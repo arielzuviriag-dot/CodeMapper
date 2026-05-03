@@ -11,7 +11,6 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -135,12 +134,14 @@ public class ConnectionResolver {
 
     private Optional<String> resolveTypeFqn(ClassOrInterfaceType type) {
         try {
-            ResolvedReferenceType resolved = type.resolve();
-            return Optional.ofNullable(resolved.getQualifiedName());
+            ResolvedType resolved = type.resolve();
+            if (resolved.isReferenceType()) {
+                return Optional.ofNullable(resolved.asReferenceType().getQualifiedName());
+            }
         } catch (Exception e) {
             log.trace("Could not resolve type {}: {}", type, e.getMessage());
-            return Optional.empty();
         }
+        return Optional.empty();
     }
 
     private Set<String> collectTypeFqns(Type type) {

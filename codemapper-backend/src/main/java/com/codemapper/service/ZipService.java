@@ -3,7 +3,6 @@ package com.codemapper.service;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
-import org.apache.commons.compress.utils.IOUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -37,7 +36,7 @@ public class ZipService {
                         Files.createDirectories(entryPath.getParent());
                     }
                     try (OutputStream out = Files.newOutputStream(entryPath)) {
-                        IOUtils.copy(zis, out);
+                        zis.transferTo(out);
                     }
                 }
             }
