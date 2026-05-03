@@ -1,0 +1,21 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: codemapper-backend
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+codemapper:
+  upload-dir: ./tmp-uploads
+  session-timeout-minutes: 120
+  cleanup-interval-minutes: 30
+
+logging:
+  level:
+    root: INFO
+    com.codemapper: DEBUG
+    org.springframework: WARN

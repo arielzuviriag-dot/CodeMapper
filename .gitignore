@@ -1,0 +1,75 @@
+﻿# ============================================
+# BACKEND - Java / Maven / Spring Boot
+# ============================================
+codemapper-backend/target/
+codemapper-backend/**/*.class
+codemapper-backend/**/*.jar
+codemapper-backend/**/*.war
+codemapper-backend/.mvn/
+codemapper-backend/mvnw
+codemapper-backend/mvnw.cmd
+codemapper-backend/HELP.md
+codemapper-backend/tmp-uploads/
+
+# ============================================
+# FRONTEND - Node / Next.js
+# ============================================
+codemapper-frontend/node_modules/
+codemapper-frontend/.next/
+codemapper-frontend/out/
+codemapper-frontend/build/
+codemapper-frontend/dist/
+codemapper-frontend/.turbo/
+codemapper-frontend/coverage/
+codemapper-frontend/*.tsbuildinfo
+codemapper-frontend/next-env.d.ts
+
+# ============================================
+# Variables de entorno (NUNCA subir a Git)
+# ============================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ============================================
+# IDEs y editores
+# ============================================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+
+# ============================================
+# Logs
+# ============================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================
+# Sistema operativo
+# ============================================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ============================================
+# Otros
+# ============================================
+*.bak
+*.tmp
+*.cache
