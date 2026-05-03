@@ -5,9 +5,6 @@ codemapper-backend/target/
 codemapper-backend/**/*.class
 codemapper-backend/**/*.jar
 codemapper-backend/**/*.war
-codemapper-backend/.mvn/
-codemapper-backend/mvnw
-codemapper-backend/mvnw.cmd
 codemapper-backend/HELP.md
 codemapper-backend/tmp-uploads/
 
