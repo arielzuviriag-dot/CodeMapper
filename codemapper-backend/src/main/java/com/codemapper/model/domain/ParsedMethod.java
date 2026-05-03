@@ -1,5 +1,6 @@
 package com.codemapper.model.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -15,7 +16,9 @@ public class ParsedMethod {
     private List<Parameter> parameters = new ArrayList<>();
     private List<String> modifiers = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
+    @JsonProperty("isStatic")
     private boolean isStatic;
+    @JsonProperty("isAbstract")
     private boolean isAbstract;
     private int lineCount;
 
