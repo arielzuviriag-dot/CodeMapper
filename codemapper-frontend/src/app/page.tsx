@@ -1,6 +1,13 @@
+"use client";
+
+import { motion, useReducedMotion } from "framer-motion";
 import { UploadTabs } from "@/components/upload/UploadTabs";
 
+const SCAN_DURATION = 7;
+
 export default function HomePage() {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-background">
       {/* Bordó radial glow — sober, not aggressive */}
@@ -8,16 +15,40 @@ export default function HomePage() {
       {/* Faint silver grid */}
       <div className="pointer-events-none absolute inset-0 cm-grid-bg opacity-60" />
 
+      {/* CRT scan line — silver dashed, drifts top→bottom in loop */}
+      {!prefersReducedMotion && <ScanLine />}
+
       <div className="relative mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-10 px-6 py-16">
-        <header className="flex flex-col items-center gap-6 text-center">
-          <div className="flex items-center gap-4">
-            <CodeMapperLogo />
-            <div className="h-10 w-px bg-[var(--border-silver)]" />
-            <span className="cm-eyebrow">CODEMAPPER · v1.0</span>
-          </div>
+        <header className="flex flex-col items-center gap-4 text-center">
+          <CodeMapperNodeLogo />
 
           <div className="flex flex-col gap-3">
-            <h1 className="cm-hero text-5xl sm:text-6xl">CodeMapper</h1>
+            <motion.h1
+              className="cm-hero text-5xl sm:text-6xl"
+              animate={
+                prefersReducedMotion
+                  ? undefined
+                  : {
+                      filter: [
+                        "blur(0px)",
+                        "blur(0px)",
+                        "blur(0.5px)",
+                        "blur(0px)",
+                        "blur(0px)",
+                      ],
+                      x: [0, 0, 2, 0, 0],
+                      opacity: [1, 1, 0.95, 1, 1],
+                    }
+              }
+              transition={{
+                duration: SCAN_DURATION,
+                repeat: Infinity,
+                ease: "linear",
+                times: [0, 0.46, 0.5, 0.54, 1],
+              }}
+            >
+              CodeMapper
+            </motion.h1>
             <p className="max-w-xl text-balance text-base text-[var(--fg-secondary)] sm:text-lg">
               Visualizá la arquitectura de tu proyecto Java en tiempo real
             </p>
@@ -41,50 +72,73 @@ export default function HomePage() {
 }
 
 /**
- * CodeMapper monogram — bordó "CM" inside a silver hairline ring.
- * Refined, no glow excess, fits the BMW/Lambo aesthetic.
+ * Horizontal scan line — silver dashed, faint bordó glow, top→bottom loop.
+ * Fixed over the viewport, never blocks pointer events.
  */
-function CodeMapperLogo() {
+function ScanLine() {
+  return (
+    <motion.div
+      className="pointer-events-none fixed left-0 right-0 z-40 h-px"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(to right, rgba(192,192,200,0.4) 0 6px, transparent 6px 12px)",
+        boxShadow: "0 0 8px rgba(185, 28, 66, 0.3)",
+      }}
+      initial={{ top: "-10px" }}
+      animate={{ top: ["-10px", "100vh"] }}
+      transition={{
+        duration: SCAN_DURATION,
+        repeat: Infinity,
+        ease: "linear",
+      }}
+    />
+  );
+}
+
+/**
+ * CodeMapper node-network logo — diamond/rhombus topology.
+ * Bordó top+bottom, silver sides, dashed silver across the middle.
+ */
+function CodeMapperNodeLogo() {
+  const nodes = [
+    { cx: 50, cy: 5, r: 12, fill: "#B91C42" },
+    { cx: 12, cy: 70, r: 10, fill: "#C0C0C8" },
+    { cx: 88, cy: 70, r: 10, fill: "#C0C0C8" },
+    { cx: 50, cy: 105, r: 6, fill: "#B91C42" },
+  ];
+
   return (
     <svg
-      width="56"
-      height="56"
-      viewBox="0 0 56 56"
+      width="75"
+      height="97"
+      viewBox="0 -10 100 130"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-label="CodeMapper"
     >
-      <defs>
-        <linearGradient id="cm-ring" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#C0C0C8" stopOpacity="0.9" />
-          <stop offset="50%" stopColor="#6B6B73" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#C0C0C8" stopOpacity="0.9" />
-        </linearGradient>
-        <linearGradient id="cm-fill" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#5C0A1A" />
-          <stop offset="100%" stopColor="#B91C42" />
-        </linearGradient>
-      </defs>
+      {/* Top edges — silver, going from top node to silver sides */}
+      <line x1="50" y1="5" x2="12" y2="70" stroke="#C0C0C8" strokeWidth="1.5" strokeOpacity="0.6" />
+      <line x1="50" y1="5" x2="88" y2="70" stroke="#C0C0C8" strokeWidth="1.5" strokeOpacity="0.6" />
 
-      <circle cx="28" cy="28" r="26" stroke="url(#cm-ring)" strokeWidth="1" />
-      <circle cx="28" cy="28" r="22" fill="url(#cm-fill)" />
+      {/* Bottom edges — bordó, silver sides to bottom node */}
+      <line x1="12" y1="70" x2="50" y2="105" stroke="#B91C42" strokeWidth="1.5" strokeOpacity="0.6" />
+      <line x1="88" y1="70" x2="50" y2="105" stroke="#B91C42" strokeWidth="1.5" strokeOpacity="0.6" />
 
-      {/* CM monogram */}
-      <path
-        d="M22.5 21.5C20 21.5 18 23.6 18 26.6V29.4C18 32.4 20 34.5 22.5 34.5C24.4 34.5 25.9 33.4 26.5 31.7"
-        stroke="#F5F5F5"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        fill="none"
+      {/* Dashed silver mid edge — left ↔ right */}
+      <line
+        x1="12"
+        y1="70"
+        x2="88"
+        y2="70"
+        stroke="#C0C0C8"
+        strokeWidth="1"
+        strokeOpacity="0.5"
+        strokeDasharray="4 3"
       />
-      <path
-        d="M30 34.5V21.5L34 28L38 21.5V34.5"
-        stroke="#F5F5F5"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
+
+      {nodes.map((n, i) => (
+        <circle key={i} cx={n.cx} cy={n.cy} r={n.r} fill={n.fill} />
+      ))}
     </svg>
   );
 }
