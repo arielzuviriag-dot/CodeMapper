@@ -34,36 +34,47 @@ interface EdgeStyle {
   marker?: EdgeMarkerType;
 }
 
+/* ============================================================
+ * Edge palette — silver hairlines + bordó accent for injection.
+ * Uses literal hex values (matched to the design tokens) so
+ * @xyflow/react gets a static value rather than a CSS variable.
+ *
+ *   silver-mid  #C0C0C8  → EXTENDS / IMPLEMENTS (structural)
+ *   silver-dark #6B6B73  → COMPOSITION
+ *   bordo       #B91C42  → DEPENDENCY_INJECTION (animated)
+ *   bordo-mid   #8B0F2A  → ANNOTATION_USAGE
+ *   silver-deep #4A4A50  → METHOD_CALL (placeholder)
+ * ============================================================ */
 const EDGE_STYLES: Record<ConnectionType, EdgeStyle> = {
   EXTENDS: {
-    stroke: "#a1a1aa",
-    strokeWidth: 2,
-    marker: { type: MarkerType.Arrow, color: "#a1a1aa", width: 20, height: 20 },
+    stroke: "#C0C0C8",
+    strokeWidth: 1.5,
+    marker: { type: MarkerType.Arrow, color: "#C0C0C8", width: 20, height: 20 },
   },
   IMPLEMENTS: {
-    stroke: "#a1a1aa",
-    strokeWidth: 2,
+    stroke: "#C0C0C8",
+    strokeWidth: 1.5,
     strokeDasharray: "5,5",
-    marker: { type: MarkerType.Arrow, color: "#a1a1aa", width: 20, height: 20 },
+    marker: { type: MarkerType.Arrow, color: "#C0C0C8", width: 20, height: 20 },
   },
   COMPOSITION: {
-    stroke: "#71717a",
-    strokeWidth: 1.5,
+    stroke: "#6B6B73",
+    strokeWidth: 1.25,
   },
   DEPENDENCY_INJECTION: {
-    stroke: "#10b981",
+    stroke: "#B91C42",
     strokeWidth: 2,
-    marker: { type: MarkerType.ArrowClosed, color: "#10b981", width: 18, height: 18 },
+    marker: { type: MarkerType.ArrowClosed, color: "#B91C42", width: 18, height: 18 },
   },
   METHOD_CALL: {
     // TODO: implementar a futuro
-    stroke: "#52525b",
+    stroke: "#4A4A50",
     strokeWidth: 1,
     strokeDasharray: "2,4",
   },
   ANNOTATION_USAGE: {
-    stroke: "#a78bfa",
-    strokeWidth: 1.5,
+    stroke: "#8B0F2A",
+    strokeWidth: 1.25,
     strokeDasharray: "2,3",
   },
 };
@@ -83,8 +94,6 @@ function CodeGraphInner() {
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Read directly from the store inside the effect to avoid making the whole
-  // effect depend on Map/array references — `version` is the canonical signal.
   const filterClasses = useCallback(
     (list: ClassNodeData[]): ClassNodeData[] =>
       list.filter((n) => {
@@ -116,7 +125,6 @@ function CodeGraphInner() {
     }, 300);
   }, [fitView]);
 
-  // Single effect reacting to flushed updates (version) + filter changes + completion.
   useEffect(() => {
     const state = useGraphStore.getState();
     const filteredClasses = filterClasses(Array.from(state.nodes.values()));
@@ -159,8 +167,8 @@ function CodeGraphInner() {
               strokeWidth: style.strokeWidth,
               strokeDasharray: style.strokeDasharray,
             },
-            labelStyle: { fontSize: 10, fill: "#a1a1aa" },
-            labelBgStyle: { fill: "#18181b", fillOpacity: 0.8 },
+            labelStyle: { fontSize: 10, fill: "#A8A8B0", fontFamily: "monospace" },
+            labelBgStyle: { fill: "#0A0A0A", fillOpacity: 0.85 },
           };
         });
 
@@ -198,7 +206,7 @@ function CodeGraphInner() {
   }, [edges, scheduleFit, setNodes]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full bg-[var(--bg-base)]">
       <aside className="absolute left-4 top-4 z-10 flex w-[260px] flex-col gap-3">
         <FilterPanel onResetLayout={onRelayout} />
         <EdgeLegend />
@@ -222,28 +230,37 @@ function CodeGraphInner() {
         maxZoom={2}
         onlyRenderVisibleElements
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#27272a" />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={28}
+          size={1}
+          color="rgba(192, 192, 200, 0.08)"
+        />
         <MiniMap
           nodeColor={(n) => {
             const data = (n.data as { classData?: ClassNodeData })?.classData;
             const ann = data?.annotations?.[0]?.replace(/^@/, "").split("(")[0];
             switch (ann) {
               case "Service":
-                return "#10b981";
+                return "#C0C0C8"; // plata clásica
               case "RestController":
               case "Controller":
-                return "#8b5cf6";
+                return "#B91C42"; // bordó vibrante
               case "Repository":
-                return "#f59e0b";
+                return "#5C0A1A"; // bordó oscuro
+              case "Component":
+                return "#4A5568"; // gris azulado
               case "Entity":
-                return "#ec4899";
+                return "#8B0F2A"; // bordó medio
               case "Configuration":
-                return "#f97316";
+                return "#A8A8B0"; // plata medio
               default:
-                return "#52525b";
+                return "#3A3A3A"; // border-default
             }
           }}
-          maskColor="rgba(0,0,0,0.5)"
+          nodeStrokeColor="rgba(192, 192, 200, 0.3)"
+          nodeStrokeWidth={1}
+          maskColor="rgba(10, 10, 10, 0.6)"
           pannable
           zoomable
         />

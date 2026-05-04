@@ -1,80 +1,117 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* CodeMapper Design System — single source of truth for tokens. */
+@import "../styles/design-system.css";
+
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+ * shadcn/ui token bridge
+ * Map shadcn semantic vars → CodeMapper design-system tokens.
+ * Keep the variable NAMES so every shadcn primitive (button,
+ * card, input, sheet, dialog…) inherits the new aesthetic
+ * automatically — no per-component change needed.
+ * ============================================================ */
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.62 0.22 295);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.22 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.55 0.22 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.27 0 0);
-  --input: oklch(0.27 0 0);
-  --ring: oklch(0.62 0.22 295);
+  --background:           var(--bg-base);
+  --foreground:           var(--fg-primary);
 
-  --chart-1: oklch(0.65 0.2 295);
-  --chart-2: oklch(0.6 0.15 162);
-  --chart-3: oklch(0.7 0.18 70);
-  --chart-4: oklch(0.62 0.18 240);
-  --chart-5: oklch(0.6 0.2 350);
+  --card:                 var(--bg-card);
+  --card-foreground:      var(--fg-primary);
 
-  --sidebar: oklch(0.16 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.62 0.22 295);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.27 0 0);
-  --sidebar-ring: oklch(0.62 0.22 295);
+  --popover:              var(--bg-panel);
+  --popover-foreground:   var(--fg-primary);
+
+  /* Primary = bordó (the brand accent) */
+  --primary:              var(--bordo);
+  --primary-foreground:   #F5F5F5;
+
+  /* Secondary = panel surface, used for chips/segmented controls */
+  --secondary:            #1F1F1F;
+  --secondary-foreground: var(--fg-primary);
+
+  --muted:                #1A1A1A;
+  --muted-foreground:     var(--fg-secondary);
+
+  /* Accent = silver wash on hover/active */
+  --accent:               #242428;
+  --accent-foreground:    var(--fg-primary);
+
+  --destructive:          var(--bordo);
+  --destructive-foreground: #F5F5F5;
+
+  --border:               var(--border-default);
+  --input:                var(--border-default);
+  --ring:                 var(--bordo);
+
+  /* Charts — graph minimap & data viz (bordó/silver palette) */
+  --chart-1: var(--bordo);          /* controller */
+  --chart-2: var(--silver);         /* service    */
+  --chart-3: var(--bordo-dark);     /* repository */
+  --chart-4: #4A5568;               /* component  */
+  --chart-5: var(--bordo-mid);      /* entity     */
+
+  /* Sidebar surface — slightly distinct from page */
+  --sidebar:                       #0F0F0F;
+  --sidebar-foreground:            var(--fg-primary);
+  --sidebar-primary:               var(--bordo);
+  --sidebar-primary-foreground:    #F5F5F5;
+  --sidebar-accent:                #1F1F1F;
+  --sidebar-accent-foreground:     var(--fg-primary);
+  --sidebar-border:                var(--border-subtle);
+  --sidebar-ring:                  var(--bordo);
 }
 
+/* ============================================================
+ * Tailwind v4 theme bridge
+ * Expose CSS vars to Tailwind utilities (bg-card, text-foreground,
+ * border-border, etc.) — same wiring as before, just pointed at
+ * the new tokens.
+ * ============================================================ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
+  --color-background:               var(--background);
+  --color-foreground:               var(--foreground);
+  --color-card:                     var(--card);
+  --color-card-foreground:          var(--card-foreground);
+  --color-popover:                  var(--popover);
+  --color-popover-foreground:       var(--popover-foreground);
+  --color-primary:                  var(--primary);
+  --color-primary-foreground:       var(--primary-foreground);
+  --color-secondary:                var(--secondary);
+  --color-secondary-foreground:     var(--secondary-foreground);
+  --color-muted:                    var(--muted);
+  --color-muted-foreground:         var(--muted-foreground);
+  --color-accent:                   var(--accent);
+  --color-accent-foreground:        var(--accent-foreground);
+  --color-destructive:              var(--destructive);
+  --color-destructive-foreground:   var(--destructive-foreground);
+  --color-border:                   var(--border);
+  --color-input:                    var(--input);
+  --color-ring:                     var(--ring);
+  --color-chart-1:                  var(--chart-1);
+  --color-chart-2:                  var(--chart-2);
+  --color-chart-3:                  var(--chart-3);
+  --color-chart-4:                  var(--chart-4);
+  --color-chart-5:                  var(--chart-5);
+  --color-sidebar:                  var(--sidebar);
+  --color-sidebar-foreground:       var(--sidebar-foreground);
+  --color-sidebar-primary:          var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent:           var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border:           var(--sidebar-border);
+  --color-sidebar-ring:             var(--sidebar-ring);
+
+  /* Custom CodeMapper tokens, exposed as Tailwind utilities */
+  --color-bordo:        var(--bordo);
+  --color-bordo-dark:   var(--bordo-dark);
+  --color-bordo-mid:    var(--bordo-mid);
+  --color-silver:       var(--silver);
+  --color-silver-mid:   var(--silver-mid);
+  --color-silver-dark:  var(--silver-dark);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -85,6 +122,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ============================================================
+ * Base layer
+ * ============================================================ */
 @layer base {
   * {
     border-color: var(--border);
@@ -92,59 +132,108 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(185, 28, 66, 0.10) 0%, transparent 60%);
+    background-attachment: fixed;
   }
   html {
     color-scheme: dark;
   }
+
+  ::selection {
+    background: rgba(185, 28, 66, 0.35);
+    color: #F5F5F5;
+  }
 }
 
+/* ============================================================
+ * Custom utilities
+ * ============================================================ */
 @layer utilities {
   .scrollbar-thin::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: oklch(0.3 0 0);
+    background: var(--border-default);
     border-radius: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--silver-dark);
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
+
+  /* Bordó hairline border, premium look */
+  .border-bordo-hairline {
+    border-color: rgba(185, 28, 66, 0.35);
+  }
+  /* Silver hairline border */
+  .border-silver-hairline {
+    border-color: rgba(192, 192, 200, 0.18);
+  }
 }
 
-/* React Flow overrides */
+/* ============================================================
+ * React Flow overrides — silver lines, bordó highlight
+ * ============================================================ */
+.react-flow {
+  background: var(--bg-base);
+}
+
 .react-flow__attribution {
   background: transparent !important;
-  color: oklch(0.5 0 0) !important;
+  color: var(--fg-muted) !important;
   font-size: 10px !important;
 }
 
 .react-flow__edge-path-selector:hover + .react-flow__edge-path,
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: oklch(0.62 0.22 295) !important;
-  stroke-width: 3 !important;
+  stroke: var(--bordo) !important;
+  stroke-width: 2.5 !important;
+  filter: drop-shadow(0 0 6px rgba(185, 28, 66, 0.45));
 }
 
 .react-flow__handle {
   opacity: 0;
 }
 
+/* React Flow built-in controls (legacy — we render our own GraphControls) */
 .react-flow__controls button {
-  background: oklch(0.18 0 0) !important;
-  border-bottom: 1px solid oklch(0.27 0 0) !important;
-  color: oklch(0.985 0 0) !important;
+  background: var(--bg-card) !important;
+  border-bottom: 1px solid var(--border-default) !important;
+  color: var(--fg-primary) !important;
+  transition: background var(--duration-fast) var(--ease-standard);
 }
 .react-flow__controls button:hover {
-  background: oklch(0.25 0 0) !important;
+  background: var(--accent) !important;
+  color: var(--bordo) !important;
 }
 .react-flow__controls button svg {
   fill: currentColor !important;
 }
 
+/* MiniMap — black surface, silver hairline, bordó nodes */
 .react-flow__minimap {
-  background: oklch(0.18 0 0) !important;
-  border: 1px solid oklch(0.27 0 0) !important;
-  border-radius: 8px !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-silver) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md);
+}
+.react-flow__minimap-mask {
+  fill: rgba(10, 10, 10, 0.6) !important;
+}
+
+/* Edge labels — small, monospaced, on a black pill */
+.react-flow__edge-text {
+  fill: var(--fg-secondary) !important;
+  font-family: var(--font-mono-stack) !important;
+  font-size: 10px !important;
+}
+.react-flow__edge-textbg {
+  fill: var(--bg-base) !important;
+  fill-opacity: 0.85 !important;
 }

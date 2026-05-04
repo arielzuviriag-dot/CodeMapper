@@ -9,15 +9,26 @@ import { LocalPathInput } from "./LocalPathInput";
 export function UploadTabs() {
   return (
     <Tabs defaultValue="upload" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="upload" className="gap-2">
-          <Upload className="h-4 w-4" /> Subir archivos
+      <TabsList
+        className="grid w-full grid-cols-3 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1"
+      >
+        <TabsTrigger
+          value="upload"
+          className="gap-2 rounded-[6px] text-xs uppercase tracking-[0.14em] data-[state=active]:bg-[var(--bordo)] data-[state=active]:text-white data-[state=active]:shadow-[0_0_18px_rgba(185,28,66,0.4)]"
+        >
+          <Upload className="h-3.5 w-3.5" /> Subir
         </TabsTrigger>
-        <TabsTrigger value="local" className="gap-2">
-          <Folder className="h-4 w-4" /> Ruta local
+        <TabsTrigger
+          value="local"
+          className="gap-2 rounded-[6px] text-xs uppercase tracking-[0.14em] data-[state=active]:bg-[var(--bordo)] data-[state=active]:text-white data-[state=active]:shadow-[0_0_18px_rgba(185,28,66,0.4)]"
+        >
+          <Folder className="h-3.5 w-3.5" /> Ruta local
         </TabsTrigger>
-        <TabsTrigger value="github" className="gap-2">
-          <Github className="h-4 w-4" /> GitHub
+        <TabsTrigger
+          value="github"
+          className="gap-2 rounded-[6px] text-xs uppercase tracking-[0.14em] data-[state=active]:bg-[var(--bordo)] data-[state=active]:text-white data-[state=active]:shadow-[0_0_18px_rgba(185,28,66,0.4)]"
+        >
+          <Github className="h-3.5 w-3.5" /> GitHub
         </TabsTrigger>
       </TabsList>
 

@@ -19,6 +19,10 @@ import { useGraphStore } from "@/store/graphStore";
 import { getClassSource } from "@/lib/api";
 import { ChevronRight, FileCode, GitBranch, Hash } from "lucide-react";
 
+/**
+ * Monaco loader is preserved as-is (dynamic, ssr:false, Skeleton fallback).
+ * It is a real Monaco editor — NOT replaced with <pre>.
+ */
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => <Skeleton className="h-full w-full" />,
@@ -91,39 +95,48 @@ export function ClassDetailSheet() {
         if (!open) clearSelection();
       }}
     >
-      <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-2xl">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col border-l border-[var(--border-silver)] bg-[var(--bg-card)] p-0 sm:max-w-2xl"
+      >
         {node ? (
           <>
-            <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
-                <FileCode className="h-5 w-5 text-primary" />
-                {node.name}
+            <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] px-6 py-4">
+              <SheetTitle className="flex items-center gap-2 text-[var(--fg-primary)]">
+                <FileCode className="h-5 w-5 text-[var(--bordo)]" />
+                <span className="font-semibold">{node.name}</span>
               </SheetTitle>
-              <SheetDescription className="truncate">
+              <SheetDescription className="truncate font-mono text-xs text-[var(--silver-dark)]">
                 {node.fullyQualifiedName}
               </SheetDescription>
             </SheetHeader>
 
             <Tabs defaultValue="source" className="flex flex-1 flex-col overflow-hidden">
-              <TabsList className="mx-6 grid grid-cols-4">
-                <TabsTrigger value="source">Código</TabsTrigger>
-                <TabsTrigger value="incoming">
-                  Entrantes ({incoming.length})
-                </TabsTrigger>
-                <TabsTrigger value="outgoing">
-                  Salientes ({outgoing.length})
-                </TabsTrigger>
-                <TabsTrigger value="metrics">Métricas</TabsTrigger>
+              <TabsList className="mx-6 mt-4 grid grid-cols-4 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
+                {[
+                  { v: "source", label: "Código" },
+                  { v: "incoming", label: `Entrantes (${incoming.length})` },
+                  { v: "outgoing", label: `Salientes (${outgoing.length})` },
+                  { v: "metrics", label: "Métricas" },
+                ].map((t) => (
+                  <TabsTrigger
+                    key={t.v}
+                    value={t.v}
+                    className="rounded-[6px] text-[10px] uppercase tracking-[0.14em] data-[state=active]:bg-[var(--bordo)] data-[state=active]:text-white data-[state=active]:shadow-[0_0_14px_rgba(185,28,66,0.35)]"
+                  >
+                    {t.label}
+                  </TabsTrigger>
+                ))}
               </TabsList>
 
-              <TabsContent value="source" className="flex-1 px-6 pb-6">
-                <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border">
+              <TabsContent value="source" className="flex-1 px-6 pb-6 pt-4">
+                <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--border-silver)] shadow-[var(--shadow-md)]">
                   {error && (
-                    <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    <div className="cm-accent-bar-left border-b border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-3 py-2 pl-4 text-xs text-[var(--bordo)]">
                       {error}
                     </div>
                   )}
-                  <div className="flex-1 overflow-hidden">
+                  <div className="flex-1 overflow-hidden bg-[#0A0A0A]">
                     {loading || source === null ? (
                       <Skeleton className="h-full w-full" />
                     ) : (
@@ -136,9 +149,12 @@ export function ClassDetailSheet() {
                           readOnly: true,
                           minimap: { enabled: true },
                           fontSize: 13,
-                          fontFamily: "var(--font-geist-mono)",
+                          fontFamily:
+                            "'JetBrains Mono', var(--font-geist-mono), monospace",
                           scrollBeyondLastLine: false,
                           automaticLayout: true,
+                          renderLineHighlight: "gutter",
+                          smoothScrolling: true,
                         }}
                       />
                     )}
@@ -146,7 +162,7 @@ export function ClassDetailSheet() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="incoming" className="flex-1 px-6 pb-6">
+              <TabsContent value="incoming" className="flex-1 px-6 pb-6 pt-4">
                 <ConnectionList
                   items={incoming.map((e) => ({
                     id: e.from,
@@ -162,7 +178,7 @@ export function ClassDetailSheet() {
                 />
               </TabsContent>
 
-              <TabsContent value="outgoing" className="flex-1 px-6 pb-6">
+              <TabsContent value="outgoing" className="flex-1 px-6 pb-6 pt-4">
                 <ConnectionList
                   items={outgoing.map((e) => ({
                     id: e.to,
@@ -178,7 +194,7 @@ export function ClassDetailSheet() {
                 />
               </TabsContent>
 
-              <TabsContent value="metrics" className="flex-1 px-6 pb-6">
+              <TabsContent value="metrics" className="flex-1 px-6 pb-6 pt-4">
                 <div className="flex flex-col gap-3 text-sm">
                   <Metric label="Campos" value={node.fields.length} />
                   <Metric label="Métodos" value={node.methods.length} />
@@ -196,25 +212,38 @@ export function ClassDetailSheet() {
                       outgoing.length
                     }
                   />
-                  <Separator className="my-2" />
+                  <Separator className="my-2 bg-[var(--border-silver)]" />
                   <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Path</span>
-                    <code className="break-all rounded bg-muted px-2 py-1 font-mono text-xs">
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+                      Path
+                    </span>
+                    <code className="break-all rounded-sm border border-[var(--border-silver)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-xs text-[var(--silver)]">
                       {node.filePath}
                     </code>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Tipo</span>
-                    <Badge variant="outline" className="w-fit">
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+                      Tipo
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="w-fit border-[var(--bordo)]/40 bg-[var(--bordo)]/10 text-[var(--bordo)]"
+                    >
                       {node.type}
                     </Badge>
                   </div>
                   {node.modifiers.length > 0 && (
                     <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Modificadores</span>
+                      <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+                        Modificadores
+                      </span>
                       <div className="flex flex-wrap gap-1">
                         {node.modifiers.map((m) => (
-                          <Badge key={m} variant="secondary">
+                          <Badge
+                            key={m}
+                            variant="secondary"
+                            className="border border-[var(--border-silver)] bg-[var(--bg-panel)] font-mono text-[10px] tracking-tight text-[var(--silver)]"
+                          >
                             {m}
                           </Badge>
                         ))}
@@ -233,12 +262,14 @@ export function ClassDetailSheet() {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
-      <div className="flex items-center gap-2 text-muted-foreground">
+    <div className="flex items-center justify-between rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-2.5">
+      <div className="flex items-center gap-2 text-[var(--silver-dark)]">
         <Hash className="h-3.5 w-3.5" />
-        <span className="text-xs">{label}</span>
+        <span className="text-[10px] uppercase tracking-[0.16em]">{label}</span>
       </div>
-      <span className="font-semibold">{value}</span>
+      <span className="font-mono text-base font-semibold tabular-nums text-[var(--fg-primary)]">
+        {value}
+      </span>
     </div>
   );
 }
@@ -271,7 +302,7 @@ function ConnectionList({
 
   if (items.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-[var(--fg-muted)]">
         Sin conexiones
       </div>
     );
@@ -286,16 +317,18 @@ function ConnectionList({
               onJump(it.id);
               center(it.id);
             }}
-            className="group flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary"
+            className="group flex items-center justify-between gap-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-3 text-left transition-all hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/5 hover:shadow-[0_0_14px_rgba(185,28,66,0.18)]"
           >
             <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">{resolveName(it.id)}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm font-medium text-[var(--fg-primary)]">
+                {resolveName(it.id)}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--silver-dark)]">
                 <GitBranch className="mr-1 inline h-3 w-3" />
                 {it.type}
               </span>
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            <ChevronRight className="h-4 w-4 text-[var(--silver-dark)] transition-all group-hover:translate-x-0.5 group-hover:text-[var(--bordo)]" />
           </button>
         ))}
       </div>
