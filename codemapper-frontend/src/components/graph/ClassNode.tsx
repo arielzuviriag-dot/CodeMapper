@@ -16,24 +16,50 @@ import {
 import type { ClassKind, ClassNodeData } from "@/lib/types";
 import { useGraphStore } from "@/store/graphStore";
 
-const ANNOTATION_COLORS: Record<string, string> = {
-  RestController: "bg-violet-600",
-  Service: "bg-emerald-600",
-  Repository: "bg-amber-600",
-  Component: "bg-sky-600",
-  Entity: "bg-pink-600",
-  Configuration: "bg-orange-600",
-  Controller: "bg-violet-500",
+/* ============================================================
+ * Header colors per Spring annotation.
+ * Strict semantic mapping — uses inline style with the exact
+ * hex values requested by the design system.
+ *   @RestController → bordó vibrante  #B91C42
+ *   @Service        → plata clásica   #C0C0C8 (text becomes black)
+ *   @Repository     → bordó oscuro    #5C0A1A
+ *   @Component      → gris azulado    #4A5568
+ *   @Entity         → bordó medio     #8B0F2A
+ *   @Configuration  → plata medio     #A8A8B0 (text becomes black)
+ *   @Controller     → alias de RestController
+ * ============================================================ */
+interface HeaderTheme {
+  bg: string;
+  fg: string;
+  border?: string;
+}
+
+const ANNOTATION_THEMES: Record<string, HeaderTheme> = {
+  RestController: { bg: "#B91C42", fg: "#F5F5F5" },
+  Controller:     { bg: "#B91C42", fg: "#F5F5F5" },
+  Service:        { bg: "#C0C0C8", fg: "#0A0A0A" },
+  Repository:     { bg: "#5C0A1A", fg: "#F5F5F5" },
+  Component:      { bg: "#4A5568", fg: "#F5F5F5" },
+  Entity:         { bg: "#8B0F2A", fg: "#F5F5F5" },
+  Configuration:  { bg: "#A8A8B0", fg: "#0A0A0A" },
 };
 
-function pickHeaderColor(data: ClassNodeData): string {
-  if (data.type === "INTERFACE") return "border-2 border-dashed border-zinc-500 bg-zinc-800";
-  if (data.type === "ENUM") return "bg-rose-600";
+const DEFAULT_THEME: HeaderTheme = { bg: "#1F1F1F", fg: "#F5F5F5" };
+const ENUM_THEME: HeaderTheme = { bg: "#8B0F2A", fg: "#F5F5F5" };
+const INTERFACE_THEME: HeaderTheme = {
+  bg: "#141414",
+  fg: "#C0C0C8",
+  border: "1px dashed #C0C0C8",
+};
+
+function pickHeaderTheme(data: ClassNodeData): HeaderTheme {
+  if (data.type === "INTERFACE") return INTERFACE_THEME;
+  if (data.type === "ENUM") return ENUM_THEME;
   for (const ann of data.annotations ?? []) {
     const stripped = ann.replace(/^@/, "").split("(")[0];
-    if (ANNOTATION_COLORS[stripped]) return ANNOTATION_COLORS[stripped];
+    if (ANNOTATION_THEMES[stripped]) return ANNOTATION_THEMES[stripped];
   }
-  return "bg-zinc-700";
+  return DEFAULT_THEME;
 }
 
 function KindIcon({ kind }: { kind: ClassKind }) {
@@ -52,9 +78,11 @@ function KindIcon({ kind }: { kind: ClassKind }) {
 }
 
 function VisibilityIcon({ modifiers }: { modifiers: string[] }) {
-  if (modifiers.includes("private")) return <Lock className="h-3 w-3 text-zinc-500" />;
-  if (modifiers.includes("protected")) return <Circle className="h-3 w-3 fill-amber-500 text-amber-500" />;
-  return <Circle className="h-3 w-3 fill-emerald-500 text-emerald-500" />;
+  if (modifiers.includes("private"))
+    return <Lock className="h-3 w-3 text-[var(--fg-muted)]" />;
+  if (modifiers.includes("protected"))
+    return <Circle className="h-3 w-3 fill-[var(--warning)] text-[var(--warning)]" />;
+  return <Circle className="h-3 w-3 fill-[var(--success)] text-[var(--success)]" />;
 }
 
 const MAX_VISIBLE = 5;
@@ -68,14 +96,8 @@ interface CustomData extends Record<string, unknown> {
 function ClassNodeComponent({ data, id }: NodeProps) {
   const classData = (data as CustomData).classData;
   const selectNode = useGraphStore((s) => s.selectNode);
-  // Narrow subscriptions: each instance only re-renders when ITS own
-  // selection toggles, not when any other node is selected.
   const isSelected = useGraphStore((s) => s.selectedNodeId === id);
-  const hideGettersSetters = useGraphStore(
-    (s) => s.filters.hideGettersSetters,
-  );
-  // Zoom-driven detail level. Coarse boolean → only re-renders when
-  // the threshold is crossed, not on every pan/zoom delta.
+  const hideGettersSetters = useGraphStore((s) => s.filters.hideGettersSetters);
   const isCompact = useStore((s) => s.transform[2] < COMPACT_ZOOM_THRESHOLD);
 
   const [showAllFields, setShowAllFields] = useState(false);
@@ -88,26 +110,37 @@ function ClassNodeComponent({ data, id }: NodeProps) {
   }, [classData.methods, hideGettersSetters]);
 
   const fields = classData.fields ?? [];
-  const headerColor = pickHeaderColor(classData);
+  const theme = pickHeaderTheme(classData);
+
+  const baseClass =
+    "group cursor-pointer rounded-md border bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)] transition-all hover:shadow-[var(--shadow-lg)]";
+  const selectedClass = isSelected
+    ? "border-[var(--bordo)] ring-2 ring-[var(--bordo)]/40"
+    : "border-[var(--border-silver)]";
 
   if (isCompact) {
     const primaryAnn = (classData.annotations ?? [])
       .map((a) => a.replace(/^@/, "").split("(")[0])[0];
     return (
       <div
-        className={`group w-[180px] cursor-pointer overflow-hidden rounded-lg border shadow-md transition-shadow hover:shadow-xl ${
-          isSelected ? "border-primary ring-2 ring-primary/40" : "border-border"
-        }`}
+        className={`${baseClass} ${selectedClass} w-[180px] overflow-hidden`}
         onClick={() => selectNode(id)}
       >
         <Handle type="target" position={Position.Top} className="!opacity-0" />
         <Handle type="source" position={Position.Bottom} className="!opacity-0" />
-        <div className={`flex items-center gap-2 px-3 py-2 text-white ${headerColor}`}>
+        <div
+          className="flex items-center gap-2 px-3 py-2 text-sm font-semibold"
+          style={{
+            backgroundColor: theme.bg,
+            color: theme.fg,
+            border: theme.border,
+          }}
+        >
           <KindIcon kind={classData.type} />
-          <span className="truncate text-sm font-semibold">{classData.name}</span>
+          <span className="truncate">{classData.name}</span>
         </div>
         {primaryAnn && (
-          <div className="bg-card px-3 py-1.5 text-[10px] font-medium text-primary">
+          <div className="bg-[var(--bg-card)] px-3 py-1.5 font-mono text-[10px] font-medium tracking-tight text-[var(--bordo)]">
             @{primaryAnn}
           </div>
         )}
@@ -126,21 +159,26 @@ function ClassNodeComponent({ data, id }: NodeProps) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.25 }}
       whileHover={{ scale: 1.02 }}
-      className={`group w-[280px] cursor-pointer rounded-lg border bg-card text-card-foreground shadow-md transition-shadow hover:shadow-xl ${
-        isSelected ? "border-primary ring-2 ring-primary/40" : "border-border"
-      }`}
+      className={`${baseClass} ${selectedClass} w-[280px]`}
       onClick={() => selectNode(id)}
     >
       <Handle type="target" position={Position.Top} className="!opacity-0" />
       <Handle type="source" position={Position.Bottom} className="!opacity-0" />
 
       <div
-        className={`flex items-center gap-2 rounded-t-lg px-3 py-2 text-white ${headerColor}`}
+        className="flex items-center gap-2 rounded-t-md px-3 py-2 text-sm font-semibold"
+        style={{
+          backgroundColor: theme.bg,
+          color: theme.fg,
+          border: theme.border,
+        }}
       >
         <KindIcon kind={classData.type} />
-        <span className="truncate text-sm font-semibold">{classData.name}</span>
+        <span className="truncate">{classData.name}</span>
         {classData.type === "ABSTRACT_CLASS" && (
-          <span className="ml-auto text-[10px] uppercase opacity-80">abs</span>
+          <span className="ml-auto text-[10px] uppercase tracking-[0.16em] opacity-80">
+            abs
+          </span>
         )}
       </div>
 
@@ -165,26 +203,26 @@ function ClassNodeComponent({ data, id }: NodeProps) {
                 initial={{ opacity: 0, x: -4 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
-                className="flex items-center gap-2 text-xs"
+                className="flex items-center gap-2 font-mono text-xs"
               >
                 <span
                   className={
                     f.modifiers.includes("private")
-                      ? "text-zinc-400"
-                      : "text-foreground"
+                      ? "text-[var(--fg-muted)]"
+                      : "text-[var(--fg-primary)]"
                   }
                 >
                   {f.name}
                 </span>
-                <span className="truncate text-zinc-500">: {f.type}</span>
+                <span className="truncate text-[var(--silver-dark)]">: {f.type}</span>
                 {f.annotations.length > 0 && (
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--bordo)]" />
                 )}
               </motion.div>
             ))}
           </AnimatePresence>
           {!showAllFields && fields.length > MAX_VISIBLE && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[10px] text-[var(--fg-muted)]">
               +{fields.length - MAX_VISIBLE} más
             </span>
           )}
@@ -206,26 +244,27 @@ function ClassNodeComponent({ data, id }: NodeProps) {
                 initial={{ opacity: 0, x: -4 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
-                className={`flex items-center gap-2 text-xs ${
+                className={`flex items-center gap-2 font-mono text-xs ${
                   m.isAbstract ? "italic" : ""
                 }`}
               >
                 <VisibilityIcon modifiers={m.modifiers} />
                 <span className="truncate">
-                  {m.name}(): <span className="text-zinc-500">{m.returnType}</span>
+                  {m.name}():{" "}
+                  <span className="text-[var(--silver-dark)]">{m.returnType}</span>
                 </span>
               </motion.div>
             ))}
           </AnimatePresence>
           {!showAllMethods && visibleMethods.length > MAX_VISIBLE && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[10px] text-[var(--fg-muted)]">
               +{visibleMethods.length - MAX_VISIBLE} más
             </span>
           )}
         </Section>
       </div>
 
-      <div className="truncate rounded-b-lg border-t border-border px-3 py-1.5 text-xs text-zinc-500">
+      <div className="truncate rounded-b-md border-t border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--fg-muted)]">
         {classData.packageName || "(sin paquete)"}
       </div>
     </motion.div>
@@ -240,13 +279,13 @@ function AnnotationList({ annotations }: { annotations: string[] }) {
       {visible.map((a, i) => (
         <span
           key={`${a}-${i}`}
-          className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+          className="rounded-sm border border-[var(--bordo)]/30 bg-[var(--bordo)]/10 px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-tight text-[var(--bordo)]"
         >
           {a.startsWith("@") ? a : `@${a}`}
         </span>
       ))}
       {remaining > 0 && (
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+        <span className="rounded-sm border border-[var(--border-silver)] bg-[var(--bg-input)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]">
           +{remaining}
         </span>
       )}
@@ -277,7 +316,7 @@ function Section({
           e.stopPropagation();
           if (collapsible) onToggle();
         }}
-        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--silver-dark)]"
       >
         {collapsible &&
           (expanded ? (
@@ -297,8 +336,6 @@ function areNodePropsEqual(prev: NodeProps, next: NodeProps) {
   if (prev.selected !== next.selected) return false;
   const prevData = (prev.data as CustomData).classData;
   const nextData = (next.data as CustomData).classData;
-  // classData reference is stable per-class until fields/methods change
-  // (the store builds a new object only for the touched class).
   return prevData === nextData;
 }
 

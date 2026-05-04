@@ -1,0 +1,223 @@
+/* ============================================================
+ * CodeMapper · Design System tokens
+ * Premium dark — BMW / Lambo / Bloomberg Terminal aesthetic.
+ * Palette ratio: 70 black · 20 bordó · 10 silver.
+ * Sober, authoritative, refined. Use restraint.
+ * ============================================================ */
+
+:root,
+.dark {
+  /* ── Surface (70% — black dominant) ──────────────────────── */
+  --bg-base:    #0A0A0A;
+  --bg-card:    #141414;
+  --bg-panel:   #1F1F1F;
+  --bg-input:   #0F0F0F;
+  --bg-overlay: rgba(10, 10, 10, 0.78);
+
+  /* ── Borders (silver, thin) ──────────────────────────────── */
+  --border-subtle:  #2A2A2A;
+  --border-default: #3A3A3A;
+  --border-strong:  #4A4A4A;
+  --border-silver:  rgba(192, 192, 200, 0.18);
+
+  /* ── Text ────────────────────────────────────────────────── */
+  --fg-primary:   #F5F5F5;
+  --fg-secondary: #A8A8B0;
+  --fg-muted:     #6B6B73;
+  --fg-disabled:  #4A4A50;
+
+  /* ── Bordó (20% — primary accent) ────────────────────────── */
+  --bordo-dark: #5C0A1A;
+  --bordo-mid:  #8B0F2A;
+  --bordo:      #B91C42;
+  --bordo-glow: rgba(185, 28, 66, 0.5);
+
+  /* ── Silver (10% — refined detail) ───────────────────────── */
+  --silver:      #C0C0C8;
+  --silver-mid:  #A8A8B0;
+  --silver-dark: #6B6B73;
+
+  /* ── Brand accents ───────────────────────────────────────── */
+  --accent-primary:      var(--bordo);
+  --accent-primary-glow: var(--bordo-glow);
+  --accent-silver:       var(--silver);
+
+  /* ── Semantic Java class colors ──────────────────────────── */
+  --java-controller: #B91C42;   /* @RestController · bordó vibrante */
+  --java-service:    #C0C0C8;   /* @Service · plata clásica         */
+  --java-repository: #5C0A1A;   /* @Repository · bordó oscuro       */
+  --java-component:  #4A5568;   /* @Component · gris azulado        */
+  --java-entity:     #8B0F2A;   /* @Entity · bordó medio            */
+  --java-config:     #A8A8B0;   /* @Configuration · plata medio     */
+  --java-interface:  #C0C0C8;   /* interface · plata punteado       */
+
+  /* ── Edge / connection colors (graph) ────────────────────── */
+  --edge-default:    #6B6B73;   /* silver-dark, finas               */
+  --edge-extends:    #C0C0C8;   /* plata clásica                    */
+  --edge-implements: #C0C0C8;   /* plata punteada                   */
+  --edge-injection:  #B91C42;   /* bordó (acento, animada)          */
+  --edge-annotation: #8B0F2A;   /* bordó-mid, sutil                 */
+
+  /* ── Status ──────────────────────────────────────────────── */
+  --success: #6B9E5F;
+  --warning: #C9A227;
+  --danger:  #B91C42;
+  --info:    var(--silver);
+
+  /* ── Gradients (signature) ───────────────────────────────── */
+  --gradient-primary:        linear-gradient(135deg, #5C0A1A 0%, #8B0F2A 50%, #B91C42 100%);
+  --gradient-bordo-deep:     linear-gradient(135deg, #0A0A0A 0%, #5C0A1A 70%, #8B0F2A 100%);
+  --gradient-silver:         linear-gradient(90deg, #6B6B73 0%, #C0C0C8 50%, #6B6B73 100%);
+  --gradient-card-border:    linear-gradient(135deg, #B91C42 0%, #C0C0C8 50%, #B91C42 100%);
+  --gradient-radial-glow:    radial-gradient(ellipse at top, rgba(185, 28, 66, 0.14) 0%, transparent 60%);
+  --gradient-grid:
+    linear-gradient(to right,  rgba(192, 192, 200, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(192, 192, 200, 0.03) 1px, transparent 1px);
+
+  /* ── Shadows / glows ─────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.75);
+  --glow-bordo:  0 0 20px rgba(185, 28, 66, 0.45), 0 0 40px rgba(185, 28, 66, 0.15);
+  --glow-silver: 0 0 14px rgba(192, 192, 200, 0.18);
+
+  /* ── Spacing (4px base) ──────────────────────────────────── */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-6: 24px; --space-8: 32px; --space-12: 48px; --space-16: 64px;
+
+  /* ── Radii ───────────────────────────────────────────────── */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   10px;
+  --radius-xl:   14px;
+  --radius-full: 9999px;
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --duration-fast:   200ms;
+  --duration-medium: 400ms;
+  --duration-slow:   600ms;
+  --ease-standard:   cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Type ────────────────────────────────────────────────── */
+  --font-sans-stack: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono-stack: "JetBrains Mono", var(--font-geist-mono), ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 14px;
+  --text-md:   16px;
+  --text-lg:   18px;
+  --text-xl:   24px;
+  --text-2xl:  32px;
+  --text-3xl:  48px;
+  --text-hero: 64px;
+
+  --tracking-tight:   -0.02em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.01em;
+  --tracking-wider:   0.02em;
+  --tracking-mono:    -0.01em;
+  --tracking-eyebrow: 0.18em;
+}
+
+/* ── Semantic typography roles ─────────────────────────────── */
+.cm-hero {
+  font-family: var(--font-sans-stack);
+  font-size: var(--text-hero);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wider);
+  line-height: 1.04;
+  background: linear-gradient(180deg, #F5F5F5 0%, #C0C0C8 55%, #6B6B73 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.cm-h1 {
+  font-family: var(--font-sans-stack);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+  line-height: 1.1;
+  color: var(--fg-primary);
+}
+.cm-h2 {
+  font-family: var(--font-sans-stack);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  line-height: 1.2;
+  color: var(--fg-primary);
+}
+.cm-h3 {
+  font-family: var(--font-sans-stack);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  line-height: 1.3;
+  color: var(--fg-primary);
+}
+.cm-eyebrow {
+  font-family: var(--font-sans-stack);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--silver-dark);
+}
+.cm-code {
+  font-family: var(--font-mono-stack);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  letter-spacing: var(--tracking-mono);
+  color: var(--fg-primary);
+}
+
+/* ── Utility primitives ────────────────────────────────────── */
+.cm-grid-bg {
+  background-image: var(--gradient-grid);
+  background-size: 36px 36px;
+}
+.cm-radial-glow {
+  background: var(--gradient-radial-glow);
+}
+.cm-glow-bordo  { box-shadow: var(--glow-bordo); }
+.cm-glow-silver { box-shadow: var(--glow-silver); }
+
+/* Silver hairline border (top edge accent) */
+.cm-hairline-top {
+  position: relative;
+}
+.cm-hairline-top::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(192, 192, 200, 0.0) 8%,
+    rgba(192, 192, 200, 0.4) 50%,
+    rgba(192, 192, 200, 0.0) 92%,
+    transparent 100%);
+  pointer-events: none;
+}
+
+/* Bordó left accent bar (used on alerts / focus rows — sparingly) */
+.cm-accent-bar-left {
+  position: relative;
+}
+.cm-accent-bar-left::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--bordo);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

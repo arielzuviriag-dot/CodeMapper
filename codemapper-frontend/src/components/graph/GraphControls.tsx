@@ -13,12 +13,27 @@ export function GraphControls({ onRelayout }: Props) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const resetUserInteraction = useGraphStore((s) => s.resetUserInteraction);
 
+  const btn =
+    "h-9 w-9 rounded-sm bg-transparent text-[var(--silver)] hover:bg-[var(--bordo)]/15 hover:text-[var(--bordo)]";
+
   return (
-    <div className="absolute right-4 top-4 z-10 flex flex-col gap-1 rounded-lg border border-border bg-card p-1 shadow-lg">
-      <Button size="icon" variant="ghost" onClick={() => zoomIn({ duration: 200 })} title="Zoom in">
+    <div className="absolute right-4 top-4 z-10 flex flex-col gap-1 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-1 shadow-[var(--shadow-md)]">
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={() => zoomIn({ duration: 200 })}
+        title="Zoom in"
+        className={btn}
+      >
         <ZoomIn className="h-4 w-4" />
       </Button>
-      <Button size="icon" variant="ghost" onClick={() => zoomOut({ duration: 200 })} title="Zoom out">
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={() => zoomOut({ duration: 200 })}
+        title="Zoom out"
+        className={btn}
+      >
         <ZoomOut className="h-4 w-4" />
       </Button>
       <Button
@@ -26,6 +41,7 @@ export function GraphControls({ onRelayout }: Props) {
         variant="ghost"
         onClick={() => fitView({ duration: 400, padding: 0.2 })}
         title="Centrar"
+        className={btn}
       >
         <Maximize2 className="h-4 w-4" />
       </Button>
@@ -37,6 +53,7 @@ export function GraphControls({ onRelayout }: Props) {
           onRelayout();
         }}
         title="Reset layout"
+        className={btn}
       >
         <RefreshCw className="h-4 w-4" />
       </Button>

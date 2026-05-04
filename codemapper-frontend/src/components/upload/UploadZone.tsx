@@ -107,26 +107,38 @@ export function UploadZone() {
     <div className="flex flex-col gap-4">
       <div
         {...getRootProps()}
-        className={`relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 transition-colors ${
+        className={`relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed p-8 transition-all duration-200 ${
           isDragActive
-            ? "border-primary bg-primary/5"
-            : "border-border hover:border-primary/50 hover:bg-accent/30"
+            ? "border-[var(--bordo)] bg-[var(--bordo)]/5 shadow-[0_0_24px_rgba(185,28,66,0.25)_inset]"
+            : "border-[var(--border-default)] bg-[var(--bg-input)] hover:border-[var(--silver-dark)] hover:bg-[var(--bg-panel)]"
         }`}
       >
+        {/* corner brackets — premium frame */}
+        <CornerBrackets active={isDragActive} />
+
         <input {...getInputProps()} />
-        <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
-        <p className="text-sm font-medium">
+        <Upload
+          className={`mb-3 h-10 w-10 transition-colors ${
+            isDragActive ? "text-[var(--bordo)]" : "text-[var(--fg-muted)]"
+          }`}
+          strokeWidth={1.4}
+        />
+        <p className="text-sm font-medium text-[var(--fg-primary)]">
           {isDragActive
             ? "Soltá los archivos acá"
             : "Arrastrá archivos .java o un .zip"}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--fg-muted)]">
           o hacé click para elegir
         </p>
       </div>
 
-      <div className="flex items-center justify-center">
-        <span className="text-xs text-muted-foreground">— o —</span>
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-[var(--border-silver)]" />
+        <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--fg-muted)]">
+          o
+        </span>
+        <span className="h-px flex-1 bg-[var(--border-silver)]" />
       </div>
 
       <div>
@@ -143,7 +155,7 @@ export function UploadZone() {
         <Button
           type="button"
           variant="outline"
-          className="w-full"
+          className="w-full border-[var(--border-silver)] bg-transparent uppercase tracking-[0.14em] hover:border-[var(--silver)] hover:bg-[var(--bg-panel)]"
           onClick={() => folderInputRef.current?.click()}
         >
           <FolderOpen className="mr-2 h-4 w-4" />
@@ -152,12 +164,14 @@ export function UploadZone() {
       </div>
 
       {prepared && (
-        <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
+        <div className="cm-accent-bar-left flex items-center justify-between rounded-md border border-[var(--border-silver)] bg-[var(--bg-panel)] p-3 pl-4">
           <div className="flex items-center gap-3">
-            <FileArchive className="h-5 w-5 text-primary" />
+            <FileArchive className="h-5 w-5 text-[var(--bordo)]" />
             <div className="flex flex-col">
-              <span className="text-sm font-medium">{prepared.description}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm font-medium text-[var(--fg-primary)]">
+                {prepared.description}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--fg-muted)]">
                 listo para analizar
               </span>
             </div>
@@ -168,7 +182,12 @@ export function UploadZone() {
         </div>
       )}
 
-      <Button onClick={onAnalyze} disabled={!prepared || busy} size="lg">
+      <Button
+        onClick={onAnalyze}
+        disabled={!prepared || busy}
+        size="lg"
+        className="bg-[var(--bordo)] uppercase tracking-[0.16em] text-white shadow-[0_0_24px_rgba(185,28,66,0.35)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_28px_rgba(185,28,66,0.55)] disabled:bg-[var(--bg-panel)] disabled:text-[var(--fg-muted)] disabled:shadow-none"
+      >
         {busy ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -179,5 +198,34 @@ export function UploadZone() {
         )}
       </Button>
     </div>
+  );
+}
+
+/** Decorative corner brackets — silver hairlines that turn bordó on drag */
+function CornerBrackets({ active }: { active: boolean }) {
+  const color = active ? "var(--bordo)" : "var(--silver-dark)";
+  return (
+    <>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-3 h-3 w-3 border-l border-t transition-colors"
+        style={{ borderColor: color }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-3 top-3 h-3 w-3 border-r border-t transition-colors"
+        style={{ borderColor: color }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-3 bottom-3 h-3 w-3 border-b border-l transition-colors"
+        style={{ borderColor: color }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-3 bottom-3 h-3 w-3 border-b border-r transition-colors"
+        style={{ borderColor: color }}
+      />
+    </>
   );
 }
