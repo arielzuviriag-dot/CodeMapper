@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { FREE_TIER_FILE_LIMIT, resolveDemoMode } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
 
 /**
  * Persistent visual reassurance shown in the sidebar while the SSE stream
@@ -9,6 +12,16 @@ import { motion, useReducedMotion } from "framer-motion";
  */
 export function StreamingIndicator() {
   const prefersReducedMotion = useReducedMotion();
+  const nodeCount = useGraphStore((s) => s.nodes.size);
+
+  const [isPro, setIsPro] = useState(false);
+  useEffect(() => {
+    setIsPro(resolveDemoMode() === "pro");
+  }, []);
+
+  const counterText = isPro
+    ? `Procesados: ${nodeCount} clases`
+    : `Procesados: ${nodeCount} / ${FREE_TIER_FILE_LIMIT}`;
 
   return (
     <motion.div
@@ -17,14 +30,13 @@ export function StreamingIndicator() {
       exit={{
         opacity: 0,
         y: 4,
-        transition: { duration: prefersReducedMotion ? 0 : 0.4 },
+        transition: { duration: prefersReducedMotion ? 0 : 0.3 },
       }}
       transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
       className="cm-hairline-top relative flex items-center gap-3 overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3 shadow-[0_0_20px_rgba(185,28,66,0.15)]"
       role="status"
       aria-live="polite"
     >
-      {/* Faint bordó wash inside the card */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-60"
@@ -36,9 +48,14 @@ export function StreamingIndicator() {
 
       <PulsingMiniLogo reducedMotion={!!prefersReducedMotion} />
 
-      <span className="relative font-mono text-sm tracking-wide text-[var(--silver-mid)]">
-        Analizando...
-      </span>
+      <div className="relative flex flex-col gap-0.5">
+        <span className="font-mono text-sm tracking-wide text-[var(--silver-mid)]">
+          Analizando...
+        </span>
+        <span className="font-mono text-[10px] tabular-nums uppercase tracking-[0.14em] text-[var(--silver-dark)]">
+          {counterText}
+        </span>
+      </div>
     </motion.div>
   );
 }
@@ -67,8 +84,8 @@ function PulsingMiniLogo({ reducedMotion }: { reducedMotion: boolean }) {
       style={{ filter: "drop-shadow(0 0 8px rgba(185,28,66,0.45))" }}
     >
       <svg
-        width="32"
-        height="40"
+        width="28"
+        height="36"
         viewBox="0 -10 100 130"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"

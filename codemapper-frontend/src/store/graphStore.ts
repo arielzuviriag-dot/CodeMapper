@@ -35,12 +35,17 @@ export interface ProjectStats {
 }
 
 export interface LimitReachedState {
+  /** Sticky: true once the FREE limit was hit at any point this session. */
   reached: boolean;
+  /** Modal visibility — independent of `reached` so the banner can persist after dismiss. */
+  modalOpen: boolean;
   limit: number;
   totalAvailable: number;
   parsed: number;
   message: string;
 }
+
+export type LimitReachedPayload = Omit<LimitReachedState, "modalOpen">;
 
 interface GraphState {
   sessionId: string | null;
@@ -77,7 +82,8 @@ interface GraphState {
   resetFilters: () => void;
   setStatus: (status: SessionStatus) => void;
   setStats: (stats: Partial<ProjectStats>) => void;
-  setLimitReached: (limit: LimitReachedState) => void;
+  setLimitReached: (limit: LimitReachedPayload) => void;
+  openLimitReachedModal: () => void;
   dismissLimitReached: () => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
@@ -115,6 +121,7 @@ const DEFAULT_STATS: ProjectStats = {
 
 const DEFAULT_LIMIT_REACHED: LimitReachedState = {
   reached: false,
+  modalOpen: false,
   limit: 0,
   totalAvailable: 0,
   parsed: 0,
@@ -335,10 +342,14 @@ export const useGraphStore = create<GraphState>((set) => ({
   setStats: (stats) =>
     set((state) => ({ stats: { ...state.stats, ...stats } })),
 
-  setLimitReached: (limit) => set({ limitReached: limit }),
+  setLimitReached: (limit) =>
+    set({ limitReached: { ...limit, modalOpen: true } }),
+
+  openLimitReachedModal: () =>
+    set((state) => ({ limitReached: { ...state.limitReached, modalOpen: true } })),
 
   dismissLimitReached: () =>
-    set((state) => ({ limitReached: { ...state.limitReached, reached: false } })),
+    set((state) => ({ limitReached: { ...state.limitReached, modalOpen: false } })),
 
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),

@@ -24,6 +24,9 @@ api.interceptors.response.use(
 
 export type DemoMode = "pro" | undefined;
 
+/** Mirror of backend `codemapper.limits.free-max-files`. Used for client-side UX hints. */
+export const FREE_TIER_FILE_LIMIT = 100;
+
 const DEMO_MODE_STORAGE_KEY = "cm-demo-mode";
 
 export function readDemoModeFromUrl(): DemoMode {

@@ -22,7 +22,7 @@ export function LimitReachedModal() {
   };
 
   return (
-    <Dialog open={limit.reached} onOpenChange={(open) => !open && dismiss()}>
+    <Dialog open={limit.modalOpen} onOpenChange={(open) => !open && dismiss()}>
       <DialogContent
         className="cm-hairline-top w-[min(540px,92vw)] max-w-[540px] overflow-hidden border border-[var(--border-silver)] bg-[var(--bg-card)] p-0 sm:rounded-xl"
         style={{ boxShadow: "var(--shadow-xl)" }}
