@@ -34,24 +34,34 @@ public class AnalyzeController {
     private final AnalysisService analysisService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<AnalyzeResponse> upload(@RequestParam("file") MultipartFile file) throws IOException {
-        log.info("Upload received: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
-        return ResponseEntity.ok(analysisService.handleUpload(file));
+    public ResponseEntity<AnalyzeResponse> upload(@RequestParam("file") MultipartFile file,
+                                                  @RequestParam(value = "demoMode", required = false) String demoMode)
+            throws IOException {
+        boolean isPro = isProMode(demoMode);
+        log.info("Upload received: {} ({} bytes) [demoMode={}]",
+                file.getOriginalFilename(), file.getSize(), demoMode);
+        return ResponseEntity.ok(analysisService.handleUpload(file, isPro));
     }
 
     @PostMapping(value = "/path", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AnalyzeResponse> analyzePath(@Valid @RequestBody AnalyzePathRequest request)
             throws IOException {
         // ENDPOINT DE DESARROLLO LOCAL — no exponer en producción
-        log.info("Analyze path request: {}", request.getAbsolutePath());
-        return ResponseEntity.ok(analysisService.handlePath(request.getAbsolutePath()));
+        boolean isPro = isProMode(request.getDemoMode());
+        log.info("Analyze path request: {} [demoMode={}]", request.getAbsolutePath(), request.getDemoMode());
+        return ResponseEntity.ok(analysisService.handlePath(request.getAbsolutePath(), isPro));
     }
 
     @PostMapping(value = "/github", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AnalyzeResponse> analyzeGithub(@Valid @RequestBody AnalyzeGithubRequest request)
             throws Exception {
-        log.info("Analyze GitHub request: {}", request.getRepoUrl());
-        return ResponseEntity.ok(analysisService.handleGithub(request.getRepoUrl()));
+        boolean isPro = isProMode(request.getDemoMode());
+        log.info("Analyze GitHub request: {} [demoMode={}]", request.getRepoUrl(), request.getDemoMode());
+        return ResponseEntity.ok(analysisService.handleGithub(request.getRepoUrl(), isPro));
+    }
+
+    private boolean isProMode(String demoMode) {
+        return demoMode != null && "pro".equalsIgnoreCase(demoMode.trim());
     }
 
     @GetMapping(value = "/stream/{sessionId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

@@ -22,9 +22,50 @@ api.interceptors.response.use(
   },
 );
 
-export async function uploadProject(file: File): Promise<AnalyzeResponse> {
+export type DemoMode = "pro" | undefined;
+
+const DEMO_MODE_STORAGE_KEY = "cm-demo-mode";
+
+export function readDemoModeFromUrl(): DemoMode {
+  if (typeof window === "undefined") return undefined;
+  const value = new URL(window.location.href).searchParams
+    .get("demo")
+    ?.toLowerCase();
+  return value === "pro" ? "pro" : undefined;
+}
+
+export function persistDemoMode(mode: DemoMode): void {
+  if (typeof window === "undefined") return;
+  if (mode) {
+    window.sessionStorage.setItem(DEMO_MODE_STORAGE_KEY, mode);
+  } else {
+    window.sessionStorage.removeItem(DEMO_MODE_STORAGE_KEY);
+  }
+}
+
+export function getStoredDemoMode(): DemoMode {
+  if (typeof window === "undefined") return undefined;
+  const stored = window.sessionStorage.getItem(DEMO_MODE_STORAGE_KEY);
+  return stored === "pro" ? "pro" : undefined;
+}
+
+/** Lee de URL primero, hace fallback a sessionStorage. Persiste el valor leído. */
+export function resolveDemoMode(): DemoMode {
+  const fromUrl = readDemoModeFromUrl();
+  if (fromUrl) {
+    persistDemoMode(fromUrl);
+    return fromUrl;
+  }
+  return getStoredDemoMode();
+}
+
+export async function uploadProject(
+  file: File,
+  demoMode?: DemoMode,
+): Promise<AnalyzeResponse> {
   const fd = new FormData();
   fd.append("file", file);
+  if (demoMode) fd.append("demoMode", demoMode);
   const { data } = await api.post<AnalyzeResponse>(
     "/api/analyze/upload",
     fd,
@@ -35,16 +76,22 @@ export async function uploadProject(file: File): Promise<AnalyzeResponse> {
 
 export async function analyzeLocalPath(
   absolutePath: string,
+  demoMode?: DemoMode,
 ): Promise<AnalyzeResponse> {
   const { data } = await api.post<AnalyzeResponse>("/api/analyze/path", {
     absolutePath,
+    demoMode,
   });
   return data;
 }
 
-export async function analyzeGithub(repoUrl: string): Promise<AnalyzeResponse> {
+export async function analyzeGithub(
+  repoUrl: string,
+  demoMode?: DemoMode,
+): Promise<AnalyzeResponse> {
   const { data } = await api.post<AnalyzeResponse>("/api/analyze/github", {
     repoUrl,
+    demoMode,
   });
   return data;
 }

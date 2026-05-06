@@ -10,6 +10,7 @@ import com.codemapper.model.event.ClassFoundEvent;
 import com.codemapper.model.event.ConnectionFoundEvent;
 import com.codemapper.model.event.ErrorEvent;
 import com.codemapper.model.event.FieldsParsedEvent;
+import com.codemapper.model.event.LimitReachedEvent;
 import com.codemapper.model.event.MethodsParsedEvent;
 import com.codemapper.model.event.PackageFoundEvent;
 import com.codemapper.model.event.SessionCompleteEvent;
@@ -28,6 +29,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeS
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -57,6 +59,9 @@ public class JavaParserService {
     private final MethodExtractor methodExtractor;
     private final ConnectionResolver connectionResolver;
 
+    @Value("${codemapper.limits.free-max-files:100}")
+    private int freeMaxFiles;
+
     public void parseProject(SessionData session, Consumer<BaseEvent> sink) throws IOException {
         Instant start = Instant.now();
         Path projectRoot = session.getProjectPath();
@@ -69,8 +74,16 @@ public class JavaParserService {
         Set<String> seenPackages = new HashSet<>();
         List<ConnectionResolver.TypedClass> typedClasses = new ArrayList<>();
 
-        List<Path> javaFiles = collectJavaFiles(projectRoot);
-        log.info("Session {}: parsing {} java files", session.getSessionId(), javaFiles.size());
+        List<Path> allJavaFiles = collectJavaFiles(projectRoot);
+        int totalAvailable = allJavaFiles.size();
+
+        boolean limitApplied = !session.isPro() && totalAvailable > freeMaxFiles;
+        List<Path> javaFiles = limitApplied
+                ? allJavaFiles.subList(0, freeMaxFiles)
+                : allJavaFiles;
+
+        log.info("Session {}: parsing {} of {} java files (pro={}, limitApplied={})",
+                session.getSessionId(), javaFiles.size(), totalAvailable, session.isPro(), limitApplied);
 
         for (Path file : javaFiles) {
             CompilationUnit cu;
@@ -134,6 +147,16 @@ public class JavaParserService {
                             file.toString()));
                 }
             }
+        }
+
+        if (limitApplied) {
+            sink.accept(new LimitReachedEvent(
+                    freeMaxFiles,
+                    totalAvailable,
+                    javaFiles.size(),
+                    "Llegaste al límite de la versión FREE"));
+            log.info("Session {}: FREE limit reached ({} of {} files parsed)",
+                    session.getSessionId(), javaFiles.size(), totalAvailable);
         }
 
         Map<String, ParsedClass> byId = new LinkedHashMap<>();

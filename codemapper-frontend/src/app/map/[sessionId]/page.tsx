@@ -11,6 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
+import { LimitReachedModal } from "@/components/sidebar/LimitReachedModal";
+import { resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useSSE } from "@/hooks/useSSE";
 
@@ -31,6 +33,7 @@ export default function MapPage() {
   const edgeCount = useGraphStore((s) => s.edges.length);
 
   useEffect(() => {
+    resolveDemoMode();
     reset();
     setSessionId(sessionId);
     return () => reset();
@@ -112,6 +115,7 @@ export default function MapPage() {
         </div>
 
         <ClassDetailSheet />
+        <LimitReachedModal />
       </main>
     </ErrorBoundary>
   );

@@ -1,12 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { UploadTabs } from "@/components/upload/UploadTabs";
+import { resolveDemoMode } from "@/lib/api";
 
 const SCAN_DURATION = 7;
 
 export default function HomePage() {
   const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    resolveDemoMode();
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background">

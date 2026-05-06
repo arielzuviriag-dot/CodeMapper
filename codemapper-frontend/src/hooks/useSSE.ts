@@ -10,6 +10,7 @@ import type {
   ConnectionFoundPayload,
   ErrorPayload,
   FieldsParsedPayload,
+  LimitReachedPayload,
   MethodsParsedPayload,
   PackageFoundPayload,
   SessionCompletePayload,
@@ -44,6 +45,7 @@ export function useSSE(sessionId: string | null) {
   const addPackagesBatch = useGraphStore((s) => s.addPackagesBatch);
   const setStatus = useGraphStore((s) => s.setStatus);
   const setStats = useGraphStore((s) => s.setStats);
+  const setLimitReached = useGraphStore((s) => s.setLimitReached);
 
   const bufferRef = useRef<Buffer>(emptyBuffer());
 
@@ -152,6 +154,18 @@ export function useSSE(sessionId: string | null) {
             toast.success("Análisis completado");
             es.close();
             clearInterval(interval);
+            break;
+          }
+          case "limit_reached": {
+            const p = data as LimitReachedPayload;
+            console.log("[CodeMapper] limit_reached recv", p);
+            setLimitReached({
+              reached: true,
+              limit: p.limit,
+              totalAvailable: p.totalFilesAvailable,
+              parsed: p.filesParsed,
+              message: p.message,
+            });
             break;
           }
           case "error": {

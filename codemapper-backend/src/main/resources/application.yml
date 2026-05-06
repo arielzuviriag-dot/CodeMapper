@@ -13,6 +13,8 @@ codemapper:
   upload-dir: ./tmp-uploads
   session-timeout-minutes: 120
   cleanup-interval-minutes: 30
+  limits:
+    free-max-files: 100
 
 logging:
   level:

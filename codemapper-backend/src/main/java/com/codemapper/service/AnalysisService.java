@@ -40,7 +40,7 @@ public class AnalysisService {
     @Value("${codemapper.upload-dir:./tmp-uploads}")
     private String uploadDirConfig;
 
-    public AnalyzeResponse handleUpload(MultipartFile file) throws IOException {
+    public AnalyzeResponse handleUpload(MultipartFile file, boolean isPro) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Uploaded file is empty");
         }
@@ -81,7 +81,7 @@ public class AnalysisService {
                 throw new IllegalArgumentException("Only .java or .zip files are accepted");
             }
 
-            SessionData session = sessionService.createSession(projectRoot, projectName, totalFiles, true);
+            SessionData session = sessionService.createSession(projectRoot, projectName, totalFiles, true, isPro);
             return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
 
         } catch (RuntimeException | IOException e) {
@@ -90,7 +90,7 @@ public class AnalysisService {
         }
     }
 
-    public AnalyzeResponse handlePath(String absolutePath) throws IOException {
+    public AnalyzeResponse handlePath(String absolutePath, boolean isPro) throws IOException {
         // ENDPOINT DE DESARROLLO LOCAL — no exponer en producción
         if (absolutePath == null || absolutePath.isBlank()) {
             throw new IllegalArgumentException("absolutePath is required");
@@ -111,11 +111,11 @@ public class AnalysisService {
         int totalFiles = ProjectInfoUtils.countJavaFiles(root);
 
         SessionData session = sessionService.createSession(root.toAbsolutePath().normalize(),
-                projectName, totalFiles, false);
+                projectName, totalFiles, false, isPro);
         return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
     }
 
-    public AnalyzeResponse handleGithub(String repoUrl) throws Exception {
+    public AnalyzeResponse handleGithub(String repoUrl, boolean isPro) throws Exception {
         if (repoUrl == null || repoUrl.isBlank()) {
             throw new IllegalArgumentException("repoUrl is required");
         }
@@ -128,7 +128,7 @@ public class AnalysisService {
             String projectName = ProjectInfoUtils.deriveName(projectRoot, pom);
             int totalFiles = ProjectInfoUtils.countJavaFiles(projectRoot);
 
-            SessionData session = sessionService.createSession(projectRoot, projectName, totalFiles, true);
+            SessionData session = sessionService.createSession(projectRoot, projectName, totalFiles, true, isPro);
             return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
         } catch (Exception e) {
             safeDelete(workDir);

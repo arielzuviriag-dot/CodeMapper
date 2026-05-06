@@ -5,7 +5,7 @@ import { useDropzone } from "react-dropzone";
 import JSZip from "jszip";
 import { FileArchive, FolderOpen, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { uploadProject } from "@/lib/api";
+import { resolveDemoMode, uploadProject } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -92,8 +92,10 @@ export function UploadZone() {
     if (!prepared) return;
     setBusy(true);
     try {
-      const res = await uploadProject(prepared.file);
-      router.push(`/map/${res.sessionId}`);
+      const demoMode = resolveDemoMode();
+      const res = await uploadProject(prepared.file, demoMode);
+      const suffix = demoMode === "pro" ? "?demo=pro" : "";
+      router.push(`/map/${res.sessionId}${suffix}`);
     } catch {
       // toast already shown by interceptor
     } finally {

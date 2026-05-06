@@ -26,6 +26,7 @@ public class SessionData {
     private Instant createdAt;
     private Status status;
     private boolean ownsFiles;
+    private boolean pro;
 
     private final List<ParsedClass> parsedClasses = new CopyOnWriteArrayList<>();
     private final List<Connection> connections = new CopyOnWriteArrayList<>();

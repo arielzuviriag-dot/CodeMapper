@@ -34,6 +34,14 @@ export interface ProjectStats {
   projectName: string;
 }
 
+export interface LimitReachedState {
+  reached: boolean;
+  limit: number;
+  totalAvailable: number;
+  parsed: number;
+  message: string;
+}
+
 interface GraphState {
   sessionId: string | null;
   nodes: Map<string, ClassNodeData>;
@@ -44,6 +52,7 @@ interface GraphState {
   stats: ProjectStats;
   userInteracted: boolean;
   packages: Set<string>;
+  limitReached: LimitReachedState;
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
 
@@ -68,6 +77,8 @@ interface GraphState {
   resetFilters: () => void;
   setStatus: (status: SessionStatus) => void;
   setStats: (stats: Partial<ProjectStats>) => void;
+  setLimitReached: (limit: LimitReachedState) => void;
+  dismissLimitReached: () => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   reset: () => void;
@@ -102,6 +113,14 @@ const DEFAULT_STATS: ProjectStats = {
   projectName: "",
 };
 
+const DEFAULT_LIMIT_REACHED: LimitReachedState = {
+  reached: false,
+  limit: 0,
+  totalAvailable: 0,
+  parsed: 0,
+  message: "",
+};
+
 function buildClassNode(payload: ClassFoundPayload): ClassNodeData {
   return {
     id: payload.id,
@@ -128,6 +147,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   stats: DEFAULT_STATS,
   userInteracted: false,
   packages: new Set(),
+  limitReached: DEFAULT_LIMIT_REACHED,
   version: 0,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -315,6 +335,11 @@ export const useGraphStore = create<GraphState>((set) => ({
   setStats: (stats) =>
     set((state) => ({ stats: { ...state.stats, ...stats } })),
 
+  setLimitReached: (limit) => set({ limitReached: limit }),
+
+  dismissLimitReached: () =>
+    set((state) => ({ limitReached: { ...state.limitReached, reached: false } })),
+
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
 
@@ -329,6 +354,7 @@ export const useGraphStore = create<GraphState>((set) => ({
       stats: DEFAULT_STATS,
       userInteracted: false,
       packages: new Set(),
+      limitReached: DEFAULT_LIMIT_REACHED,
       version: 0,
     }),
 }));

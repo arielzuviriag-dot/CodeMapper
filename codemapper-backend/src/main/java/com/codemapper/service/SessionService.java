@@ -26,7 +26,8 @@ public class SessionService {
     @Value("${codemapper.session-timeout-minutes:120}")
     private long sessionTimeoutMinutes;
 
-    public SessionData createSession(Path projectPath, String projectName, int totalFiles, boolean ownsFiles) {
+    public SessionData createSession(Path projectPath, String projectName, int totalFiles,
+                                     boolean ownsFiles, boolean pro) {
         SessionData data = new SessionData();
         data.setSessionId(UUID.randomUUID().toString());
         data.setProjectPath(projectPath);
@@ -35,9 +36,10 @@ public class SessionService {
         data.setCreatedAt(Instant.now());
         data.setStatus(SessionData.Status.CREATED);
         data.setOwnsFiles(ownsFiles);
+        data.setPro(pro);
         sessions.put(data.getSessionId(), data);
-        log.info("Created session {} for project '{}' ({} files) at {}",
-                data.getSessionId(), projectName, totalFiles, projectPath);
+        log.info("Created session {} for project '{}' ({} files, pro={}) at {}",
+                data.getSessionId(), projectName, totalFiles, pro, projectPath);
         return data;
     }
 

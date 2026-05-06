@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Github, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { analyzeGithub } from "@/lib/api";
+import { analyzeGithub, resolveDemoMode } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -20,8 +20,10 @@ export function GitHubInput() {
     }
     setBusy(true);
     try {
-      const res = await analyzeGithub(url.trim());
-      router.push(`/map/${res.sessionId}`);
+      const demoMode = resolveDemoMode();
+      const res = await analyzeGithub(url.trim(), demoMode);
+      const suffix = demoMode === "pro" ? "?demo=pro" : "";
+      router.push(`/map/${res.sessionId}${suffix}`);
     } catch {
       // toast handled
     } finally {

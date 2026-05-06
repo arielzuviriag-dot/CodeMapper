@@ -10,4 +10,6 @@ public class AnalyzeGithubRequest {
 
     @NotBlank(message = "repoUrl is required")
     private String repoUrl;
+
+    private String demoMode;
 }

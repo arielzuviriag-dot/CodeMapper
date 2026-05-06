@@ -74,6 +74,7 @@ export type SSEEventType =
   | "methods_parsed"
   | "connection_found"
   | "session_complete"
+  | "limit_reached"
   | "error";
 
 export interface SSEEvent<T = unknown> {
@@ -129,4 +130,11 @@ export interface SessionCompletePayload {
 export interface ErrorPayload {
   message: string;
   code?: string;
+}
+
+export interface LimitReachedPayload {
+  limit: number;
+  totalFilesAvailable: number;
+  filesParsed: number;
+  message: string;
 }

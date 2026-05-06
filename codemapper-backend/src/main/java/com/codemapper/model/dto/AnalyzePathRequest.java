@@ -10,4 +10,6 @@ public class AnalyzePathRequest {
 
     @NotBlank(message = "absolutePath is required")
     private String absolutePath;
+
+    private String demoMode;
 }
