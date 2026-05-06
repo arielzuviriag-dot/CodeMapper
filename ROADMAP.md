@@ -1,129 +1,179 @@
 # Roadmap CodeMapper
 
-## ✅ MVP v0.1 — COMPLETADO
+## ✅ MVP v0.0 — Análisis general (COMPLETADO)
 - [x] Backend Spring Boot + JavaParser
-- [x] Frontend Next.js + React Flow
-- [x] Análisis de proyectos Java completos
+- [x] Frontend Next.js + React Flow  
+- [x] Análisis de proyectos Java completos (vista panorámica)
 - [x] Streaming SSE progresivo
-- [x] Visualización por capas (Controllers → Services → Repos → Entities)
+- [x] Visualización por capas
 - [x] Filtros, búsqueda, click en nodo muestra código
 - [x] Design System BMW/Lambo aplicado
 - [x] Tested con backend-reserva (234 clases, 494 conexiones)
 
 ---
 
-## 🎯 v0.2 — IMPACT TRACER (la feature estrella, vale plata)
+## 🎯 v0.1 — FREE (próximo paso)
 
-> Idea original: rastrear la cadena completa desde un punto de entrada hasta la base de datos, atravesando TODOS los formatos del proyecto (no solo Java).
+> Versión gratuita con límites estrictos. Es la entrada al producto.
 
-### Qué problema resuelve
-Cualquier dev que entra a un proyecto legacy se pierde. Hay un bug en un formulario web y nadie sabe por dónde empezar. Esta feature da la respuesta visual end-to-end.
+### Caso A — Análisis FOCO de un Java (NUEVO)
+- Inputs: 1 archivo .java + proyecto entero como marco
+- UX progresiva:
+  1. El java aparece centrado en pantalla
+  2. Se cargan variables de a una (animación stagger)
+  3. Se cargan métodos
+  4. Se cargan interfaces que implementa
+  5. Aparecen conexiones (qué llama, quién lo llama, properties que usa)
+- Límite FREE: hasta 10 conexiones mostradas
+- Cuota: 10 búsquedas por semana
 
-### Casos de uso reales
-- Bug en formulario HTML → "qué clase Java lo procesa, qué tabla toca"
-- Dev nuevo en el proyecto → "muestrame qué hace este botón"
-- Refactor → "si toco esta clase, qué se rompe"
-- Auditoría seguridad → "qué endpoints llegan a la tabla creditCards"
-- Documentación automática de flujos completos
+### Caso B — Análisis GENERAL (lo que ya existe, con límite)
+- El MVP actual pero limitado
+- Límite FREE: hasta 100 archivos mostrados
 
-### Punto de partida (input puede ser cualquiera)
-- Archivo .java (Controller, Service, Repository, Entity)
-- Archivo .html / .jsp / .xhtml (formulario, pantalla)
-- Un BOTÓN específico de un HTML (con su action)
-- Archivo .xml (struts-config, web.xml, applicationContext, persistence.xml)
-- Archivo .properties / .yml / .yaml
-- Archivo .css / .js / .ts (frontend)
-- Una tabla de base de datos (rastreo inverso)
-
-### Qué tiene que rastrear
-1. Frontend → Backend: form action, fetch, axios
-2. Backend mappings: struts-config, Spring annotations, web.xml servlets
-3. Backend layers: Controller → Service → Repository → Entity
-4. Configs: properties, applicationContext, persistence.xml
-5. Base de datos: @Table, SQL inline, stored procedures, FKs
-
-### UI del Tracer
-- Subir proyecto + seleccionar archivo de inicio
-- El archivo de inicio queda CENTRADO en pantalla
-- La cadena se dibuja radiando desde el centro hacia afuera
-- Cada nivel de profundidad en un anillo concéntrico
-- Colores distintos por TIPO de nodo (HTML, XML, Properties, Java, DB, SQL)
+### UX adicional
+- Login obligatorio (no hay acceso anónimo)
+- Mensaje permanente abajo: "Estás usando la versión FREE - Te quedan X búsquedas esta semana"
+- Dashboard del usuario con porcentaje de uso visible
 
 ---
 
-## 🌍 v0.3 — MULTI-LENGUAJE
+## 💎 v0.2 — PRO (primera versión paga)
 
-> Idea original: no quedarse solo en Java. Soportar otros stacks legacy y modernos.
+> Mismo producto que v0.1 pero sin límites.
 
-### Lenguajes target (en orden de prioridad)
+- Análisis FOCO: sin límite de 10 conexiones
+- Análisis GENERAL: sin límite de 100 archivos
+- Búsquedas ilimitadas
+- Sin mensajes de FREE
+
+---
+
+## 🔍 v0.3 — EXPANSIÓN PRO
+
+### Nuevos puntos de partida
+- Archivo .html / .jsp como inicio
+- Botón específico de un HTML
+- Método específico (no solo archivo entero)
+
+### INVESTIGAR ERROR
+- Input: punto de partida + excepción
+- Output: identifica dónde puede lanzarse esa excepción en el camino
+- Modo bidireccional: rastreo desde el punto + búsqueda inversa por excepción
+- Caso de uso real: "App caída, falla en UserService.validateLogin() con NullPointerException"
+
+---
+
+## 🔄 v0.4 — RECORRIDO INVERSO desde DB
+
+- Input: nombre de tabla
+- Output: rastreo inverso completo
+  - Repository que la usa → Service → Controller → endpoint REST → frontend → botón origen
+- "Desde la tabla hacia el botón que dispara todo"
+
+---
+
+## 📚 v0.5 — DOCUMENTACIÓN INTEGRADA
+
+- Input adicional opcional: docs (PDF, MD, Confluence exportado)
+- La app indexa la documentación
+- Cuando hace cualquier análisis, también busca menciones en docs
+- Conecta visualmente la documentación al grafo
+
+---
+
+## 🌍 v1.0 — MULTI-LENGUAJE + IA
+
+### Multi-lenguaje (en orden de prioridad)
 1. Java (ya hecho)
-2. COBOL (mainframes, bancos, gobiernos — mercado enorme casi sin herramientas modernas)
-3. C# / .NET (WebForms, ASP.NET, Entity Framework)
-4. PHP (WordPress, Laravel, sistemas legacy)
-5. Python (Django, Flask, FastAPI)
-6. Node.js / TypeScript (Express, NestJS, Next.js)
-7. Visual Basic / VB.NET
-8. Ruby on Rails
+2. COBOL (mainframes - mercado enorme sin herramientas modernas)
+3. C# / .NET
+4. PHP
+5. Python
+6. Node.js / TypeScript
 
-### Por qué COBOL es la apuesta brillante
-- Trillones de líneas en producción (bancos, gobiernos, aerolíneas)
-- Casi nadie sabe leerlo
-- Empresas pagan fortunas por entender su código COBOL
-- Herramientas existentes (Micro Focus) son de los 90s y caras
-- CodeMapper podría ser la PRIMERA herramienta moderna de visualización COBOL
-
----
-
-## 💰 v1.0 — MONETIZACIÓN
-
-### Pricing
-- FREE: hasta 50 clases, sin tracer, sin export
-- PRO ($19/mes): ilimitado, tracer, export, histórico
-- ENTERPRISE ($99/mes): multi-lenguaje, API, webhooks, on-premise
-
-### Stack para implementar
-- NextAuth.js (login Google/GitHub/email)
-- Stripe (suscripciones)
-- PostgreSQL (usuarios y análisis guardados)
-- Redis (sesiones y cache)
-
----
-
-## 💡 v2.0 — IDEAS LOCAS
-
-- IA que sugiere refactors
-- Detección de code smells, ciclos, dead code
-- Plugin IntelliJ / VS Code / Eclipse
-- Modo colaborativo (varios devs en vivo)
-- Comparación visual entre commits
-- Documentación auto en PDF / Confluence
-- Análisis de impacto en PRs
-- Chat con tu codebase
+### IA (a definir cómo integrar)
+- Resumen en lenguaje natural de clases
 - Búsqueda semántica
+- Sugerencias de refactor
+
+> Pendiente: definir bien el rol de la IA en el producto
 
 ---
 
-## 📝 Notas estratégicas
+## 💰 Modelo de monetización
 
-### Decisión clave (3-Mayo-2026)
-"Dar como opción de pago tipo pagas más tenes más detalle pero necesitas una máquina más robusta" — el modo detallado consume más recursos, naturalmente requiere mejores máquinas. Tier comercial alineado con valor técnico real.
+### Pricing (versiones tentativas)
 
-### Diferenciadores
-- vs Sonar: Sonar es métricas, no visualización end-to-end
-- vs Structure101: caro y feo, lookee de los 2010s
-- vs IntelliJ Diagrams: solo Java, solo dentro del IDE
-- vs Sourcegraph: enfocado en search, no en flujos visuales
-- CodeMapper: end-to-end + multi-lenguaje + UI moderna
+**FREE** (v0.1)
+- Hasta 10 conexiones en modo FOCO
+- Hasta 100 archivos en modo GENERAL
+- 10 búsquedas por semana
+- Login obligatorio
+- Mensaje permanente
+
+**PRO** (v0.2 → v0.5 conforme crece)
+- Sin límites
+- Todas las features de cada versión
+
+**ULTIMATE** (v1.0)
+- Multi-lenguaje
+- IA integrada
+
+### Tipo de límite
+HARD limit en backend (se detiene a los 100 archivos / 10 conexiones)
 
 ---
 
-## 🗓️ Próximos pasos
+## 📐 Plan de ejecución actual
 
-- [x] MVP v0.1 — completado 3-Mayo-2026
-- [ ] v0.2 Impact Tracer — diseño detallado pendiente
-- [ ] v0.3 Multi-lenguaje — investigación pendiente
-- [ ] v1.0 Monetización — después de validación
+### FASE 1 — CONSTRUIR v0.1 + v0.2 (3-4 semanas)
+- v0.1 FREE con límites hard
+- v0.2 PRO sin límites
+- Sin sistema de pago real (todavía)
+- Sin login real (todavía)
+- Toggle interno "Demo PRO" para mostrar a beta testers
+
+### FASE 2 — VALIDACIÓN (1-2 semanas)
+- Mostrar a 10-20 personas (amigos, colegas, comunidad)
+- Recopilar feedback honesto
+- Decidir si vale la pena seguir
+
+### FASE 3 — PRODUCTIZACIÓN (si feedback positivo)
+- Implementar auth real (NextAuth)
+- Implementar pagos reales (Stripe)
+- Landing nueva con video explicativo
+- Dashboard de usuario completo
+- Lanzamiento oficial
 
 ---
 
-Última actualización: 3-Mayo-2026
+## 🏷️ Pendiente: cambiar el nombre del producto
+
+"CodeMapper" lo usan otras herramientas. Hay que elegir nombre nuevo.
+Opciones a considerar: Ariadne, Codetrail, Pathfind, Tendril, Wayfinder.
+
+---
+
+## 💡 Notas estratégicas
+
+### Diferenciadores frente a competencia
+- vs Sonar: nosotros somos visualización end-to-end, no métricas
+- vs Structure101: UI moderna y accesible
+- vs IntelliJ Diagrams: multi-formato (no solo Java) y compartible
+- vs Sourcegraph: enfocado en flujos visuales, no en search
+
+### Casos de uso que justifican el producto
+- Devs entrando a proyecto legacy
+- Debug profundo (modo INVESTIGAR ERROR)
+- Refactor seguro (modo RECORRIDO INVERSO)
+- Auditoría de seguridad (qué llega a tablas sensibles)
+- Documentación automática
+
+### Decisión clave (sesión actual)
+"Construir v0.1 + v0.2 antes de pedir feedback. Cuando alguien vea el FREE y se le acabe, le mostramos el PRO con un toggle demo, así evalúa si pagaría."
+
+---
+
+Última actualización: sesión actual
+Estado: Fase 1 — construyendo v0.1 + v0.2
