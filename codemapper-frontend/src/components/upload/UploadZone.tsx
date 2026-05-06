@@ -3,11 +3,16 @@
 import { useCallback, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import JSZip from "jszip";
+import { AnimatePresence } from "framer-motion";
 import { FileArchive, FolderOpen, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
+import { cn } from "@/lib/utils";
 import { resolveDemoMode, uploadProject } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+
+const NAVIGATE_DELAY_MS = 200;
 
 interface PreparedUpload {
   file: File;
@@ -30,7 +35,8 @@ async function zipFiles(files: File[]): Promise<File> {
 export function UploadZone() {
   const router = useRouter();
   const [prepared, setPrepared] = useState<PreparedUpload | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const onDrop = useCallback(async (accepted: File[]) => {
@@ -89,18 +95,21 @@ export function UploadZone() {
   };
 
   const onAnalyze = async () => {
-    if (!prepared) return;
-    setBusy(true);
+    if (!prepared || isAnalyzing) return;
+    setIsAnalyzing(true);
+    const demoMode = resolveDemoMode();
+    let sessionId: string;
     try {
-      const demoMode = resolveDemoMode();
       const res = await uploadProject(prepared.file, demoMode);
-      const suffix = demoMode === "pro" ? "?demo=pro" : "";
-      router.push(`/map/${res.sessionId}${suffix}`);
+      sessionId = res.sessionId;
     } catch {
-      // toast already shown by interceptor
-    } finally {
-      setBusy(false);
+      // toast already shown by interceptor — allow retry
+      setIsAnalyzing(false);
+      return;
     }
+    setShowOverlay(true);
+    const suffix = demoMode === "pro" ? "?demo=pro" : "";
+    setTimeout(() => router.push(`/map/${sessionId}${suffix}`), NAVIGATE_DELAY_MS);
   };
 
   const clear = () => setPrepared(null);
@@ -178,7 +187,7 @@ export function UploadZone() {
               </span>
             </div>
           </div>
-          <Button size="icon" variant="ghost" onClick={clear} disabled={busy}>
+          <Button size="icon" variant="ghost" onClick={clear} disabled={isAnalyzing}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -186,19 +195,28 @@ export function UploadZone() {
 
       <Button
         onClick={onAnalyze}
-        disabled={!prepared || busy}
+        disabled={!prepared || isAnalyzing}
         size="lg"
-        className="bg-[var(--bordo)] uppercase tracking-[0.16em] text-white shadow-[0_0_24px_rgba(185,28,66,0.35)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_28px_rgba(185,28,66,0.55)] disabled:bg-[var(--bg-panel)] disabled:text-[var(--fg-muted)] disabled:shadow-none"
+        className={cn(
+          "uppercase tracking-[0.16em] text-white",
+          isAnalyzing
+            ? "cursor-wait bg-[var(--bordo)] opacity-70 shadow-[0_0_12px_rgba(185,28,66,0.18)] hover:bg-[var(--bordo)] disabled:bg-[var(--bordo)] disabled:text-white disabled:opacity-70"
+            : "bg-[var(--bordo)] shadow-[0_0_24px_rgba(185,28,66,0.35)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_28px_rgba(185,28,66,0.55)] disabled:bg-[var(--bg-panel)] disabled:text-[var(--fg-muted)] disabled:shadow-none",
+        )}
       >
-        {busy ? (
+        {isAnalyzing ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Subiendo...
+            Analizando...
           </>
         ) : (
           "Analizar"
         )}
       </Button>
+
+      <AnimatePresence>
+        {showOverlay && <AnalysisLoadingScreen />}
+      </AnimatePresence>
     </div>
   );
 }

@@ -4,10 +4,13 @@ import * as React from "react";
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { AnimatePresence } from "framer-motion";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
+import { StreamingIndicator } from "@/components/loading/StreamingIndicator";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
@@ -31,6 +34,11 @@ export default function MapPage() {
   const stats = useGraphStore((s) => s.stats);
   const nodeCount = useGraphStore((s) => s.nodes.size);
   const edgeCount = useGraphStore((s) => s.edges.length);
+  const sessionStatus = useGraphStore((s) => s.sessionStatus);
+
+  const showLoadingScreen =
+    nodeCount === 0 &&
+    (sessionStatus === "idle" || sessionStatus === "streaming");
 
   useEffect(() => {
     resolveDemoMode();
@@ -106,6 +114,11 @@ export default function MapPage() {
           <aside className="hidden w-[280px] shrink-0 flex-col gap-3 border-r border-[var(--border-silver)] bg-[var(--bg-base)] p-3 lg:flex">
             <ParseProgress />
             <ProjectStats />
+            <AnimatePresence>
+              {sessionStatus === "streaming" && nodeCount > 0 && (
+                <StreamingIndicator />
+              )}
+            </AnimatePresence>
             <EmptyOrLoading />
           </aside>
 
@@ -116,6 +129,10 @@ export default function MapPage() {
 
         <ClassDetailSheet />
         <LimitReachedModal />
+
+        <AnimatePresence>
+          {showLoadingScreen && <AnalysisLoadingScreen />}
+        </AnimatePresence>
       </main>
     </ErrorBoundary>
   );

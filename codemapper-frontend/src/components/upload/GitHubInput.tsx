@@ -1,34 +1,44 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Github, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
+import { cn } from "@/lib/utils";
 import { analyzeGithub, resolveDemoMode } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+const NAVIGATE_DELAY_MS = 200;
+
 export function GitHubInput() {
   const router = useRouter();
   const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
 
   const onAnalyze = async () => {
     if (!url.trim()) {
       toast.error("Ingresá una URL de GitHub");
       return;
     }
-    setBusy(true);
+    if (isAnalyzing) return;
+    setIsAnalyzing(true);
+    const demoMode = resolveDemoMode();
+    let sessionId: string;
     try {
-      const demoMode = resolveDemoMode();
       const res = await analyzeGithub(url.trim(), demoMode);
-      const suffix = demoMode === "pro" ? "?demo=pro" : "";
-      router.push(`/map/${res.sessionId}${suffix}`);
+      sessionId = res.sessionId;
     } catch {
-      // toast handled
-    } finally {
-      setBusy(false);
+      // toast handled by interceptor — allow retry
+      setIsAnalyzing(false);
+      return;
     }
+    setShowOverlay(true);
+    const suffix = demoMode === "pro" ? "?demo=pro" : "";
+    setTimeout(() => router.push(`/map/${sessionId}${suffix}`), NAVIGATE_DELAY_MS);
   };
 
   return (
@@ -40,7 +50,7 @@ export function GitHubInput() {
           placeholder="https://github.com/usuario/repo"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          disabled={busy}
+          disabled={isAnalyzing}
           onKeyDown={(e) => {
             if (e.key === "Enter") onAnalyze();
           }}
@@ -54,19 +64,28 @@ export function GitHubInput() {
 
       <Button
         onClick={onAnalyze}
-        disabled={!url.trim() || busy}
+        disabled={!url.trim() || isAnalyzing}
         size="lg"
-        className="bg-[var(--bordo)] uppercase tracking-[0.16em] text-white shadow-[0_0_24px_rgba(185,28,66,0.35)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_28px_rgba(185,28,66,0.55)] disabled:bg-[var(--bg-panel)] disabled:text-[var(--fg-muted)] disabled:shadow-none"
+        className={cn(
+          "uppercase tracking-[0.16em] text-white",
+          isAnalyzing
+            ? "cursor-wait bg-[var(--bordo)] opacity-70 shadow-[0_0_12px_rgba(185,28,66,0.18)] hover:bg-[var(--bordo)] disabled:bg-[var(--bordo)] disabled:text-white disabled:opacity-70"
+            : "bg-[var(--bordo)] shadow-[0_0_24px_rgba(185,28,66,0.35)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_28px_rgba(185,28,66,0.55)] disabled:bg-[var(--bg-panel)] disabled:text-[var(--fg-muted)] disabled:shadow-none",
+        )}
       >
-        {busy ? (
+        {isAnalyzing ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Clonando...
+            Analizando...
           </>
         ) : (
           "Analizar"
         )}
       </Button>
+
+      <AnimatePresence>
+        {showOverlay && <AnalysisLoadingScreen />}
+      </AnimatePresence>
     </div>
   );
 }
