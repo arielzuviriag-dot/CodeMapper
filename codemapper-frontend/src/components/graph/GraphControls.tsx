@@ -17,7 +17,7 @@ export function GraphControls({ onRelayout }: Props) {
     "h-9 w-9 rounded-sm bg-transparent text-[var(--silver)] hover:bg-[var(--bordo)]/15 hover:text-[var(--bordo)]";
 
   return (
-    <div className="absolute right-4 top-4 z-10 flex flex-col gap-1 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-1 shadow-[var(--shadow-md)]">
+    <div className="absolute right-4 top-4 z-10 flex w-[170px] flex-row items-center justify-around gap-1 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-1 shadow-[var(--shadow-md)]">
       <Button
         size="icon"
         variant="ghost"

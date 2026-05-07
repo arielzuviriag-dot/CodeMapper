@@ -20,11 +20,13 @@ import { useCallback, useEffect, useRef } from "react";
 import { ClassNode } from "./ClassNode";
 import { EdgeLegend } from "./EdgeLegend";
 import { GraphControls } from "./GraphControls";
+import { StackedLabelEdge } from "./StackedLabelEdge";
 import { useGraphStore } from "@/store/graphStore";
 import { applyDagreLayout } from "@/lib/layout";
 import type { ClassNodeData, ConnectionType } from "@/lib/types";
 
 const nodeTypes = { classNode: ClassNode };
+const edgeTypes = { stackedLabel: StackedLabelEdge };
 
 interface EdgeStyle {
   stroke: string;
@@ -145,32 +147,47 @@ function CodeGraphInner() {
         };
       });
 
+      // First pass: count edges per (source, target) so each edge knows
+      // its index among siblings — used by the StackedLabelEdge to spread
+      // labels vertically and avoid overlap.
+      const visibleConns = state.edges.filter(
+        (c) => visibleIds.has(c.from) && visibleIds.has(c.to),
+      );
+      const pairCounts = new Map<string, number>();
+      for (const c of visibleConns) {
+        const key = `${c.from}|${c.to}`;
+        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+      }
+      const pairSeen = new Map<string, number>();
+
       const seenEdgeIds = new Set<string>();
-      const nextEdges: Edge[] = state.edges
-        .filter((c) => visibleIds.has(c.from) && visibleIds.has(c.to))
-        .map((c, idx) => {
-          const style = EDGE_STYLES[c.type];
-          let id = `${c.from}--${c.type}--${c.to}--${idx}`;
-          while (seenEdgeIds.has(id))
-            id = `${id}-${Math.random().toString(36).slice(2, 6)}`;
-          seenEdgeIds.add(id);
-          return {
-            id,
-            source: c.from,
-            target: c.to,
-            label: c.label,
-            type: "smoothstep",
-            animated: c.type === "DEPENDENCY_INJECTION",
-            markerEnd: style.marker,
-            style: {
-              stroke: style.stroke,
-              strokeWidth: style.strokeWidth,
-              strokeDasharray: style.strokeDasharray,
-            },
-            labelStyle: { fontSize: 10, fill: "#A8A8B0", fontFamily: "monospace" },
-            labelBgStyle: { fill: "#0A0A0A", fillOpacity: 0.85 },
-          };
-        });
+      const nextEdges: Edge[] = visibleConns.map((c, idx) => {
+        const style = EDGE_STYLES[c.type];
+        const key = `${c.from}|${c.to}`;
+        const siblingCount = pairCounts.get(key) ?? 1;
+        const siblingIndex = pairSeen.get(key) ?? 0;
+        pairSeen.set(key, siblingIndex + 1);
+
+        let id = `${c.from}--${c.type}--${c.to}--${idx}`;
+        while (seenEdgeIds.has(id))
+          id = `${id}-${Math.random().toString(36).slice(2, 6)}`;
+        seenEdgeIds.add(id);
+        return {
+          id,
+          source: c.from,
+          target: c.to,
+          label: c.label,
+          type: "stackedLabel",
+          animated: c.type === "DEPENDENCY_INJECTION",
+          markerEnd: style.marker,
+          style: {
+            stroke: style.stroke,
+            strokeWidth: style.strokeWidth,
+            strokeDasharray: style.strokeDasharray,
+          },
+          data: { siblingIndex, siblingCount, accent: style.stroke },
+        };
+      });
 
       const grew = nextNodes.length - lastLayoutCount.current;
       const shouldLayout =
@@ -217,11 +234,11 @@ function CodeGraphInner() {
 
   return (
     <div className="relative h-full w-full bg-[var(--bg-base)]">
-      {/* Edge legend pinned to the top-right corner of the graph area —
-          out of the way of the graph itself, doesn't compete with the
-          minimap which sits at bottom-right. The Filters panel lives in
-          the page's outer left sidebar. */}
-      <aside className="absolute right-4 top-4 z-10 w-[220px]">
+      {/* Edge legend lives below the zoom controls (which are pinned at
+          right-4 top-4) so the two sit as separate blocks in the same
+          right column. Doesn't compete with the minimap at bottom-right;
+          Filters panel lives in the page's outer left sidebar. */}
+      <aside className="absolute right-4 top-[64px] z-10 w-[170px]">
         <EdgeLegend />
       </aside>
 
@@ -229,6 +246,7 @@ function CodeGraphInner() {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={(changes) => {
           if (changes.some((c) => c.type === "position" && c.dragging === false)) {
             markUserInteracted();
