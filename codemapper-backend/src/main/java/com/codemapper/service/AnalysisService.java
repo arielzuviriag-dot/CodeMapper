@@ -119,6 +119,66 @@ public class AnalysisService {
         return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
     }
 
+    /**
+     * FOCUS analysis from an uploaded ZIP — the user picked the project folder
+     * in the browser and we received the contents. Identical to {@link #handleUpload}
+     * but additionally validates the focusFile, marks the session FOCUS, and
+     * the existing SSE stream branches into the focus tracer.
+     */
+    public AnalyzeResponse handleFocusUpload(MultipartFile file,
+                                              String focusRelativeFile,
+                                              boolean isPro) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Uploaded file is empty");
+        }
+        if (focusRelativeFile == null || focusRelativeFile.isBlank()) {
+            throw new IllegalArgumentException("focusFile is required");
+        }
+        String original = file.getOriginalFilename();
+        if (original == null || !original.toLowerCase().endsWith(".zip")) {
+            throw new IllegalArgumentException(
+                    "Focus upload requires a .zip with the project contents");
+        }
+
+        Path workDir = uploadDir().resolve(UUID.randomUUID().toString());
+        Files.createDirectories(workDir);
+
+        try {
+            try (InputStream in = file.getInputStream()) {
+                zipService.extract(in, workDir);
+            }
+            Optional<Path> pom = ProjectInfoUtils.findClosestPom(workDir);
+            if (pom.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "El zip subido no contiene pom.xml — el modo FOCO necesita un proyecto Maven");
+            }
+            Path projectRoot = pom.get().getParent();
+            Path focus = projectRoot.resolve(focusRelativeFile).normalize();
+            if (!focus.startsWith(projectRoot)) {
+                throw new IllegalArgumentException("focusFile must live inside the project");
+            }
+            if (!Files.exists(focus) || !Files.isRegularFile(focus)) {
+                throw new FileNotFoundException(
+                        "Focus file not found in upload: " + focusRelativeFile);
+            }
+            if (!focus.getFileName().toString().endsWith(".java")) {
+                throw new IllegalArgumentException("focusFile must be a .java file");
+            }
+
+            String projectName = ProjectInfoUtils.deriveName(projectRoot, pom.get());
+            int totalFiles = ProjectInfoUtils.countJavaFiles(projectRoot);
+
+            SessionData session = sessionService.createSession(
+                    projectRoot, projectName, totalFiles, true, isPro);
+            session.setMode(SessionData.Mode.FOCUS);
+            session.setFocusFile(focus);
+            return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
+        } catch (RuntimeException | IOException e) {
+            safeDelete(workDir);
+            throw e;
+        }
+    }
+
     public AnalyzeResponse handleFocus(String absoluteProjectPath, String focusRelativeFile, boolean isPro)
             throws IOException {
         if (absoluteProjectPath == null || absoluteProjectPath.isBlank()) {

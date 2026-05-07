@@ -121,6 +121,36 @@ export async function analyzeFocus(
   return data;
 }
 
+/**
+ * FOCUS analysis from an uploaded zip — the user picked the project folder
+ * via the browser's native folder picker; we sent it as a ZIP. Backend
+ * extracts it to a tmp dir, then runs the focus tracer against the file
+ * indicated by `focusFile` (relative to the zipped project root).
+ */
+export async function analyzeFocusUpload(input: {
+  zipBlob: Blob;
+  focusFile: string;
+  demoMode?: DemoMode;
+}): Promise<AnalyzeFocusResponse> {
+  const fd = new FormData();
+  fd.append(
+    "file",
+    new File([input.zipBlob], "project.zip", { type: "application/zip" }),
+  );
+  fd.append("focusFile", input.focusFile);
+  if (input.demoMode) fd.append("demoMode", input.demoMode);
+  const { data } = await api.post<AnalyzeFocusResponse>(
+    "/api/analyze/focus-upload",
+    fd,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      // Folder uploads can be big — bypass the default 60s axios timeout.
+      timeout: 300_000,
+    },
+  );
+  return data;
+}
+
 export interface AnalyzeFocusMethodInput {
   projectPath: string;
   focusFile: string;
