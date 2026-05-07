@@ -16,16 +16,16 @@
 
 > Versión gratuita con límites estrictos. Es la entrada al producto.
 
-### Caso A — Análisis FOCO de un Java (NUEVO)
-- Inputs: 1 archivo .java + proyecto entero como marco
-- UX progresiva:
-  1. El java aparece centrado en pantalla
-  2. Se cargan variables de a una (animación stagger)
-  3. Se cargan métodos
-  4. Se cargan interfaces que implementa
-  5. Aparecen conexiones (qué llama, quién lo llama, properties que usa)
-- Límite FREE: hasta 10 conexiones mostradas
-- Cuota: 10 búsquedas por semana
+### Caso A — Análisis FOCO de un Java ✅ COMPLETADO
+- [x] Backend `/api/analyze/focus` con tracing nivel 1 (CALLED_BY/CALLS/EXTENDS/IMPLEMENTS/USES_PROPERTIES)
+- [x] UI: tab "Foco" en home, FocusInput con projectPath + focusFile
+- [x] FocusGraph con layout radial (centro + N en estrella)
+- [x] FocusCenterNode gigante (400px) con variables/métodos como pills + stagger
+- [x] FocusEdge con colores por tipo + label always-visible + hover prominente + animación stroke-draw
+- [x] Conexiones aparecen una por una con stagger 500ms
+- [x] Límite FREE: 10 conexiones (modal `FocusLimitReachedModal` educativo)
+- [x] `demoMode=pro` bypassa el límite
+- [ ] Cuota: 10 búsquedas por semana (pendiente para login real)
 
 ### Caso B — Análisis GENERAL (lo que ya existe, con límite)
 - El MVP actual pero limitado

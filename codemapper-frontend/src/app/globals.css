@@ -237,3 +237,53 @@
   fill: var(--bg-base) !important;
   fill-opacity: 0.85 !important;
 }
+
+/* ============================================================
+ * FOCUS mode — radial edge "draw" animation.
+ * Uses CSS variable --cm-focus-delay (set inline per edge in
+ * FocusEdge) so each edge starts drawing at its own time.
+ * ============================================================ */
+@keyframes cm-focus-edge-draw {
+  from { stroke-dashoffset: 1500; opacity: 0; }
+  20%   { opacity: 1; }
+  to    { stroke-dashoffset: 0; opacity: 1; }
+}
+.cm-focus-edge-path {
+  stroke-dasharray: 1500;
+  stroke-dashoffset: 1500;
+  opacity: 0;
+  animation: cm-focus-edge-draw 700ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--cm-focus-delay, 0s);
+}
+@keyframes cm-focus-edge-label-fade {
+  from { opacity: 0; }
+  to { opacity: 0.5; }
+}
+@keyframes cm-focus-edge-bg-fade {
+  from { opacity: 0; }
+  to { opacity: 0.85; }
+}
+.cm-focus-edge-label {
+  font-family: var(--font-mono-stack);
+  font-size: 9px;
+  fill: var(--silver-mid);
+  opacity: 0;
+  pointer-events: none;
+  animation: cm-focus-edge-label-fade 400ms ease forwards;
+  animation-delay: var(--cm-focus-delay, 0s);
+  transition: opacity 200ms ease, font-size 200ms ease, fill 200ms ease;
+}
+.cm-focus-edge-label-bg {
+  opacity: 0;
+  animation: cm-focus-edge-bg-fade 400ms ease forwards;
+  animation-delay: var(--cm-focus-delay, 0s);
+  transition: opacity 200ms ease;
+}
+.cm-focus-edge-group:hover .cm-focus-edge-label {
+  opacity: 1;
+  font-size: 11px;
+  fill: var(--fg-primary);
+}
+.cm-focus-edge-group:hover .cm-focus-edge-path {
+  filter: drop-shadow(0 0 8px currentColor);
+}

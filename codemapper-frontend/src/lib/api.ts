@@ -99,6 +99,28 @@ export async function analyzeGithub(
   return data;
 }
 
+export interface AnalyzeFocusInput {
+  projectPath: string;
+  focusFile: string;
+  demoMode?: DemoMode;
+}
+
+export interface AnalyzeFocusResponse extends AnalyzeResponse {
+  projectName?: string;
+  totalFiles?: number;
+}
+
+export async function analyzeFocus(
+  input: AnalyzeFocusInput,
+): Promise<AnalyzeFocusResponse> {
+  const { data } = await api.post<AnalyzeFocusResponse>("/api/analyze/focus", {
+    projectPath: input.projectPath,
+    focusFile: input.focusFile,
+    demoMode: input.demoMode,
+  });
+  return data;
+}
+
 export async function getClassSource(
   sessionId: string,
   classId: string,

@@ -75,7 +75,15 @@ export type SSEEventType =
   | "connection_found"
   | "session_complete"
   | "limit_reached"
+  | "focus_class_loaded"
   | "error";
+
+export type FocusConnectionType =
+  | "EXTENDS"
+  | "IMPLEMENTS"
+  | "CALLED_BY"
+  | "CALLS"
+  | "USES_PROPERTIES";
 
 export interface SSEEvent<T = unknown> {
   type: SSEEventType;
@@ -137,4 +145,35 @@ export interface LimitReachedPayload {
   totalFilesAvailable: number;
   filesParsed: number;
   message: string;
+}
+
+export interface FocusClassLoadedPayload {
+  id: string;
+  fullyQualifiedName: string;
+  name: string;
+  packageName: string;
+  type: ClassKind;
+  annotations: string[];
+  modifiers: string[];
+  fields: ParsedField[];
+  methods: ParsedMethod[];
+  implementsList: string[];
+  extendsClass: string | null;
+  sourceFile: string;
+  lineCount: number;
+}
+
+export interface FocusConnectionPayload {
+  id: string;
+  fullyQualifiedName: string;
+  name: string;
+  packageName: string;
+  type: ClassKind;
+  annotations: string[];
+  connectionType: FocusConnectionType;
+  fields: ParsedField[];
+  methods: ParsedMethod[];
+  /** 1-based emission order from backend. */
+  position: number;
+  sourceFile: string;
 }

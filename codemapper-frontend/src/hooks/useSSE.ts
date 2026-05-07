@@ -10,6 +10,8 @@ import type {
   ConnectionFoundPayload,
   ErrorPayload,
   FieldsParsedPayload,
+  FocusClassLoadedPayload,
+  FocusConnectionPayload,
   LimitReachedPayload,
   MethodsParsedPayload,
   PackageFoundPayload,
@@ -46,6 +48,8 @@ export function useSSE(sessionId: string | null) {
   const setStatus = useGraphStore((s) => s.setStatus);
   const setStats = useGraphStore((s) => s.setStats);
   const setLimitReached = useGraphStore((s) => s.setLimitReached);
+  const setFocusClass = useGraphStore((s) => s.setFocusClass);
+  const addFocusConnection = useGraphStore((s) => s.addFocusConnection);
 
   const bufferRef = useRef<Buffer>(emptyBuffer());
 
@@ -136,8 +140,22 @@ export function useSSE(sessionId: string | null) {
             break;
           case "connection_found":
             totalConnsSeen++;
-            bufferRef.current.connections.push(data as ConnectionFoundPayload);
+            if (useGraphStore.getState().focusMode) {
+              // FOCUS mode: payload is a class node + connectionType + position.
+              // Skip the batched buffer and write directly so the radial UI can
+              // animate connections one-by-one.
+              addFocusConnection(data as FocusConnectionPayload);
+            } else {
+              bufferRef.current.connections.push(data as ConnectionFoundPayload);
+            }
             break;
+          case "focus_class_loaded": {
+            const p = data as FocusClassLoadedPayload;
+            console.log("[CodeMapper] focus_class_loaded", p.fullyQualifiedName);
+            setFocusClass(p);
+            setStats({ projectName: p.name });
+            break;
+          }
           case "session_complete": {
             const p = data as SessionCompletePayload;
             console.log(

@@ -7,6 +7,8 @@ import type {
   Connection,
   ConnectionFoundPayload,
   FieldsParsedPayload,
+  FocusClassLoadedPayload,
+  FocusConnectionPayload,
   MethodsParsedPayload,
   ParsedField,
   ParsedMethod,
@@ -58,6 +60,12 @@ interface GraphState {
   userInteracted: boolean;
   packages: Set<string>;
   limitReached: LimitReachedState;
+  /** True once the session is identified as a FOCUS analysis. */
+  focusMode: boolean;
+  /** Central class for FOCUS mode. */
+  focusClass: FocusClassLoadedPayload | null;
+  /** Level-1 dependencies streamed in arrival order. */
+  focusConnections: FocusConnectionPayload[];
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
 
@@ -85,6 +93,9 @@ interface GraphState {
   setLimitReached: (limit: LimitReachedPayload) => void;
   openLimitReachedModal: () => void;
   dismissLimitReached: () => void;
+  setFocusMode: (enabled: boolean) => void;
+  setFocusClass: (focus: FocusClassLoadedPayload) => void;
+  addFocusConnection: (conn: FocusConnectionPayload) => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   reset: () => void;
@@ -155,6 +166,9 @@ export const useGraphStore = create<GraphState>((set) => ({
   userInteracted: false,
   packages: new Set(),
   limitReached: DEFAULT_LIMIT_REACHED,
+  focusMode: false,
+  focusClass: null,
+  focusConnections: [],
   version: 0,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -351,6 +365,24 @@ export const useGraphStore = create<GraphState>((set) => ({
   dismissLimitReached: () =>
     set((state) => ({ limitReached: { ...state.limitReached, modalOpen: false } })),
 
+  setFocusMode: (enabled) => set({ focusMode: enabled }),
+
+  setFocusClass: (focus) =>
+    set((state) => ({
+      focusMode: true,
+      focusClass: focus,
+      version: state.version + 1,
+    })),
+
+  addFocusConnection: (conn) =>
+    set((state) => {
+      if (state.focusConnections.some((c) => c.id === conn.id)) return state;
+      return {
+        focusConnections: [...state.focusConnections, conn],
+        version: state.version + 1,
+      };
+    }),
+
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
 
@@ -366,6 +398,9 @@ export const useGraphStore = create<GraphState>((set) => ({
       userInteracted: false,
       packages: new Set(),
       limitReached: DEFAULT_LIMIT_REACHED,
+      focusMode: false,
+      focusClass: null,
+      focusConnections: [],
       version: 0,
     }),
 }));
