@@ -62,18 +62,6 @@ public class AnalyzeController {
         return ResponseEntity.ok(analysisService.handleGithub(request.getRepoUrl(), isPro));
     }
 
-    @PostMapping(value = "/focus-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<AnalyzeResponse> focusUpload(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("focusFile") String focusFile,
-            @RequestParam(value = "demoMode", required = false) String demoMode)
-            throws IOException {
-        boolean isPro = isProMode(demoMode);
-        log.info("Focus upload: file={} focus={} [demoMode={}]",
-                file.getOriginalFilename(), focusFile, demoMode);
-        return ResponseEntity.ok(analysisService.handleFocusUpload(file, focusFile, isPro));
-    }
-
     @PostMapping(value = "/focus", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AnalyzeResponse> analyzeFocus(@Valid @RequestBody AnalyzeFocusRequest request)
             throws IOException {
