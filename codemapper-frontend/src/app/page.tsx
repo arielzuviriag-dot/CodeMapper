@@ -58,10 +58,10 @@ export default function HomePage() {
                 times: [0, 0.46, 0.5, 0.54, 1],
               }}
             >
-              CodeMapper
+              MapperView
             </motion.h1>
             <p className="max-w-xl text-balance text-base text-[var(--fg-secondary)] sm:text-lg">
-              Visualizá la arquitectura de tu proyecto Java en tiempo real
+              Visualizá la arquitectura de tu proyecto
             </p>
           </div>
         </header>
@@ -125,7 +125,7 @@ function CodeMapperNodeLogo() {
       viewBox="0 -10 100 130"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="CodeMapper"
+      aria-label="MapperView"
     >
       {/* Top edges — silver, going from top node to silver sides */}
       <line x1="50" y1="5" x2="12" y2="70" stroke="#C0C0C8" strokeWidth="1.5" strokeOpacity="0.6" />

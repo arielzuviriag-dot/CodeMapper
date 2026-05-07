@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CodeMapper",
+  title: "MapperView",
   description: "Visualizá la arquitectura de tu proyecto Java en tiempo real",
 };
 

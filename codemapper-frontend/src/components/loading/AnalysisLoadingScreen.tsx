@@ -96,7 +96,7 @@ function PulsingDiamondLogo({ reducedMotion }: { reducedMotion: boolean }) {
         viewBox="0 -10 100 130"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        aria-label="CodeMapper"
+        aria-label="MapperView"
       >
         <line x1="50" y1="5" x2="12" y2="70" stroke="#C0C0C8" strokeWidth="1.5" strokeOpacity="0.6" />
         <line x1="50" y1="5" x2="88" y2="70" stroke="#C0C0C8" strokeWidth="1.5" strokeOpacity="0.6" />
