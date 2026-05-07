@@ -1,24 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import { HardDrive, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { cn } from "@/lib/utils";
 import { analyzeLocalPath, resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-const NAVIGATE_DELAY_MS = 200;
-
 export function LocalPathInput() {
   const router = useRouter();
   const [path, setPath] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(false);
 
   const onAnalyze = async () => {
     if (!path.trim()) {
@@ -41,9 +36,8 @@ export function LocalPathInput() {
     // Persist for the FOCO SCANER button on the map page (it needs the
     // absolute project path to compute relative focus file paths).
     useGraphStore.getState().setProjectPath(trimmed);
-    setShowOverlay(true);
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
-    setTimeout(() => router.push(`/map/${sessionId}${suffix}`), NAVIGATE_DELAY_MS);
+    router.push(`/map/${sessionId}${suffix}`);
   };
 
   return (
@@ -87,10 +81,6 @@ export function LocalPathInput() {
           "Analizar"
         )}
       </Button>
-
-      <AnimatePresence>
-        {showOverlay && <AnalysisLoadingScreen />}
-      </AnimatePresence>
     </div>
   );
 }

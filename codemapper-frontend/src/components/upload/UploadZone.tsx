@@ -3,16 +3,12 @@
 import { useCallback, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import JSZip from "jszip";
-import { AnimatePresence } from "framer-motion";
 import { FileArchive, FolderOpen, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { cn } from "@/lib/utils";
 import { resolveDemoMode, uploadProject } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-
-const NAVIGATE_DELAY_MS = 200;
 
 interface PreparedUpload {
   file: File;
@@ -36,7 +32,6 @@ export function UploadZone() {
   const router = useRouter();
   const [prepared, setPrepared] = useState<PreparedUpload | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const onDrop = useCallback(async (accepted: File[]) => {
@@ -107,9 +102,8 @@ export function UploadZone() {
       setIsAnalyzing(false);
       return;
     }
-    setShowOverlay(true);
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
-    setTimeout(() => router.push(`/map/${sessionId}${suffix}`), NAVIGATE_DELAY_MS);
+    router.push(`/map/${sessionId}${suffix}`);
   };
 
   const clear = () => setPrepared(null);
@@ -214,9 +208,6 @@ export function UploadZone() {
         )}
       </Button>
 
-      <AnimatePresence>
-        {showOverlay && <AnalysisLoadingScreen />}
-      </AnimatePresence>
     </div>
   );
 }

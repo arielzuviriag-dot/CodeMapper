@@ -1,25 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import { Crosshair, FileCode2, Folder, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { cn } from "@/lib/utils";
 import { analyzeFocus, resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-const NAVIGATE_DELAY_MS = 200;
-
 export function FocusInput() {
   const router = useRouter();
   const [projectPath, setProjectPath] = useState("");
   const [focusFile, setFocusFile] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(false);
 
   const trimmedProject = projectPath.trim();
   const trimmedFocus = focusFile.trim();
@@ -60,13 +55,9 @@ export function FocusInput() {
     // Persist for the FOCO SCANER button on the map page (it needs the
     // absolute project path to compute relative focus file paths).
     useGraphStore.getState().setProjectPath(trimmedProject);
-    setShowOverlay(true);
     const params = new URLSearchParams({ mode: "focus" });
     if (demoMode === "pro") params.set("demo", "pro");
-    setTimeout(
-      () => router.push(`/map/${sessionId}?${params.toString()}`),
-      NAVIGATE_DELAY_MS,
-    );
+    router.push(`/map/${sessionId}?${params.toString()}`);
   };
 
   return (
@@ -131,10 +122,6 @@ export function FocusInput() {
           </>
         )}
       </Button>
-
-      <AnimatePresence>
-        {showOverlay && <AnalysisLoadingScreen />}
-      </AnimatePresence>
     </div>
   );
 }

@@ -20,8 +20,6 @@ import { toPng } from "html-to-image";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
-import { InlineGraphLoading } from "@/components/loading/InlineGraphLoading";
 import { StreamingIndicator } from "@/components/loading/StreamingIndicator";
 import { FilterPanel } from "@/components/graph/FilterPanel";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
@@ -71,11 +69,9 @@ export default function MapPage() {
   const focusMethod = useGraphStore((s) => s.focusMethod);
   const focusConnections = useGraphStore((s) => s.focusConnections);
   const focusConnectionCount = focusConnections.length;
-  const pendingReanalysis = useGraphStore((s) => s.pendingReanalysis);
   const setPendingReanalysis = useGraphStore((s) => s.setPendingReanalysis);
 
   const [isPro, setIsPro] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   /** Auto-dismiss the FREE limit banner after 5s — long enough to read,
    *  short enough to not steal real estate from the graph. */
@@ -87,7 +83,6 @@ export default function MapPage() {
 
   useEffect(() => {
     setIsPro(resolveDemoMode() === "pro");
-    setIsInitialLoading(true);
     reset();
     setSessionId(sessionId);
     if (urlMode === "focus") {
@@ -99,11 +94,10 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  // Once we have any data, the FOCO SCANER chain flag has done its job.
+  // (The flag is no longer used to render anything; cleared for hygiene.)
   useEffect(() => {
     if (focusClass !== null || focusMethod !== null || nodeCount > 0) {
-      setIsInitialLoading(false);
-      // First useful event arrived → the chained re-analysis (if any) is no
-      // longer "pending". This single one-way flip dismisses InlineGraphLoading.
       setPendingReanalysis(false);
     }
   }, [focusClass, focusMethod, nodeCount, setPendingReanalysis]);
@@ -301,24 +295,23 @@ export default function MapPage() {
           </aside>
 
           <section className="relative flex-1">
-            {pendingReanalysis ? null : focusMethodMode ? (
+            {focusMethodMode ? (
               <FocusMethodGraph />
             ) : focusMode ? (
               <FocusGraph />
             ) : (
               <CodeGraph />
             )}
+            {/* Floating "Analizando..." → "Analizado" indicator. Stays
+                visible after streaming ends, summarizing the final stats. */}
             <AnimatePresence>
-              {pendingReanalysis && <InlineGraphLoading />}
-            </AnimatePresence>
-            <AnimatePresence>
-              {sessionStatus === "streaming" &&
+              {(sessionStatus === "streaming" || sessionStatus === "complete") &&
                 (inAnyFocusMode
                   ? focusConnectionCount > 0 ||
                     focusClass !== null ||
                     focusMethod !== null
                   : nodeCount > 0) && (
-                  <div className="absolute bottom-4 left-4 z-20 w-[240px]">
+                  <div className="absolute bottom-4 left-4 z-20 w-[260px]">
                     <StreamingIndicator />
                   </div>
                 )}
@@ -327,14 +320,6 @@ export default function MapPage() {
         </div>
 
         <ClassDetailSheet />
-
-        {/* Full-screen loader is for the FIRST analysis (home → /map). For
-            chained re-analyses (sheet → /map/{newId}) we use the inline
-            loader inside the graph section, so the header + sidebar stay
-            visible. The two are mutually exclusive. */}
-        <AnimatePresence initial={false}>
-          {isInitialLoading && !pendingReanalysis && <AnalysisLoadingScreen />}
-        </AnimatePresence>
       </main>
     </ErrorBoundary>
   );

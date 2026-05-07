@@ -1,23 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import { Github, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { cn } from "@/lib/utils";
 import { analyzeGithub, resolveDemoMode } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-const NAVIGATE_DELAY_MS = 200;
-
 export function GitHubInput() {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(false);
 
   const onAnalyze = async () => {
     if (!url.trim()) {
@@ -36,9 +31,8 @@ export function GitHubInput() {
       setIsAnalyzing(false);
       return;
     }
-    setShowOverlay(true);
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
-    setTimeout(() => router.push(`/map/${sessionId}${suffix}`), NAVIGATE_DELAY_MS);
+    router.push(`/map/${sessionId}${suffix}`);
   };
 
   return (
@@ -82,10 +76,6 @@ export function GitHubInput() {
           "Analizar"
         )}
       </Button>
-
-      <AnimatePresence>
-        {showOverlay && <AnalysisLoadingScreen />}
-      </AnimatePresence>
     </div>
   );
 }
