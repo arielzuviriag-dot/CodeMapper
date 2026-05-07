@@ -77,10 +77,13 @@ export default function MapPage() {
   const [isPro, setIsPro] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  /** Auto-dismiss the FREE limit banner after 5s — long enough to read,
+   *  short enough to not steal real estate from the graph. */
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const inAnyFocusMode = focusMode || focusMethodMode;
   const showFullLimitBanner =
-    !isPro && !inAnyFocusMode && limitReached.reached;
+    !isPro && !inAnyFocusMode && limitReached.reached && !bannerDismissed;
 
   useEffect(() => {
     setIsPro(resolveDemoMode() === "pro");
@@ -104,6 +107,19 @@ export default function MapPage() {
       setPendingReanalysis(false);
     }
   }, [focusClass, focusMethod, nodeCount, setPendingReanalysis]);
+
+  // Auto-hide the FREE limit banner 5s after it appears. Resets on a fresh
+  // session (when reached flips back to false via reset()) so the next
+  // analysis can show its own banner.
+  useEffect(() => {
+    if (!limitReached.reached) {
+      setBannerDismissed(false);
+      return;
+    }
+    setBannerDismissed(false);
+    const t = setTimeout(() => setBannerDismissed(true), 5000);
+    return () => clearTimeout(t);
+  }, [limitReached.reached]);
 
   useSSE(sessionId);
 
