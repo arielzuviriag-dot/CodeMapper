@@ -100,7 +100,7 @@ export function StreamingIndicator() {
             </span>
           )}
         </span>
-        <span className="truncate font-mono text-[10px] tabular-nums uppercase tracking-[0.14em] text-[var(--silver-dark)]">
+        <span className="font-mono text-[10px] leading-snug tabular-nums uppercase tracking-[0.14em] text-[var(--silver-dark)]">
           {counterText}
         </span>
       </div>
