@@ -281,14 +281,6 @@ export default function MapPage() {
                 <FilterPanel />
               </>
             )}
-            <AnimatePresence>
-              {sessionStatus === "streaming" &&
-                (inAnyFocusMode
-                  ? focusConnectionCount > 0 ||
-                    focusClass !== null ||
-                    focusMethod !== null
-                  : nodeCount > 0) && <StreamingIndicator />}
-            </AnimatePresence>
             {!inAnyFocusMode && <EmptyOrLoading />}
           </aside>
 
@@ -302,6 +294,18 @@ export default function MapPage() {
             )}
             <AnimatePresence>
               {pendingReanalysis && <InlineGraphLoading />}
+            </AnimatePresence>
+            <AnimatePresence>
+              {sessionStatus === "streaming" &&
+                (inAnyFocusMode
+                  ? focusConnectionCount > 0 ||
+                    focusClass !== null ||
+                    focusMethod !== null
+                  : nodeCount > 0) && (
+                  <div className="absolute bottom-4 left-4 z-20 w-[240px]">
+                    <StreamingIndicator />
+                  </div>
+                )}
             </AnimatePresence>
           </section>
         </div>
