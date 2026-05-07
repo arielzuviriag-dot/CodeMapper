@@ -15,6 +15,7 @@ codemapper:
   cleanup-interval-minutes: 30
   limits:
     free-max-files: 100
+    focus-max-connections: 10
 
 logging:
   level:

@@ -1,5 +1,6 @@
 package com.codemapper.controller;
 
+import com.codemapper.model.dto.AnalyzeFocusRequest;
 import com.codemapper.model.dto.AnalyzeGithubRequest;
 import com.codemapper.model.dto.AnalyzePathRequest;
 import com.codemapper.model.dto.AnalyzeResponse;
@@ -58,6 +59,18 @@ public class AnalyzeController {
         boolean isPro = isProMode(request.getDemoMode());
         log.info("Analyze GitHub request: {} [demoMode={}]", request.getRepoUrl(), request.getDemoMode());
         return ResponseEntity.ok(analysisService.handleGithub(request.getRepoUrl(), isPro));
+    }
+
+    @PostMapping(value = "/focus", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AnalyzeResponse> analyzeFocus(@Valid @RequestBody AnalyzeFocusRequest request)
+            throws IOException {
+        boolean isPro = isProMode(request.getDemoMode());
+        log.info("Analyze FOCUS request: project={} focus={} [demoMode={}]",
+                request.getProjectPath(), request.getFocusFile(), request.getDemoMode());
+        return ResponseEntity.ok(analysisService.handleFocus(
+                request.getProjectPath(),
+                request.getFocusFile(),
+                isPro));
     }
 
     private boolean isProMode(String demoMode) {

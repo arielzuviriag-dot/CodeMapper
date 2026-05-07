@@ -19,14 +19,10 @@ import com.codemapper.parser.ClassExtractor;
 import com.codemapper.parser.ConnectionResolver;
 import com.codemapper.parser.FieldExtractor;
 import com.codemapper.parser.MethodExtractor;
-import com.github.javaparser.ParserConfiguration;
+import com.codemapper.parser.SymbolSolverConfigurer;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,7 +37,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +53,7 @@ public class JavaParserService {
     private final FieldExtractor fieldExtractor;
     private final MethodExtractor methodExtractor;
     private final ConnectionResolver connectionResolver;
+    private final SymbolSolverConfigurer symbolSolverConfigurer;
 
     @Value("${codemapper.limits.free-max-files:100}")
     private int freeMaxFiles;
@@ -67,7 +63,7 @@ public class JavaParserService {
         Path projectRoot = session.getProjectPath();
         session.setStatus(SessionData.Status.PARSING);
 
-        configureSymbolSolver(projectRoot);
+        symbolSolverConfigurer.configure(projectRoot);
 
         sink.accept(new SessionStartEvent(session.getTotalFiles(), session.getProjectName(), start));
 
@@ -182,68 +178,6 @@ public class JavaParserService {
                 session.getParsedClasses().size(),
                 connections.size(),
                 durationMs);
-    }
-
-    private void configureSymbolSolver(Path projectRoot) throws IOException {
-        CombinedTypeSolver combined = new CombinedTypeSolver();
-        combined.add(new ReflectionTypeSolver());
-
-        List<Path> sourceRoots = findSourceRoots(projectRoot);
-        if (sourceRoots.isEmpty()) {
-            try {
-                combined.add(new JavaParserTypeSolver(projectRoot.toFile()));
-            } catch (Exception e) {
-                log.debug("Could not register fallback source root {}: {}", projectRoot, e.getMessage());
-            }
-        } else {
-            for (Path src : sourceRoots) {
-                try {
-                    combined.add(new JavaParserTypeSolver(src.toFile()));
-                } catch (Exception e) {
-                    log.debug("Skipping source root {}: {}", src, e.getMessage());
-                }
-            }
-        }
-
-        // Optional: jars from local Maven repository could be wired here via JarTypeSolver
-        // for richer symbol resolution against project dependencies. Skipped for now to
-        // avoid scanning ~/.m2/repository on every analysis. If a dependency cannot be
-        // resolved, ConnectionResolver silently skips that link.
-
-        ParserConfiguration config = new ParserConfiguration()
-                .setSymbolResolver(new JavaSymbolSolver(combined))
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
-        StaticJavaParser.setConfiguration(config);
-
-        log.info("Symbol solver configured with {} source root(s)", sourceRoots.size());
-    }
-
-    private List<Path> findSourceRoots(Path root) throws IOException {
-        List<Path> sources = new ArrayList<>();
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (!dir.equals(root) && ProjectInfoUtils.shouldExclude(dir)) {
-                    return FileVisitResult.SKIP_SUBTREE;
-                }
-                int n = dir.getNameCount();
-                if (n >= 3) {
-                    Path tail = dir.subpath(n - 3, n);
-                    if (tail.equals(Path.of("src", "main", "java"))) {
-                        sources.add(dir);
-                        return FileVisitResult.SKIP_SUBTREE;
-                    }
-                }
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                return FileVisitResult.CONTINUE;
-            }
-        });
-        sources.sort(Comparator.comparingInt(Path::getNameCount));
-        return sources;
     }
 
     private List<Path> collectJavaFiles(Path root) throws IOException {

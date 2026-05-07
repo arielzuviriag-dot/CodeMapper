@@ -19,6 +19,11 @@ public class SessionData {
         FAILED
     }
 
+    public enum Mode {
+        FULL,
+        FOCUS
+    }
+
     private String sessionId;
     private Path projectPath;
     private String projectName;
@@ -27,6 +32,8 @@ public class SessionData {
     private Status status;
     private boolean ownsFiles;
     private boolean pro;
+    private Mode mode = Mode.FULL;
+    private Path focusFile;
 
     private final List<ParsedClass> parsedClasses = new CopyOnWriteArrayList<>();
     private final List<Connection> connections = new CopyOnWriteArrayList<>();

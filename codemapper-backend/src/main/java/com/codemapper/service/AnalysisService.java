@@ -5,6 +5,7 @@ import com.codemapper.model.domain.ParsedClass;
 import com.codemapper.model.domain.SessionData;
 import com.codemapper.model.dto.AnalyzeResponse;
 import com.codemapper.model.dto.ClassSourceResponse;
+import com.codemapper.model.event.BaseEvent;
 import com.codemapper.model.event.ErrorEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -35,6 +37,7 @@ public class AnalysisService {
     private final ZipService zipService;
     private final GitService gitService;
     private final JavaParserService javaParserService;
+    private final FocusTracerService focusTracerService;
     private final ExecutorService analysisExecutor;
 
     @Value("${codemapper.upload-dir:./tmp-uploads}")
@@ -115,6 +118,46 @@ public class AnalysisService {
         return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
     }
 
+    public AnalyzeResponse handleFocus(String absoluteProjectPath, String focusRelativeFile, boolean isPro)
+            throws IOException {
+        if (absoluteProjectPath == null || absoluteProjectPath.isBlank()) {
+            throw new IllegalArgumentException("projectPath is required");
+        }
+        if (focusRelativeFile == null || focusRelativeFile.isBlank()) {
+            throw new IllegalArgumentException("focusFile is required");
+        }
+        Path root = Path.of(absoluteProjectPath).toAbsolutePath().normalize();
+        if (!Files.exists(root)) {
+            throw new FileNotFoundException("Project path does not exist: " + absoluteProjectPath);
+        }
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException("Project path is not a directory: " + absoluteProjectPath);
+        }
+        if (!Files.isReadable(root)) {
+            throw new IllegalArgumentException("Project path is not readable: " + absoluteProjectPath);
+        }
+
+        Path focus = root.resolve(focusRelativeFile).normalize();
+        if (!focus.startsWith(root)) {
+            throw new IllegalArgumentException("focusFile must live inside projectPath");
+        }
+        if (!Files.exists(focus) || !Files.isRegularFile(focus)) {
+            throw new FileNotFoundException("Focus file does not exist: " + focus);
+        }
+        if (!focus.getFileName().toString().endsWith(".java")) {
+            throw new IllegalArgumentException("Focus file must be a .java file: " + focus);
+        }
+
+        Path pom = ProjectInfoUtils.findClosestPom(root).orElse(null);
+        String projectName = ProjectInfoUtils.deriveName(root, pom);
+        int totalFiles = ProjectInfoUtils.countJavaFiles(root);
+
+        SessionData session = sessionService.createSession(root, projectName, totalFiles, false, isPro);
+        session.setMode(SessionData.Mode.FOCUS);
+        session.setFocusFile(focus);
+        return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
+    }
+
     public AnalyzeResponse handleGithub(String repoUrl, boolean isPro) throws Exception {
         if (repoUrl == null || repoUrl.isBlank()) {
             throw new IllegalArgumentException("repoUrl is required");
@@ -149,7 +192,7 @@ public class AnalysisService {
 
         analysisExecutor.execute(() -> {
             try {
-                javaParserService.parseProject(session, event -> {
+                Consumer<BaseEvent> sink = event -> {
                     try {
                         emitter.send(SseEmitter.event()
                                 .name(event.eventName())
@@ -158,7 +201,12 @@ public class AnalysisService {
                         log.warn("Could not send SSE event '{}' for session {}: {}",
                                 event.eventName(), sessionId, e.getMessage());
                     }
-                });
+                };
+                if (session.getMode() == SessionData.Mode.FOCUS) {
+                    focusTracerService.traceFocus(session, sink);
+                } else {
+                    javaParserService.parseProject(session, sink);
+                }
                 emitter.complete();
             } catch (Exception ex) {
                 log.error("Analysis failed for session {}", sessionId, ex);
