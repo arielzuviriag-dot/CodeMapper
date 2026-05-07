@@ -1,6 +1,11 @@
 import axios, { AxiosError } from "axios";
 import { toast } from "sonner";
-import type { AnalyzeResponse, ClassSourceResponse } from "./types";
+import type {
+  AnalyzeResponse,
+  ClassSourceResponse,
+  FocusClassLoadedPayload,
+  FocusConnectionPayload,
+} from "./types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8090";
@@ -140,6 +145,30 @@ export async function analyzeFocusMethod(
       demoMode: input.demoMode,
     },
   );
+  return data;
+}
+
+export interface FocoExportRequest {
+  focusClass: FocusClassLoadedPayload;
+  connections: FocusConnectionPayload[];
+  pro: boolean;
+  limitApplied: boolean;
+  totalAvailable: number;
+}
+
+/**
+ * Render the current FOCO state as a printable PDF. Stateless on the
+ * server — sends the same data the user is looking at, so the PDF mirrors
+ * the UI (FREE limit included). Returns the raw blob for download.
+ */
+export async function exportFocoPdf(
+  request: FocoExportRequest,
+): Promise<Blob> {
+  const { data } = await api.post<Blob>("/api/foco/export/pdf", request, {
+    responseType: "blob",
+    headers: { "Content-Type": "application/json" },
+    timeout: 60_000,
+  });
   return data;
 }
 

@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Crosshair,
   Download,
+  FileText,
   Info,
   Loader2,
   Search,
@@ -25,7 +26,7 @@ import { StreamingIndicator } from "@/components/loading/StreamingIndicator";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
-import { resolveDemoMode } from "@/lib/api";
+import { exportFocoPdf, resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useSSE } from "@/hooks/useSSE";
 
@@ -67,12 +68,14 @@ export default function MapPage() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const focusMethodMode = useGraphStore((s) => s.focusMethodMode);
   const focusMethod = useGraphStore((s) => s.focusMethod);
-  const focusConnectionCount = useGraphStore((s) => s.focusConnections.length);
+  const focusConnections = useGraphStore((s) => s.focusConnections);
+  const focusConnectionCount = focusConnections.length;
   const pendingReanalysis = useGraphStore((s) => s.pendingReanalysis);
   const setPendingReanalysis = useGraphStore((s) => s.setPendingReanalysis);
 
   const [isPro, setIsPro] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const inAnyFocusMode = focusMode || focusMethodMode;
   const showFullLimitBanner =
@@ -121,6 +124,40 @@ export default function MapPage() {
       console.error(err);
     }
   };
+
+  const onDownloadPdf = async () => {
+    if (!focusClass || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const blob = await exportFocoPdf({
+        focusClass,
+        connections: focusConnections,
+        pro: isPro,
+        limitApplied: limitReached.reached,
+        totalAvailable:
+          limitReached.totalAvailable > 0
+            ? limitReached.totalAvailable
+            : focusConnections.length,
+      });
+      const url = URL.createObjectURL(blob);
+      const today = new Date().toISOString().slice(0, 10);
+      const safeName = focusClass.name.replace(/[^A-Za-z0-9._-]/g, "_");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `codemapper-foco-${safeName}-${today}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[CodeMapper] PDF export failed", err);
+      toast.error("No se pudo generar el PDF");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const canDownloadPdf = focusMode && !focusMethodMode && focusClass !== null;
 
   const headerProjectLabel = focusMethodMode
     ? focusMethod
@@ -182,15 +219,38 @@ export default function MapPage() {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExport}
-            className="border-[var(--border-silver)] bg-transparent text-xs uppercase tracking-[0.14em] hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)]"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar PNG
-          </Button>
+          <div className="flex items-center gap-2">
+            {canDownloadPdf && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDownloadPdf}
+                disabled={isExportingPdf}
+                className="border-[var(--border-silver)] bg-transparent text-xs uppercase tracking-[0.14em] hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] disabled:opacity-60"
+              >
+                {isExportingPdf ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Descargar PDF
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              className="border-[var(--border-silver)] bg-transparent text-xs uppercase tracking-[0.14em] hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)]"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar PNG
+            </Button>
+          </div>
         </header>
 
         <AnimatePresence>
