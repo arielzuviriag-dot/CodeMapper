@@ -4,27 +4,26 @@ import { memo } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getSmoothStepPath,
   type EdgeProps,
 } from "@xyflow/react";
 
 interface StackedEdgeData extends Record<string, unknown> {
   /** 0-based position among edges sharing the same (source, target). */
   siblingIndex: number;
-  /** Total edges between this pair (for vertical stacking math). */
+  /** Total edges between this pair (for the perpendicular offset math). */
   siblingCount: number;
-  /** Optional CSS color for the label badge border (matches edge stroke). */
   accent?: string;
 }
 
-const LABEL_ROW_HEIGHT = 18;
+/** Distance in px between adjacent parallel curves. Increase if labels still
+ *  feel cramped or decrease for a tighter stack. */
+const SIBLING_SPACING = 32;
 
 /**
- * Smoothstep edge whose label is rendered as an HTML pill via
- * EdgeLabelRenderer. When two or more edges share endpoints, each label
- * is stacked vertically around the midpoint so they don't overlap. The
- * default reactflow built-in edges drop all labels at the midpoint and
- * collide visually.
+ * Edge whose path bows perpendicularly to its straight line — when several
+ * edges share the same (source, target), each one curves in a different
+ * direction so the lines don't lie on top of each other. The label rides
+ * the apex of the curve, so labels separate naturally with the lines.
  */
 function StackedLabelEdgeComponent({
   id,
@@ -32,8 +31,6 @@ function StackedLabelEdgeComponent({
   sourceY,
   targetX,
   targetY,
-  sourcePosition,
-  targetPosition,
   label,
   style,
   markerEnd,
@@ -43,22 +40,39 @@ function StackedLabelEdgeComponent({
   const siblingIndex = ed.siblingIndex ?? 0;
   const siblingCount = Math.max(ed.siblingCount ?? 1, 1);
 
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2;
 
-  // Center the stack on the midpoint: row 0 of N is at offset
-  //   (0 - (N-1)/2) * H  →  for N=2: -H/2 and +H/2
-  //                         for N=3: -H, 0, +H
-  const offsetY =
+  // Symmetric offset around 0 so the family of curves is balanced:
+  //   N=1 → [0]
+  //   N=2 → [-S/2, +S/2]
+  //   N=3 → [-S, 0, +S]
+  const offset =
     siblingCount > 1
-      ? (siblingIndex - (siblingCount - 1) / 2) * LABEL_ROW_HEIGHT
+      ? (siblingIndex - (siblingCount - 1) / 2) * SIBLING_SPACING
       : 0;
+
+  // Perpendicular unit vector to (target - source). For a near-horizontal
+  // edge (dy small) the offset is mostly vertical; for vertical layouts it's
+  // mostly horizontal. Falls back to a small downward push if the two ends
+  // collapse to a single point (shouldn't happen but defensive).
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = -dy / len;
+  const py = dx / len;
+
+  const ctrlX = midX + px * offset;
+  const ctrlY = midY + py * offset;
+
+  // Quadratic Bézier through the offset control point — straight line when
+  // offset=0, gentle bow otherwise.
+  const path = `M ${sourceX},${sourceY} Q ${ctrlX},${ctrlY} ${targetX},${targetY}`;
+
+  // The Bézier midpoint sits at t=0.5: P = ¼ S + ½ C + ¼ T. That's a clean
+  // place to drop the label — it tracks the curve apex.
+  const labelX = sourceX * 0.25 + ctrlX * 0.5 + targetX * 0.25;
+  const labelY = sourceY * 0.25 + ctrlY * 0.5 + targetY * 0.25;
 
   return (
     <>
@@ -68,7 +82,7 @@ function StackedLabelEdgeComponent({
           <div
             style={{
               position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + offsetY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
             }}
             className="rounded-sm border border-[var(--border-silver)] bg-[var(--bg-base)]/90 px-1.5 py-0.5 font-mono text-[10px] leading-none tracking-tight text-[var(--silver-mid)]"
