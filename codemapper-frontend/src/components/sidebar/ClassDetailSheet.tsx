@@ -324,7 +324,7 @@ export function ClassDetailSheet() {
     >
       <SheetContent
         side="right"
-        className="flex w-full flex-col border-l border-[var(--border-silver)] bg-[var(--bg-card)] p-0 sm:max-w-2xl"
+        className="flex w-full flex-col border-l border-[var(--border-silver)] bg-[var(--bg-card)] p-0 sm:max-w-4xl xl:max-w-[64vw]"
       >
         {node || isCurrentFocusMethod ? (
           <>
