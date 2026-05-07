@@ -21,7 +21,8 @@ public class SessionData {
 
     public enum Mode {
         FULL,
-        FOCUS
+        FOCUS,
+        FOCUS_METHOD
     }
 
     private String sessionId;
@@ -34,6 +35,8 @@ public class SessionData {
     private boolean pro;
     private Mode mode = Mode.FULL;
     private Path focusFile;
+    /** Method name to trace when mode == FOCUS_METHOD. */
+    private String focusMethodName;
 
     private final List<ParsedClass> parsedClasses = new CopyOnWriteArrayList<>();
     private final List<Connection> connections = new CopyOnWriteArrayList<>();

@@ -16,6 +16,7 @@ codemapper:
   limits:
     free-max-files: 100
     focus-max-connections: 10
+    focus-method-max-connections: 10
 
 logging:
   level:

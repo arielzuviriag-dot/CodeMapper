@@ -36,6 +36,14 @@ const FocusGraph = dynamic(
   { ssr: false, loading: () => <GraphSkeleton /> },
 );
 
+const FocusMethodGraph = dynamic(
+  () =>
+    import("@/components/graph/FocusMethodGraph").then(
+      (m) => m.FocusMethodGraph,
+    ),
+  { ssr: false, loading: () => <GraphSkeleton /> },
+);
+
 export default function MapPage() {
   const params = useParams<{ sessionId: string }>();
   const searchParams = useSearchParams();
@@ -46,6 +54,7 @@ export default function MapPage() {
   const setSessionId = useGraphStore((s) => s.setSessionId);
   const reset = useGraphStore((s) => s.reset);
   const setFocusMode = useGraphStore((s) => s.setFocusMode);
+  const setFocusMethodMode = useGraphStore((s) => s.setFocusMethodMode);
   const stats = useGraphStore((s) => s.stats);
   const nodeCount = useGraphStore((s) => s.nodes.size);
   const edgeCount = useGraphStore((s) => s.edges.length);
@@ -53,18 +62,16 @@ export default function MapPage() {
   const limitReached = useGraphStore((s) => s.limitReached);
   const focusMode = useGraphStore((s) => s.focusMode);
   const focusClass = useGraphStore((s) => s.focusClass);
+  const focusMethodMode = useGraphStore((s) => s.focusMethodMode);
+  const focusMethod = useGraphStore((s) => s.focusMethod);
   const focusConnectionCount = useGraphStore((s) => s.focusConnections.length);
 
   const [isPro, setIsPro] = useState(false);
-  // ──────────────────────────────────────────────────────────────
-  // Single one-way flag: starts true, flips false on the first
-  // useful payload (focus class loaded OR first regular node), and
-  // never flips back. Avoids the multi-cycle flicker that happened
-  // when the loading screen was derived from sessionStatus + counts.
-  // ──────────────────────────────────────────────────────────────
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  const showFullLimitBanner = !isPro && !focusMode && limitReached.reached;
+  const inAnyFocusMode = focusMode || focusMethodMode;
+  const showFullLimitBanner =
+    !isPro && !inAnyFocusMode && limitReached.reached;
 
   useEffect(() => {
     setIsPro(resolveDemoMode() === "pro");
@@ -73,16 +80,18 @@ export default function MapPage() {
     setSessionId(sessionId);
     if (urlMode === "focus") {
       setFocusMode(true);
+    } else if (urlMode === "focus-method") {
+      setFocusMethodMode(true);
     }
     return () => reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   useEffect(() => {
-    if (focusClass !== null || nodeCount > 0) {
+    if (focusClass !== null || focusMethod !== null || nodeCount > 0) {
       setIsInitialLoading(false);
     }
-  }, [focusClass, nodeCount]);
+  }, [focusClass, focusMethod, nodeCount]);
 
   useSSE(sessionId);
 
@@ -105,9 +114,13 @@ export default function MapPage() {
     }
   };
 
-  const headerProjectLabel = focusMode
-    ? focusClass?.name ?? stats.projectName ?? "Foco"
-    : stats.projectName || "Proyecto";
+  const headerProjectLabel = focusMethodMode
+    ? focusMethod
+      ? `${focusMethod.containingClass}.${focusMethod.methodName}()`
+      : stats.projectName ?? "Foco método"
+    : focusMode
+      ? focusClass?.name ?? stats.projectName ?? "Foco"
+      : stats.projectName || "Proyecto";
 
   const onUpgradeBannerClick = () => {
     toast.success("Te avisaremos cuando salga PRO");
@@ -128,7 +141,7 @@ export default function MapPage() {
           </Button>
 
           <div className="flex items-center gap-3">
-            {focusMode ? (
+            {inAnyFocusMode ? (
               <Crosshair
                 className="h-4 w-4 text-[var(--bordo)]"
                 strokeWidth={2}
@@ -139,7 +152,11 @@ export default function MapPage() {
             )}
             <div className="flex flex-col items-center gap-0.5">
               <div className="flex items-center gap-2">
-                {focusMode && <FocusModeBadge />}
+                {focusMethodMode ? (
+                  <FocusMethodBadge />
+                ) : focusMode ? (
+                  <FocusModeBadge />
+                ) : null}
                 <span className="text-sm font-semibold text-[var(--fg-primary)]">
                   {headerProjectLabel}
                 </span>
@@ -147,6 +164,7 @@ export default function MapPage() {
               </div>
               <HeaderStats
                 focusMode={focusMode}
+                focusMethodMode={focusMethodMode}
                 nodeCount={nodeCount}
                 edgeCount={edgeCount}
                 focusConnections={focusConnectionCount}
@@ -180,7 +198,9 @@ export default function MapPage() {
         <div className="flex flex-1 overflow-hidden">
           <aside className="hidden w-[280px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[var(--border-silver)] bg-[var(--bg-base)] p-3 lg:flex">
             <ParseProgress />
-            {focusMode ? (
+            {focusMethodMode ? (
+              <FocusMethodSidebarInfo />
+            ) : focusMode ? (
               <>
                 <FocusSidebarInfo />
                 <FocusFieldsBlock />
@@ -191,15 +211,23 @@ export default function MapPage() {
             )}
             <AnimatePresence>
               {sessionStatus === "streaming" &&
-                (focusMode
-                  ? focusConnectionCount > 0 || focusClass !== null
+                (inAnyFocusMode
+                  ? focusConnectionCount > 0 ||
+                    focusClass !== null ||
+                    focusMethod !== null
                   : nodeCount > 0) && <StreamingIndicator />}
             </AnimatePresence>
-            {!focusMode && <EmptyOrLoading />}
+            {!inAnyFocusMode && <EmptyOrLoading />}
           </aside>
 
           <section className="relative flex-1">
-            {focusMode ? <FocusGraph /> : <CodeGraph />}
+            {focusMethodMode ? (
+              <FocusMethodGraph />
+            ) : focusMode ? (
+              <FocusGraph />
+            ) : (
+              <CodeGraph />
+            )}
           </section>
         </div>
 
@@ -224,6 +252,14 @@ function FocusModeBadge() {
   );
 }
 
+function FocusMethodBadge() {
+  return (
+    <span className="rounded-sm border border-[var(--bordo)] bg-[var(--bordo)]/10 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--bordo)]">
+      Foco método
+    </span>
+  );
+}
+
 function FreeBadge() {
   return (
     <span className="rounded-sm bg-[var(--bordo)] px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-white shadow-[0_0_8px_rgba(185,28,66,0.4)]">
@@ -234,6 +270,7 @@ function FreeBadge() {
 
 function HeaderStats({
   focusMode,
+  focusMethodMode,
   nodeCount,
   edgeCount,
   focusConnections,
@@ -241,6 +278,7 @@ function HeaderStats({
   totalAvailable,
 }: {
   focusMode: boolean;
+  focusMethodMode: boolean;
   nodeCount: number;
   edgeCount: number;
   focusConnections: number;
@@ -249,6 +287,18 @@ function HeaderStats({
 }) {
   const baseCls =
     "font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]";
+
+  if (focusMethodMode) {
+    return (
+      <span className={baseCls}>
+        Invocadores ·{" "}
+        <span className="tabular-nums text-[var(--silver)]">
+          {focusConnections}
+        </span>{" "}
+        clases
+      </span>
+    );
+  }
 
   if (focusMode) {
     return (
@@ -340,6 +390,50 @@ function LimitReachedBanner({
   );
 }
 
+function FocusMethodSidebarInfo() {
+  const focusMethod = useGraphStore((s) => s.focusMethod);
+  const connectionCount = useGraphStore((s) => s.focusConnections.length);
+
+  if (!focusMethod) {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-4 text-center text-xs text-[var(--fg-secondary)]">
+        <Loader2 className="h-4 w-4 animate-spin text-[var(--bordo)]" />
+        Cargando método focus...
+      </div>
+    );
+  }
+
+  return (
+    <div className="cm-hairline-top flex flex-col gap-3 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3">
+      <div className="flex items-center gap-2">
+        <Crosshair
+          className="h-3.5 w-3.5 shrink-0 text-[var(--bordo)]"
+          style={{ filter: "drop-shadow(0 0 4px rgba(185,28,66,0.55))" }}
+        />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
+          Método foco
+        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="break-words text-sm font-semibold text-[var(--fg-primary)]">
+          {focusMethod.containingClass}.{focusMethod.methodName}()
+        </span>
+        <span className="break-all font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+          {focusMethod.containingClassPackage || "(sin paquete)"}
+        </span>
+      </div>
+      <div className="rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px] leading-snug text-[var(--silver)]">
+        <span className="text-[var(--silver-dark)]">retorna:</span>{" "}
+        <span className="text-[var(--bordo)]">{focusMethod.returnType}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 border-t border-[var(--border-silver)] pt-3 text-center">
+        <SidebarMetric value={focusMethod.parameters.length} label="Params" />
+        <SidebarMetric value={connectionCount} label="Invocadores" />
+      </div>
+    </div>
+  );
+}
+
 function FocusSidebarInfo() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const connectionCount = useGraphStore((s) => s.focusConnections.length);
@@ -383,6 +477,7 @@ function FocusSidebarInfo() {
 
 function FocusFieldsBlock() {
   const focusClass = useGraphStore((s) => s.focusClass);
+  const openVariableSheet = useGraphStore((s) => s.openVariableSheet);
   if (!focusClass || focusClass.fields.length === 0) return null;
   return (
     <motion.div
@@ -399,19 +494,23 @@ function FocusFieldsBlock() {
       </div>
       <div className="flex flex-col gap-1">
         {focusClass.fields.map((f, i) => (
-          <motion.div
+          <motion.button
             key={`${f.name}-${i}`}
+            type="button"
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.28, delay: i * 0.2 }}
-            className="flex items-baseline gap-2 font-mono text-[11px] leading-tight"
+            onClick={() => openVariableSheet(focusClass.id, f)}
+            className="flex items-baseline gap-2 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
           >
-            <span className="shrink-0 text-[var(--silver-dark)]">{f.type}</span>
+            <span className="shrink-0 text-[var(--silver-dark)] group-hover:text-[var(--bordo)]">
+              {f.type}
+            </span>
             <span className="truncate text-[var(--fg-primary)]">{f.name}</span>
             {f.annotations.length > 0 && (
               <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bordo)]" />
             )}
-          </motion.div>
+          </motion.button>
         ))}
       </div>
     </motion.div>
@@ -420,6 +519,7 @@ function FocusFieldsBlock() {
 
 function FocusMethodsBlock() {
   const focusClass = useGraphStore((s) => s.focusClass);
+  const openMethodSheet = useGraphStore((s) => s.openMethodSheet);
   if (!focusClass || focusClass.methods.length === 0) return null;
   // Methods come AFTER fields visually — start delay accounts for the
   // fields stagger (each field at 0.2s, plus the block animation).
@@ -439,12 +539,14 @@ function FocusMethodsBlock() {
       </div>
       <div className="flex flex-col gap-1">
         {focusClass.methods.map((m, i) => (
-          <motion.div
+          <motion.button
             key={`${m.name}-${i}`}
+            type="button"
             initial={{ opacity: 0, x: -6 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.22, delay: fieldsDelay + i * 0.1 }}
-            className="flex items-baseline gap-1 font-mono text-[11px] leading-tight"
+            onClick={() => openMethodSheet(focusClass.id, m)}
+            className="flex items-baseline gap-1 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
           >
             <span className="truncate text-[var(--fg-primary)]">{m.name}</span>
             <span className="text-[var(--fg-muted)]">()</span>
@@ -453,7 +555,7 @@ function FocusMethodsBlock() {
                 : {m.returnType}
               </span>
             )}
-          </motion.div>
+          </motion.button>
         ))}
       </div>
     </motion.div>

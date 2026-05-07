@@ -18,6 +18,7 @@ const TYPE_STYLE: Record<
   EXTENDS: { stroke: "#C0C0C8", width: 2.5, label: "Extiende" },
   IMPLEMENTS: { stroke: "#C0C0C8", width: 1.75, dash: "6 5", label: "Implementa" },
   USES_PROPERTIES: { stroke: "#8B0F2A", width: 1.75, dash: "3 4", label: "Usa props" },
+  INVOKES_METHOD: { stroke: "#B91C42", width: 2, label: "Invoca" },
 };
 
 const STAGGER_S = 0.5;

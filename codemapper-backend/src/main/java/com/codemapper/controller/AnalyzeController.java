@@ -1,5 +1,6 @@
 package com.codemapper.controller;
 
+import com.codemapper.model.dto.AnalyzeFocusMethodRequest;
 import com.codemapper.model.dto.AnalyzeFocusRequest;
 import com.codemapper.model.dto.AnalyzeGithubRequest;
 import com.codemapper.model.dto.AnalyzePathRequest;
@@ -70,6 +71,20 @@ public class AnalyzeController {
         return ResponseEntity.ok(analysisService.handleFocus(
                 request.getProjectPath(),
                 request.getFocusFile(),
+                isPro));
+    }
+
+    @PostMapping(value = "/focus-method", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AnalyzeResponse> analyzeFocusMethod(
+            @Valid @RequestBody AnalyzeFocusMethodRequest request) throws IOException {
+        boolean isPro = isProMode(request.getDemoMode());
+        log.info("Analyze FOCUS METHOD request: project={} focus={} method={} [demoMode={}]",
+                request.getProjectPath(), request.getFocusFile(), request.getMethodName(),
+                request.getDemoMode());
+        return ResponseEntity.ok(analysisService.handleFocusMethod(
+                request.getProjectPath(),
+                request.getFocusFile(),
+                request.getMethodName(),
                 isPro));
     }
 

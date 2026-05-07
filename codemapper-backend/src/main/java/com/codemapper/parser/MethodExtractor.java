@@ -40,7 +40,11 @@ public class MethodExtractor {
                 .collect(Collectors.toCollection(ArrayList::new)));
         pm.setStatic(md.isStatic());
         pm.setAbstract(md.isAbstract());
-        pm.setLineCount(md.getRange().map(r -> r.end.line - r.begin.line + 1).orElse(0));
+        md.getRange().ifPresent(r -> {
+            pm.setLineCount(r.end.line - r.begin.line + 1);
+            pm.setStartLine(r.begin.line);
+            pm.setEndLine(r.end.line);
+        });
         return pm;
     }
 
@@ -57,7 +61,11 @@ public class MethodExtractor {
                 .collect(Collectors.toCollection(ArrayList::new)));
         pm.setStatic(false);
         pm.setAbstract(false);
-        pm.setLineCount(cd.getRange().map(r -> r.end.line - r.begin.line + 1).orElse(0));
+        cd.getRange().ifPresent(r -> {
+            pm.setLineCount(r.end.line - r.begin.line + 1);
+            pm.setStartLine(r.begin.line);
+            pm.setEndLine(r.end.line);
+        });
         return pm;
     }
 

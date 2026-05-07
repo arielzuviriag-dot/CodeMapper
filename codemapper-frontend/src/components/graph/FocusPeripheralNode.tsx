@@ -26,6 +26,7 @@ const TYPE_THEME: Record<FocusConnectionType, { bg: string; fg: string; label: s
   EXTENDS: { bg: "#C0C0C8", fg: "#0A0A0A", label: "Extiende" },
   IMPLEMENTS: { bg: "#A8A8B0", fg: "#0A0A0A", label: "Implementa" },
   USES_PROPERTIES: { bg: "#8B0F2A", fg: "#FFFFFF", label: "Usa props" },
+  INVOKES_METHOD: { bg: "#B91C42", fg: "#FFFFFF", label: "Invoca" },
 };
 
 function KindIcon({ kind }: { kind: ClassKind }) {

@@ -21,6 +21,10 @@ public class ParsedMethod {
     @JsonProperty("isAbstract")
     private boolean isAbstract;
     private int lineCount;
+    /** 1-based start line of the method declaration in its source file (0 if unknown). */
+    private int startLine;
+    /** 1-based inclusive end line of the method body (0 if unknown). */
+    private int endLine;
 
     @Data
     @NoArgsConstructor

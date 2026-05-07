@@ -121,6 +121,28 @@ export async function analyzeFocus(
   return data;
 }
 
+export interface AnalyzeFocusMethodInput {
+  projectPath: string;
+  focusFile: string;
+  methodName: string;
+  demoMode?: DemoMode;
+}
+
+export async function analyzeFocusMethod(
+  input: AnalyzeFocusMethodInput,
+): Promise<AnalyzeFocusResponse> {
+  const { data } = await api.post<AnalyzeFocusResponse>(
+    "/api/analyze/focus-method",
+    {
+      projectPath: input.projectPath,
+      focusFile: input.focusFile,
+      methodName: input.methodName,
+      demoMode: input.demoMode,
+    },
+  );
+  return data;
+}
+
 export async function getClassSource(
   sessionId: string,
   classId: string,

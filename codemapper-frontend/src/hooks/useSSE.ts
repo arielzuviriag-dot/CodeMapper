@@ -12,6 +12,7 @@ import type {
   FieldsParsedPayload,
   FocusClassLoadedPayload,
   FocusConnectionPayload,
+  FocusMethodLoadedPayload,
   LimitReachedPayload,
   MethodsParsedPayload,
   PackageFoundPayload,
@@ -50,6 +51,7 @@ export function useSSE(sessionId: string | null) {
   const setLimitReached = useGraphStore((s) => s.setLimitReached);
   const setFocusClass = useGraphStore((s) => s.setFocusClass);
   const addFocusConnection = useGraphStore((s) => s.addFocusConnection);
+  const setFocusMethod = useGraphStore((s) => s.setFocusMethod);
 
   const bufferRef = useRef<Buffer>(emptyBuffer());
 
@@ -156,6 +158,18 @@ export function useSSE(sessionId: string | null) {
             console.log("[CodeMapper] focus_class_loaded", p.fullyQualifiedName);
             setFocusClass(p);
             setStats({ projectName: p.name });
+            break;
+          }
+          case "focus_method_loaded": {
+            const p = data as FocusMethodLoadedPayload;
+            console.log(
+              "[CodeMapper] focus_method_loaded",
+              `${p.containingClass}.${p.methodName}`,
+            );
+            setFocusMethod(p);
+            setStats({
+              projectName: `${p.containingClass}.${p.methodName}()`,
+            });
             break;
           }
           case "session_complete": {

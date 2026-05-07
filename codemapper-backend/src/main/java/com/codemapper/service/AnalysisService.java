@@ -38,6 +38,7 @@ public class AnalysisService {
     private final GitService gitService;
     private final JavaParserService javaParserService;
     private final FocusTracerService focusTracerService;
+    private final FocusMethodTracerService focusMethodTracerService;
     private final ExecutorService analysisExecutor;
 
     @Value("${codemapper.upload-dir:./tmp-uploads}")
@@ -158,6 +159,22 @@ public class AnalysisService {
         return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
     }
 
+    public AnalyzeResponse handleFocusMethod(String absoluteProjectPath,
+                                              String focusRelativeFile,
+                                              String methodName,
+                                              boolean isPro) throws IOException {
+        if (methodName == null || methodName.isBlank()) {
+            throw new IllegalArgumentException("methodName is required");
+        }
+        // Reuse the same path validation as handleFocus, then layer the method
+        // info on top before returning the response.
+        AnalyzeResponse base = handleFocus(absoluteProjectPath, focusRelativeFile, isPro);
+        SessionData session = sessionService.getSession(base.getSessionId());
+        session.setMode(SessionData.Mode.FOCUS_METHOD);
+        session.setFocusMethodName(methodName.trim());
+        return base;
+    }
+
     public AnalyzeResponse handleGithub(String repoUrl, boolean isPro) throws Exception {
         if (repoUrl == null || repoUrl.isBlank()) {
             throw new IllegalArgumentException("repoUrl is required");
@@ -202,10 +219,13 @@ public class AnalysisService {
                                 event.eventName(), sessionId, e.getMessage());
                     }
                 };
-                if (session.getMode() == SessionData.Mode.FOCUS) {
-                    focusTracerService.traceFocus(session, sink);
-                } else {
-                    javaParserService.parseProject(session, sink);
+                switch (session.getMode()) {
+                    case FOCUS_METHOD ->
+                            focusMethodTracerService.traceMethod(session, sink);
+                    case FOCUS ->
+                            focusTracerService.traceFocus(session, sink);
+                    case FULL ->
+                            javaParserService.parseProject(session, sink);
                 }
                 emitter.complete();
             } catch (Exception ex) {

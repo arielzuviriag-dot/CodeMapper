@@ -5,5 +5,8 @@ public enum FocusConnectionType {
     IMPLEMENTS,
     CALLED_BY,
     CALLS,
-    USES_PROPERTIES
+    USES_PROPERTIES,
+    /** Used when the focus is a method (not a class) — every connection is a class
+     *  that contains at least one invocation of that method. */
+    INVOKES_METHOD
 }

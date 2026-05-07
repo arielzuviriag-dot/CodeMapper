@@ -29,6 +29,10 @@ export interface ParsedMethod {
   isStatic: boolean;
   isAbstract: boolean;
   lineCount: number;
+  /** 1-based start line of the method declaration in its source file (0 if unknown). */
+  startLine?: number;
+  /** 1-based inclusive end line of the method body (0 if unknown). */
+  endLine?: number;
 }
 
 export interface ClassNodeData {
@@ -83,6 +87,7 @@ export const SSE_EVENT_NAMES = [
   "session_complete",
   "limit_reached",
   "focus_class_loaded",
+  "focus_method_loaded",
   "error",
 ] as const;
 
@@ -93,7 +98,11 @@ export type FocusConnectionType =
   | "IMPLEMENTS"
   | "CALLED_BY"
   | "CALLS"
-  | "USES_PROPERTIES";
+  | "USES_PROPERTIES"
+  | "INVOKES_METHOD";
+
+/** Drives which view the right-hand sheet renders. */
+export type SheetMode = "class" | "variable" | "method";
 
 export interface SSEEvent<T = unknown> {
   type: SSEEventType;
@@ -186,4 +195,21 @@ export interface FocusConnectionPayload {
   /** 1-based emission order from backend. */
   position: number;
   sourceFile: string;
+}
+
+export interface FocusMethodLoadedPayload {
+  id: string;
+  containingClass: string;
+  containingClassFullyQualifiedName: string;
+  containingClassPackage: string;
+  methodName: string;
+  /** Single-line signature (`public Foo bar(int x)`). */
+  signature: string;
+  returnType: string;
+  parameters: { name: string; type: string }[];
+  /** Source slice from `startLine` through `endLine` of the focus file. */
+  sourceCode: string;
+  lineCount: number;
+  startLine: number;
+  endLine: number;
 }

@@ -9,9 +9,11 @@ import type {
   FieldsParsedPayload,
   FocusClassLoadedPayload,
   FocusConnectionPayload,
+  FocusMethodLoadedPayload,
   MethodsParsedPayload,
   ParsedField,
   ParsedMethod,
+  SheetMode,
 } from "@/lib/types";
 
 export type SessionStatus =
@@ -70,6 +72,13 @@ interface GraphState {
    *  so the FOCO SCANER button can reuse it across re-analyses. Set by the
    *  inputs that know the path (LocalPathInput, FocusInput). */
   projectPath: string | null;
+  /** Drives which view the right-hand sheet renders. */
+  sheetMode: SheetMode;
+  selectedVariable: ParsedField | null;
+  selectedMethod: ParsedMethod | null;
+  /** Method-as-focus payload (FOCUS_METHOD mode). */
+  focusMethod: FocusMethodLoadedPayload | null;
+  focusMethodMode: boolean;
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
 
@@ -101,6 +110,12 @@ interface GraphState {
   setFocusClass: (focus: FocusClassLoadedPayload) => void;
   addFocusConnection: (conn: FocusConnectionPayload) => void;
   setProjectPath: (path: string | null) => void;
+  setFocusMethodMode: (enabled: boolean) => void;
+  setFocusMethod: (focus: FocusMethodLoadedPayload) => void;
+  /** Open the sheet on a specific variable of a class node. */
+  openVariableSheet: (classNodeId: string, field: ParsedField) => void;
+  /** Open the sheet on a specific method of a class node. */
+  openMethodSheet: (classNodeId: string, method: ParsedMethod) => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   reset: () => void;
@@ -211,6 +226,11 @@ export const useGraphStore = create<GraphState>((set) => ({
   focusClass: null,
   focusConnections: [],
   projectPath: null,
+  sheetMode: "class",
+  selectedVariable: null,
+  selectedMethod: null,
+  focusMethod: null,
+  focusMethodMode: false,
   version: 0,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -363,8 +383,22 @@ export const useGraphStore = create<GraphState>((set) => ({
       return { packages: next, version: state.version + 1 };
     }),
 
-  selectNode: (id) => set({ selectedNodeId: id }),
-  clearSelection: () => set({ selectedNodeId: null }),
+  // Selecting a node from the graph always lands on the "class" sheet view.
+  // Variable/method drill-ins go through openVariableSheet / openMethodSheet.
+  selectNode: (id) =>
+    set({
+      selectedNodeId: id,
+      sheetMode: "class",
+      selectedVariable: null,
+      selectedMethod: null,
+    }),
+  clearSelection: () =>
+    set({
+      selectedNodeId: null,
+      sheetMode: "class",
+      selectedVariable: null,
+      selectedMethod: null,
+    }),
 
   updateFilter: (key, value) =>
     set((state) => ({ filters: { ...state.filters, [key]: value } })),
@@ -439,6 +473,34 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   setProjectPath: (path) => set({ projectPath: path }),
 
+  setFocusMethodMode: (enabled) => set({ focusMethodMode: enabled }),
+
+  setFocusMethod: (focus) => {
+    // [debug] flagging while we stabilise focus mode — remove once stable
+    console.log("[CodeMapper] setFocusMethod called with:", focus);
+    set((state) => ({
+      focusMethodMode: true,
+      focusMethod: focus,
+      version: state.version + 1,
+    }));
+  },
+
+  openVariableSheet: (classNodeId, field) =>
+    set({
+      selectedNodeId: classNodeId,
+      sheetMode: "variable",
+      selectedVariable: field,
+      selectedMethod: null,
+    }),
+
+  openMethodSheet: (classNodeId, method) =>
+    set({
+      selectedNodeId: classNodeId,
+      sheetMode: "method",
+      selectedVariable: null,
+      selectedMethod: method,
+    }),
+
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
 
@@ -461,6 +523,11 @@ export const useGraphStore = create<GraphState>((set) => ({
       focusMode: false,
       focusClass: null,
       focusConnections: [],
+      sheetMode: "class",
+      selectedVariable: null,
+      selectedMethod: null,
+      focusMethod: null,
+      focusMethodMode: false,
       version: 0,
     }),
 }));
