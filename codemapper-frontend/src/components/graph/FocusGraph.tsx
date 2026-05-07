@@ -48,6 +48,7 @@ function radiusFor(count: number): number {
 function FocusGraphInner() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const focusConnections = useGraphStore((s) => s.focusConnections);
+  const selectNode = useGraphStore((s) => s.selectNode);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,6 +130,7 @@ function FocusGraphInner() {
         nodesConnectable={false}
         elementsSelectable={false}
         defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+        onNodeClick={(_, node) => selectNode(node.id)}
       >
         <Background
           variant={BackgroundVariant.Dots}

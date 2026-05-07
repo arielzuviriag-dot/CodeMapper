@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { cn } from "@/lib/utils";
 import { analyzeLocalPath, resolveDemoMode } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -27,15 +28,19 @@ export function LocalPathInput() {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     const demoMode = resolveDemoMode();
+    const trimmed = path.trim();
     let sessionId: string;
     try {
-      const res = await analyzeLocalPath(path.trim(), demoMode);
+      const res = await analyzeLocalPath(trimmed, demoMode);
       sessionId = res.sessionId;
     } catch {
       // toast handled by interceptor — allow retry
       setIsAnalyzing(false);
       return;
     }
+    // Persist for the FOCO SCANER button on the map page (it needs the
+    // absolute project path to compute relative focus file paths).
+    useGraphStore.getState().setProjectPath(trimmed);
     setShowOverlay(true);
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
     setTimeout(() => router.push(`/map/${sessionId}${suffix}`), NAVIGATE_DELAY_MS);

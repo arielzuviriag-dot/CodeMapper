@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { cn } from "@/lib/utils";
 import { analyzeFocus, resolveDemoMode } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -55,6 +56,9 @@ export function FocusInput() {
       setIsAnalyzing(false);
       return;
     }
+    // Persist for the FOCO SCANER button on the map page (it needs the
+    // absolute project path to compute relative focus file paths).
+    useGraphStore.getState().setProjectPath(trimmedProject);
     setShowOverlay(true);
     const params = new URLSearchParams({ mode: "focus" });
     if (demoMode === "pro") params.set("demo", "pro");

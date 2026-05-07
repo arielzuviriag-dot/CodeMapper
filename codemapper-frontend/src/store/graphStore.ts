@@ -66,6 +66,10 @@ interface GraphState {
   focusClass: FocusClassLoadedPayload | null;
   /** Level-1 dependencies streamed in arrival order. */
   focusConnections: FocusConnectionPayload[];
+  /** Absolute project path used for the current analysis. Survives `reset()`
+   *  so the FOCO SCANER button can reuse it across re-analyses. Set by the
+   *  inputs that know the path (LocalPathInput, FocusInput). */
+  projectPath: string | null;
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
 
@@ -96,6 +100,7 @@ interface GraphState {
   setFocusMode: (enabled: boolean) => void;
   setFocusClass: (focus: FocusClassLoadedPayload) => void;
   addFocusConnection: (conn: FocusConnectionPayload) => void;
+  setProjectPath: (path: string | null) => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   reset: () => void;
@@ -155,6 +160,42 @@ function buildClassNode(payload: ClassFoundPayload): ClassNodeData {
   };
 }
 
+/** Mirror a FOCUS payload into the regular `nodes` Map so the existing
+ *  ClassDetailSheet (which keys off `selectedNodeId` → nodes.get) works
+ *  for focus center + peripheral nodes without branching. */
+function focusToClassNode(payload: FocusClassLoadedPayload): ClassNodeData {
+  return {
+    id: payload.id,
+    name: payload.name,
+    fullyQualifiedName: payload.fullyQualifiedName,
+    packageName: payload.packageName,
+    type: payload.type,
+    annotations: payload.annotations ?? [],
+    filePath: payload.sourceFile,
+    lineCount: payload.lineCount ?? 0,
+    modifiers: payload.modifiers ?? [],
+    fields: payload.fields ?? [],
+    methods: payload.methods ?? [],
+  };
+}
+
+function focusConnToClassNode(payload: FocusConnectionPayload): ClassNodeData {
+  return {
+    id: payload.id,
+    name: payload.name,
+    fullyQualifiedName: payload.fullyQualifiedName,
+    packageName: payload.packageName,
+    type: payload.type,
+    annotations: payload.annotations ?? [],
+    filePath: payload.sourceFile,
+    // FocusConnectionEvent doesn't carry lineCount; metrics show 0 for peripherals.
+    lineCount: 0,
+    modifiers: [],
+    fields: payload.fields ?? [],
+    methods: payload.methods ?? [],
+  };
+}
+
 export const useGraphStore = create<GraphState>((set) => ({
   sessionId: null,
   nodes: new Map(),
@@ -169,6 +210,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   focusMode: false,
   focusClass: null,
   focusConnections: [],
+  projectPath: null,
   version: 0,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -370,25 +412,40 @@ export const useGraphStore = create<GraphState>((set) => ({
   setFocusClass: (focus) => {
     // [debug] flagging while we stabilise focus mode — remove once stable
     console.log("[CodeMapper] setFocusClass called with:", focus);
-    set((state) => ({
-      focusMode: true,
-      focusClass: focus,
-      version: state.version + 1,
-    }));
+    set((state) => {
+      const nextNodes = new Map(state.nodes);
+      nextNodes.set(focus.id, focusToClassNode(focus));
+      return {
+        focusMode: true,
+        focusClass: focus,
+        nodes: nextNodes,
+        version: state.version + 1,
+      };
+    });
   },
 
   addFocusConnection: (conn) =>
     set((state) => {
       if (state.focusConnections.some((c) => c.id === conn.id)) return state;
+      const nextNodes = new Map(state.nodes);
+      // Always overwrite — peripheral data is the latest version of that node.
+      nextNodes.set(conn.id, focusConnToClassNode(conn));
       return {
         focusConnections: [...state.focusConnections, conn],
+        nodes: nextNodes,
         version: state.version + 1,
       };
     }),
 
+  setProjectPath: (path) => set({ projectPath: path }),
+
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
 
+  // NOTE: `projectPath` is intentionally NOT cleared here. It survives
+  // page resets so the FOCO SCANER button can chain re-analyses on the
+  // same project without re-asking the user for the path. Inputs that
+  // know the path (LocalPathInput / FocusInput) overwrite it on submit.
   reset: () =>
     set({
       sessionId: null,
