@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
@@ -11,7 +11,9 @@ import {
   Download,
   Info,
   Loader2,
+  Search,
   Sparkles,
+  X,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
@@ -488,7 +490,36 @@ function FocusSidebarInfo() {
 function FocusFieldsBlock() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const openVariableSheet = useGraphStore((s) => s.openVariableSheet);
-  if (!focusClass || focusClass.fields.length === 0) return null;
+  const [query, setQuery] = useState("");
+  const isFirstMount = useRef(true);
+
+  // After the very first paint of this block, subsequent re-mounts (caused
+  // by clearing the filter) shouldn't replay the long initial stagger.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      isFirstMount.current = false;
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+
+  const trimmed = query.trim();
+  const isFiltering = trimmed.length >= 3;
+  const lower = trimmed.toLowerCase();
+  const allFields = focusClass?.fields ?? [];
+  const filtered = useMemo(
+    () =>
+      isFiltering
+        ? allFields.filter((f) => f.name.toLowerCase().includes(lower))
+        : allFields,
+    [allFields, isFiltering, lower],
+  );
+
+  if (!focusClass || allFields.length === 0) return null;
+
+  const total = allFields.length;
+  const matched = filtered.length;
+  const empty = isFiltering && matched === 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -499,30 +530,52 @@ function FocusFieldsBlock() {
       <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
         Variables{" "}
         <span className="text-[var(--silver)] tabular-nums">
-          ({focusClass.fields.length})
+          ({isFiltering ? `${matched} de ${total}` : total})
         </span>
       </div>
-      <div className="flex flex-col gap-1">
-        {focusClass.fields.map((f, i) => (
-          <motion.button
-            key={`${f.name}-${i}`}
-            type="button"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.28, delay: i * 0.2 }}
-            onClick={() => openVariableSheet(focusClass.id, f)}
-            className="flex items-baseline gap-2 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
-          >
-            <span className="shrink-0 text-[var(--silver-dark)] group-hover:text-[var(--bordo)]">
-              {f.type}
-            </span>
-            <span className="truncate text-[var(--fg-primary)]">{f.name}</span>
-            {f.annotations.length > 0 && (
-              <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bordo)]" />
-            )}
-          </motion.button>
-        ))}
-      </div>
+
+      <SidebarSearch
+        value={query}
+        onChange={setQuery}
+        placeholder="Buscar variable..."
+        ariaLabel="Buscar variable"
+      />
+
+      {empty ? (
+        <div className="py-2 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+          Sin resultados
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <AnimatePresence initial={false}>
+            {filtered.map((f, i) => (
+              <motion.button
+                key={f.name}
+                type="button"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6, transition: { duration: 0.15 } }}
+                transition={{
+                  duration: 0.28,
+                  delay: isFirstMount.current ? i * 0.2 : 0,
+                }}
+                onClick={() => openVariableSheet(focusClass.id, f)}
+                className="flex items-baseline gap-2 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
+              >
+                <span className="shrink-0 text-[var(--silver-dark)]">
+                  {f.type}
+                </span>
+                <span className="truncate text-[var(--fg-primary)]">
+                  {f.name}
+                </span>
+                {f.annotations.length > 0 && (
+                  <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bordo)]" />
+                )}
+              </motion.button>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -530,10 +583,38 @@ function FocusFieldsBlock() {
 function FocusMethodsBlock() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const openMethodSheet = useGraphStore((s) => s.openMethodSheet);
-  if (!focusClass || focusClass.methods.length === 0) return null;
+  const [query, setQuery] = useState("");
+  const isFirstMount = useRef(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      isFirstMount.current = false;
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+
   // Methods come AFTER fields visually — start delay accounts for the
   // fields stagger (each field at 0.2s, plus the block animation).
-  const fieldsDelay = focusClass.fields.length * 0.2 + 0.2;
+  const fieldsDelay = (focusClass?.fields.length ?? 0) * 0.2 + 0.2;
+
+  const trimmed = query.trim();
+  const isFiltering = trimmed.length >= 3;
+  const lower = trimmed.toLowerCase();
+  const allMethods = focusClass?.methods ?? [];
+  const filtered = useMemo(
+    () =>
+      isFiltering
+        ? allMethods.filter((m) => m.name.toLowerCase().includes(lower))
+        : allMethods,
+    [allMethods, isFiltering, lower],
+  );
+
+  if (!focusClass || allMethods.length === 0) return null;
+
+  const total = allMethods.length;
+  const matched = filtered.length;
+  const empty = isFiltering && matched === 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -544,31 +625,92 @@ function FocusMethodsBlock() {
       <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
         Métodos{" "}
         <span className="text-[var(--silver)] tabular-nums">
-          ({focusClass.methods.length})
+          ({isFiltering ? `${matched} de ${total}` : total})
         </span>
       </div>
-      <div className="flex flex-col gap-1">
-        {focusClass.methods.map((m, i) => (
-          <motion.button
-            key={`${m.name}-${i}`}
-            type="button"
-            initial={{ opacity: 0, x: -6 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22, delay: fieldsDelay + i * 0.1 }}
-            onClick={() => openMethodSheet(focusClass.id, m)}
-            className="flex items-baseline gap-1 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
-          >
-            <span className="truncate text-[var(--fg-primary)]">{m.name}</span>
-            <span className="text-[var(--fg-muted)]">()</span>
-            {m.returnType !== "<constructor>" && (
-              <span className="truncate text-[var(--silver-dark)]">
-                : {m.returnType}
-              </span>
-            )}
-          </motion.button>
-        ))}
-      </div>
+
+      <SidebarSearch
+        value={query}
+        onChange={setQuery}
+        placeholder="Buscar método..."
+        ariaLabel="Buscar método"
+      />
+
+      {empty ? (
+        <div className="py-2 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+          Sin resultados
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <AnimatePresence initial={false}>
+            {filtered.map((m, i) => (
+              <motion.button
+                key={m.name}
+                type="button"
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6, transition: { duration: 0.15 } }}
+                transition={{
+                  duration: 0.22,
+                  delay: isFirstMount.current ? fieldsDelay + i * 0.1 : 0,
+                }}
+                onClick={() => openMethodSheet(focusClass.id, m)}
+                className="flex items-baseline gap-1 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
+              >
+                <span className="truncate text-[var(--fg-primary)]">
+                  {m.name}
+                </span>
+                <span className="text-[var(--fg-muted)]">()</span>
+                {m.returnType !== "<constructor>" && (
+                  <span className="truncate text-[var(--silver-dark)]">
+                    : {m.returnType}
+                  </span>
+                )}
+              </motion.button>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
     </motion.div>
+  );
+}
+
+function SidebarSearch({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="relative flex items-center gap-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] px-2.5 py-1.5 transition-all focus-within:border-[var(--bordo)] focus-within:shadow-[0_0_12px_rgba(185,28,66,0.22)]">
+      <Search className="h-3 w-3 shrink-0 text-[var(--silver-mid)]" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onChange("");
+        }}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className="flex-1 bg-transparent font-mono text-xs leading-tight text-[var(--fg-primary)] placeholder:text-[var(--silver-dark)] focus:outline-none"
+      />
+      {value.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Limpiar búsqueda"
+          className="rounded-sm text-[var(--silver-dark)] transition-colors hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
