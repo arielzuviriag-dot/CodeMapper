@@ -29,7 +29,7 @@ export default function HomePage() {
       {/* CRT scan line — silver dashed, drifts top→bottom in loop */}
       {!prefersReducedMotion && <ScanLine />}
 
-      <div className="relative mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-10 px-6 py-16">
+      <div className="relative mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-start gap-8 px-6 pb-16 pt-12">
         <header className="flex flex-col items-center gap-4 text-center">
           <CodeMapperNodeLogo />
 
