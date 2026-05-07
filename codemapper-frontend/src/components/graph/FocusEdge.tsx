@@ -13,11 +13,11 @@ const TYPE_STYLE: Record<
   FocusConnectionType,
   { stroke: string; width: number; dash?: string; label: string }
 > = {
-  CALLS: { stroke: "#B91C42", width: 2, label: "calls" },
-  CALLED_BY: { stroke: "#5C0A1A", width: 2, label: "called by" },
-  EXTENDS: { stroke: "#C0C0C8", width: 2.5, label: "extends" },
-  IMPLEMENTS: { stroke: "#C0C0C8", width: 1.75, dash: "6 5", label: "implements" },
-  USES_PROPERTIES: { stroke: "#8B0F2A", width: 1.75, dash: "3 4", label: "uses props" },
+  CALLS: { stroke: "#B91C42", width: 2, label: "Llama a" },
+  CALLED_BY: { stroke: "#5C0A1A", width: 2, label: "Llamado por" },
+  EXTENDS: { stroke: "#C0C0C8", width: 2.5, label: "Extiende" },
+  IMPLEMENTS: { stroke: "#C0C0C8", width: 1.75, dash: "6 5", label: "Implementa" },
+  USES_PROPERTIES: { stroke: "#8B0F2A", width: 1.75, dash: "3 4", label: "Usa props" },
 };
 
 const STAGGER_S = 0.5;
@@ -69,9 +69,9 @@ function FocusEdgeComponent({
         }}
       />
       <rect
-        x={labelX - 36}
+        x={labelX - 44}
         y={labelY - 7}
-        width={72}
+        width={88}
         height={14}
         rx={3}
         ry={3}

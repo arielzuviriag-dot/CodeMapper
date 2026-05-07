@@ -14,15 +14,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toPng } from "html-to-image";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
-import { FocusLimitReachedModal } from "@/components/loading/FocusLimitReachedModal";
 import { StreamingIndicator } from "@/components/loading/StreamingIndicator";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
-import { LimitReachedModal } from "@/components/sidebar/LimitReachedModal";
 import { resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useSSE } from "@/hooks/useSSE";
@@ -52,24 +51,24 @@ export default function MapPage() {
   const edgeCount = useGraphStore((s) => s.edges.length);
   const sessionStatus = useGraphStore((s) => s.sessionStatus);
   const limitReached = useGraphStore((s) => s.limitReached);
-  const openLimitReachedModal = useGraphStore((s) => s.openLimitReachedModal);
   const focusMode = useGraphStore((s) => s.focusMode);
   const focusClass = useGraphStore((s) => s.focusClass);
   const focusConnectionCount = useGraphStore((s) => s.focusConnections.length);
 
   const [isPro, setIsPro] = useState(false);
-
-  const visualNodeCount = focusMode ? focusConnectionCount + (focusClass ? 1 : 0) : nodeCount;
-  const visualEdgeCount = focusMode ? focusConnectionCount : edgeCount;
-
-  const showLoadingScreen =
-    visualNodeCount === 0 &&
-    (sessionStatus === "idle" || sessionStatus === "streaming");
+  // ──────────────────────────────────────────────────────────────
+  // Single one-way flag: starts true, flips false on the first
+  // useful payload (focus class loaded OR first regular node), and
+  // never flips back. Avoids the multi-cycle flicker that happened
+  // when the loading screen was derived from sessionStatus + counts.
+  // ──────────────────────────────────────────────────────────────
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const showFullLimitBanner = !isPro && !focusMode && limitReached.reached;
 
   useEffect(() => {
     setIsPro(resolveDemoMode() === "pro");
+    setIsInitialLoading(true);
     reset();
     setSessionId(sessionId);
     if (urlMode === "focus") {
@@ -78,6 +77,12 @@ export default function MapPage() {
     return () => reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  useEffect(() => {
+    if (focusClass !== null || nodeCount > 0) {
+      setIsInitialLoading(false);
+    }
+  }, [focusClass, nodeCount]);
 
   useSSE(sessionId);
 
@@ -103,6 +108,10 @@ export default function MapPage() {
   const headerProjectLabel = focusMode
     ? focusClass?.name ?? stats.projectName ?? "Foco"
     : stats.projectName || "Proyecto";
+
+  const onUpgradeBannerClick = () => {
+    toast.success("Te avisaremos cuando salga PRO");
+  };
 
   return (
     <ErrorBoundary>
@@ -163,23 +172,28 @@ export default function MapPage() {
             <LimitReachedBanner
               parsed={limitReached.parsed}
               totalAvailable={limitReached.totalAvailable}
-              onUpgrade={openLimitReachedModal}
+              onUpgrade={onUpgradeBannerClick}
             />
           )}
         </AnimatePresence>
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="hidden w-[280px] shrink-0 flex-col gap-3 border-r border-[var(--border-silver)] bg-[var(--bg-base)] p-3 lg:flex">
+          <aside className="hidden w-[280px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[var(--border-silver)] bg-[var(--bg-base)] p-3 lg:flex">
             <ParseProgress />
             {focusMode ? (
-              <FocusSidebarInfo />
+              <>
+                <FocusSidebarInfo />
+                <FocusFieldsBlock />
+                <FocusMethodsBlock />
+              </>
             ) : (
               <ProjectStats />
             )}
             <AnimatePresence>
-              {sessionStatus === "streaming" && visualNodeCount > 0 && (
-                <StreamingIndicator />
-              )}
+              {sessionStatus === "streaming" &&
+                (focusMode
+                  ? focusConnectionCount > 0 || focusClass !== null
+                  : nodeCount > 0) && <StreamingIndicator />}
             </AnimatePresence>
             {!focusMode && <EmptyOrLoading />}
           </aside>
@@ -190,10 +204,12 @@ export default function MapPage() {
         </div>
 
         <ClassDetailSheet />
-        {focusMode ? <FocusLimitReachedModal /> : <LimitReachedModal />}
 
-        <AnimatePresence>
-          {showLoadingScreen && <AnalysisLoadingScreen />}
+        {/* AnimatePresence with initial={false} so the loading screen does NOT
+            re-fade-in when this page mounts after the home overlay; it appears
+            instantly, lives once, then plays its exit on first useful event. */}
+        <AnimatePresence initial={false}>
+          {isInitialLoading && <AnalysisLoadingScreen />}
         </AnimatePresence>
       </main>
     </ErrorBoundary>
@@ -362,6 +378,85 @@ function FocusSidebarInfo() {
         <SidebarMetric value={connectionCount} label="Conexiones" />
       </div>
     </div>
+  );
+}
+
+function FocusFieldsBlock() {
+  const focusClass = useGraphStore((s) => s.focusClass);
+  if (!focusClass || focusClass.fields.length === 0) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="cm-hairline-top flex flex-col gap-2 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3"
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
+        Variables{" "}
+        <span className="text-[var(--silver)] tabular-nums">
+          ({focusClass.fields.length})
+        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        {focusClass.fields.map((f, i) => (
+          <motion.div
+            key={`${f.name}-${i}`}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.28, delay: i * 0.2 }}
+            className="flex items-baseline gap-2 font-mono text-[11px] leading-tight"
+          >
+            <span className="shrink-0 text-[var(--silver-dark)]">{f.type}</span>
+            <span className="truncate text-[var(--fg-primary)]">{f.name}</span>
+            {f.annotations.length > 0 && (
+              <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bordo)]" />
+            )}
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function FocusMethodsBlock() {
+  const focusClass = useGraphStore((s) => s.focusClass);
+  if (!focusClass || focusClass.methods.length === 0) return null;
+  // Methods come AFTER fields visually — start delay accounts for the
+  // fields stagger (each field at 0.2s, plus the block animation).
+  const fieldsDelay = focusClass.fields.length * 0.2 + 0.2;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: fieldsDelay }}
+      className="cm-hairline-top flex flex-col gap-2 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3"
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
+        Métodos{" "}
+        <span className="text-[var(--silver)] tabular-nums">
+          ({focusClass.methods.length})
+        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        {focusClass.methods.map((m, i) => (
+          <motion.div
+            key={`${m.name}-${i}`}
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.22, delay: fieldsDelay + i * 0.1 }}
+            className="flex items-baseline gap-1 font-mono text-[11px] leading-tight"
+          >
+            <span className="truncate text-[var(--fg-primary)]">{m.name}</span>
+            <span className="text-[var(--fg-muted)]">()</span>
+            {m.returnType !== "<constructor>" && (
+              <span className="truncate text-[var(--silver-dark)]">
+                : {m.returnType}
+              </span>
+            )}
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
   );
 }
 

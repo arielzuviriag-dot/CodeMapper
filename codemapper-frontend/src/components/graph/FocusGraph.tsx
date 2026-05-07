@@ -34,15 +34,15 @@ const FOCUS_EDGE_TYPES = {
  *   peripheral_i.center = ( R * cos(angle_i), R * sin(angle_i) )
  *   angle_i = -π/2 + (i / N) * 2π     // start at top, clockwise
  * ============================================================ */
-const CENTER_W = 400;
-const CENTER_H = 360;
+const CENTER_W = 280;
+const CENTER_H = 120;
 const PERIPHERAL_W = 220;
 const PERIPHERAL_H = 150;
 
 function radiusFor(count: number): number {
-  if (count <= 6) return 460;
-  if (count <= 10) return 520;
-  return 520 + (count - 10) * 30;
+  if (count <= 6) return 480;
+  if (count <= 10) return 560;
+  return 560 + (count - 10) * 32;
 }
 
 function FocusGraphInner() {
