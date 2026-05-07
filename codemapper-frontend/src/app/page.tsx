@@ -30,8 +30,8 @@ export default function HomePage() {
       {!prefersReducedMotion && <ScanLine />}
 
       <div className="relative mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-start gap-6 px-6 pb-16 pt-6">
-        <header className="flex flex-col items-center gap-3 text-center">
-          <div className="flex items-center gap-4">
+        <header className="flex items-center justify-center gap-5">
+          <div className="flex flex-col items-center gap-1 text-center">
             <motion.h1
               className="cm-hero text-5xl sm:text-6xl"
               animate={
@@ -58,11 +58,11 @@ export default function HomePage() {
             >
               MapperView
             </motion.h1>
-            <CodeMapperNodeLogo />
+            <p className="max-w-xl text-balance text-base text-[var(--fg-secondary)] sm:text-lg">
+              Visualizá la arquitectura de tu proyecto
+            </p>
           </div>
-          <p className="max-w-xl text-balance text-base text-[var(--fg-secondary)] sm:text-lg">
-            Visualizá la arquitectura de tu proyecto
-          </p>
+          <CodeMapperNodeLogo />
         </header>
 
         <section
