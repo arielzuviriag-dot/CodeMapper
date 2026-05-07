@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { FocusScanConfirmModal } from "@/components/loading/FocusScanConfirmModal";
 import { useGraphStore } from "@/store/graphStore";
 import {
   analyzeFocus,
@@ -134,10 +135,20 @@ export function ClassDetailSheet() {
   const focusConnections = useGraphStore((s) => s.focusConnections);
   const projectPath = useGraphStore((s) => s.projectPath);
 
+  const setPendingReanalysis = useGraphStore((s) => s.setPendingReanalysis);
+
   const [source, setSource] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isFocusing, setIsFocusing] = useState(false);
+
+  /** Confirmation step before re-analyzing. The pending action is captured
+   *  in a closure so the modal stays decoupled from class- vs method-scan
+   *  details — it just calls back when the user accepts. */
+  const [confirm, setConfirm] = useState<{
+    label: string;
+    run: () => Promise<void>;
+  } | null>(null);
 
   const isCurrentFocusClass =
     focusMode && focusClass !== null && focusClass.id === selectedNodeId;
@@ -220,60 +231,95 @@ export function ClassDetailSheet() {
     !!node.filePath &&
     computeRelativeFocusFile(projectPath, node.filePath) !== null;
 
-  const onFocusScanClass = async () => {
+  const requestFocusScanClass = () => {
     if (!node || !projectPath || isFocusing) return;
     const rel = computeRelativeFocusFile(projectPath, node.filePath);
     if (!rel) {
       toast.error("No se puede deducir el path relativo del archivo");
       return;
     }
-    setIsFocusing(true);
-    const demoMode = resolveDemoMode();
-    let newSessionId: string;
-    try {
-      const res = await analyzeFocus({ projectPath, focusFile: rel, demoMode });
-      newSessionId = res.sessionId;
-    } catch {
-      setIsFocusing(false);
-      return;
-    }
-    clearSelection();
-    const params = new URLSearchParams({ mode: "focus" });
-    if (demoMode === "pro") params.set("demo", "pro");
-    router.replace(`/map/${newSessionId}?${params.toString()}`);
+    setConfirm({
+      label: node.name,
+      run: async () => {
+        setIsFocusing(true);
+        const demoMode = resolveDemoMode();
+        let newSessionId: string;
+        try {
+          const res = await analyzeFocus({
+            projectPath,
+            focusFile: rel,
+            demoMode,
+          });
+          newSessionId = res.sessionId;
+        } catch {
+          setIsFocusing(false);
+          return;
+        }
+        // Flip the flag BEFORE navigating so the next map render swaps the
+        // full-screen loader for the inline one.
+        setPendingReanalysis(true);
+        clearSelection();
+        const params = new URLSearchParams({ mode: "focus" });
+        if (demoMode === "pro") params.set("demo", "pro");
+        router.replace(`/map/${newSessionId}?${params.toString()}`);
+      },
+    });
   };
 
   /** FOCO SCANER over a method — fires from the method-mode sheet. Uses the
    *  current focus class as the source file for the method. */
-  const onFocusScanMethod = async () => {
+  const requestFocusScanMethod = () => {
     if (!selectedMethod || !focusClass || !projectPath || isFocusing) return;
     const rel = computeRelativeFocusFile(projectPath, focusClass.sourceFile);
     if (!rel) {
       toast.error("No se puede deducir el path relativo del archivo");
       return;
     }
-    setIsFocusing(true);
-    const demoMode = resolveDemoMode();
-    let newSessionId: string;
-    try {
-      const res = await analyzeFocusMethod({
-        projectPath,
-        focusFile: rel,
-        methodName: selectedMethod.name,
-        demoMode,
-      });
-      newSessionId = res.sessionId;
-    } catch {
-      setIsFocusing(false);
-      return;
-    }
-    clearSelection();
-    const params = new URLSearchParams({ mode: "focus-method" });
-    if (demoMode === "pro") params.set("demo", "pro");
-    router.replace(`/map/${newSessionId}?${params.toString()}`);
+    setConfirm({
+      label: `${focusClass.name}.${selectedMethod.name}()`,
+      run: async () => {
+        setIsFocusing(true);
+        const demoMode = resolveDemoMode();
+        let newSessionId: string;
+        try {
+          const res = await analyzeFocusMethod({
+            projectPath,
+            focusFile: rel,
+            methodName: selectedMethod.name,
+            demoMode,
+          });
+          newSessionId = res.sessionId;
+        } catch {
+          setIsFocusing(false);
+          return;
+        }
+        setPendingReanalysis(true);
+        clearSelection();
+        const params = new URLSearchParams({ mode: "focus-method" });
+        if (demoMode === "pro") params.set("demo", "pro");
+        router.replace(`/map/${newSessionId}?${params.toString()}`);
+      },
+    });
   };
 
+  const onConfirmFocusScan = () => {
+    const target = confirm;
+    setConfirm(null);
+    target?.run();
+  };
+
+  const isProForModal =
+    typeof window !== "undefined" && resolveDemoMode() === "pro";
+
   return (
+    <>
+    <FocusScanConfirmModal
+      open={confirm !== null}
+      targetLabel={confirm?.label ?? ""}
+      isPro={isProForModal}
+      onCancel={() => setConfirm(null)}
+      onConfirm={onConfirmFocusScan}
+    />
     <Sheet
       open={!!selectedNodeId}
       onOpenChange={(open) => {
@@ -292,8 +338,8 @@ export function ClassDetailSheet() {
               isCurrentFocusMethod={isCurrentFocusMethod}
               isFocusing={isFocusing}
               canFocusScan={canFocusScan}
-              onFocusScanClass={onFocusScanClass}
-              onFocusScanMethod={onFocusScanMethod}
+              onFocusScanClass={requestFocusScanClass}
+              onFocusScanMethod={requestFocusScanMethod}
               nodeName={node?.name ?? focusMethod?.containingClass ?? ""}
               nodeFqn={node?.fullyQualifiedName ?? ""}
               variable={selectedVariable}
@@ -314,7 +360,7 @@ export function ClassDetailSheet() {
                 isFocusPeripheral={isFocusPeripheral}
                 canFocusScan={canFocusScan}
                 isFocusing={isFocusing}
-                onFocusScan={onFocusScanClass}
+                onFocusScan={requestFocusScanClass}
                 selectNode={selectNode}
               />
             )}
@@ -341,6 +387,7 @@ export function ClassDetailSheet() {
         ) : null}
       </SheetContent>
     </Sheet>
+    </>
   );
 }
 

@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
+import { InlineGraphLoading } from "@/components/loading/InlineGraphLoading";
 import { StreamingIndicator } from "@/components/loading/StreamingIndicator";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
@@ -65,6 +66,8 @@ export default function MapPage() {
   const focusMethodMode = useGraphStore((s) => s.focusMethodMode);
   const focusMethod = useGraphStore((s) => s.focusMethod);
   const focusConnectionCount = useGraphStore((s) => s.focusConnections.length);
+  const pendingReanalysis = useGraphStore((s) => s.pendingReanalysis);
+  const setPendingReanalysis = useGraphStore((s) => s.setPendingReanalysis);
 
   const [isPro, setIsPro] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -90,8 +93,11 @@ export default function MapPage() {
   useEffect(() => {
     if (focusClass !== null || focusMethod !== null || nodeCount > 0) {
       setIsInitialLoading(false);
+      // First useful event arrived → the chained re-analysis (if any) is no
+      // longer "pending". This single one-way flip dismisses InlineGraphLoading.
+      setPendingReanalysis(false);
     }
-  }, [focusClass, focusMethod, nodeCount]);
+  }, [focusClass, focusMethod, nodeCount, setPendingReanalysis]);
 
   useSSE(sessionId);
 
@@ -221,23 +227,27 @@ export default function MapPage() {
           </aside>
 
           <section className="relative flex-1">
-            {focusMethodMode ? (
+            {pendingReanalysis ? null : focusMethodMode ? (
               <FocusMethodGraph />
             ) : focusMode ? (
               <FocusGraph />
             ) : (
               <CodeGraph />
             )}
+            <AnimatePresence>
+              {pendingReanalysis && <InlineGraphLoading />}
+            </AnimatePresence>
           </section>
         </div>
 
         <ClassDetailSheet />
 
-        {/* AnimatePresence with initial={false} so the loading screen does NOT
-            re-fade-in when this page mounts after the home overlay; it appears
-            instantly, lives once, then plays its exit on first useful event. */}
+        {/* Full-screen loader is for the FIRST analysis (home → /map). For
+            chained re-analyses (sheet → /map/{newId}) we use the inline
+            loader inside the graph section, so the header + sidebar stay
+            visible. The two are mutually exclusive. */}
         <AnimatePresence initial={false}>
-          {isInitialLoading && <AnalysisLoadingScreen />}
+          {isInitialLoading && !pendingReanalysis && <AnalysisLoadingScreen />}
         </AnimatePresence>
       </main>
     </ErrorBoundary>

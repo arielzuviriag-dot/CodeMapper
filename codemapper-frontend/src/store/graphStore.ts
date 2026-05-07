@@ -79,6 +79,11 @@ interface GraphState {
   /** Method-as-focus payload (FOCUS_METHOD mode). */
   focusMethod: FocusMethodLoadedPayload | null;
   focusMethodMode: boolean;
+  /** True while a FOCO SCANER navigation is in flight (sheet → new session).
+   *  The map page uses this flag to swap the full-screen loader for a smaller
+   *  in-graph loader so the header + sidebar stay visible during the
+   *  transition. Survives `reset()` so it can carry across the session change. */
+  pendingReanalysis: boolean;
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
 
@@ -116,6 +121,7 @@ interface GraphState {
   openVariableSheet: (classNodeId: string, field: ParsedField) => void;
   /** Open the sheet on a specific method of a class node. */
   openMethodSheet: (classNodeId: string, method: ParsedMethod) => void;
+  setPendingReanalysis: (pending: boolean) => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   reset: () => void;
@@ -231,6 +237,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   selectedMethod: null,
   focusMethod: null,
   focusMethodMode: false,
+  pendingReanalysis: false,
   version: 0,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -501,13 +508,17 @@ export const useGraphStore = create<GraphState>((set) => ({
       selectedMethod: method,
     }),
 
+  setPendingReanalysis: (pending) => set({ pendingReanalysis: pending }),
+
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
 
-  // NOTE: `projectPath` is intentionally NOT cleared here. It survives
-  // page resets so the FOCO SCANER button can chain re-analyses on the
-  // same project without re-asking the user for the path. Inputs that
-  // know the path (LocalPathInput / FocusInput) overwrite it on submit.
+  // NOTE: `projectPath` and `pendingReanalysis` are intentionally NOT
+  // cleared here. Both must survive the map page's reset() on session
+  // change so the FOCO SCANER → reanalysis transition can chain without
+  // losing context. Their lifecycle is owned by the inputs / home
+  // (which set/clear them) and the map page (which clears
+  // pendingReanalysis once the new graph starts streaming).
   reset: () =>
     set({
       sessionId: null,

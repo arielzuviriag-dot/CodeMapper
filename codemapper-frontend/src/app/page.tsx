@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { UploadTabs } from "@/components/upload/UploadTabs";
 import { resolveDemoMode } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
 
 const SCAN_DURATION = 7;
 
@@ -12,6 +13,10 @@ export default function HomePage() {
 
   useEffect(() => {
     resolveDemoMode();
+    // Reset the chained-reanalysis flag so a fresh home → map flow uses the
+    // full-screen loader (and not the inline one left over from a prior
+    // FOCO SCANER navigation that the user abandoned).
+    useGraphStore.getState().setPendingReanalysis(false);
   }, []);
 
   return (
