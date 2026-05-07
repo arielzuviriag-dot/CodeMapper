@@ -154,13 +154,6 @@ export function ClassDetailSheet() {
     focusMode && focusClass !== null && focusClass.id === selectedNodeId;
   const isCurrentFocusMethod =
     focusMethodMode && focusMethod !== null && focusMethod.id === selectedNodeId;
-  /** Peripheral of focus-class mode whose source the backend doesn't expose. */
-  const isFocusPeripheral =
-    focusMode &&
-    focusClass !== null &&
-    focusClass.id !== selectedNodeId &&
-    sheetMode === "class" &&
-    !focusMethodMode;
 
   const incoming = useMemo(
     () => allEdges.filter((e) => e.to === selectedNodeId),
@@ -179,12 +172,6 @@ export function ClassDetailSheet() {
       setError(null);
       return;
     }
-    if (isFocusPeripheral) {
-      setSource(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
     // In focus-method mode, the center node IS the method — its source is
     // already in focusMethod.sourceCode, no fetch needed.
     if (isCurrentFocusMethod) {
@@ -193,6 +180,8 @@ export function ClassDetailSheet() {
       setLoading(false);
       return;
     }
+    // [debug] flagging while we stabilise focus mode — remove once stable
+    console.log("[CodeMapper] sheet fetch source:", selectedNodeId);
     let cancelled = false;
     setLoading(true);
     setSource(null);
@@ -200,6 +189,13 @@ export function ClassDetailSheet() {
     getClassSource(sessionId, selectedNodeId)
       .then((res) => {
         if (cancelled) return;
+        // [debug] flagging while we stabilise focus mode — remove once stable
+        console.log(
+          "[CodeMapper] sheet source resolved:",
+          selectedNodeId,
+          res?.sourceCode?.length ?? 0,
+          "chars",
+        );
         const code = res?.sourceCode ?? "";
         if (!code) {
           setError("La respuesta del backend no incluye sourceCode.");
@@ -220,7 +216,7 @@ export function ClassDetailSheet() {
     return () => {
       cancelled = true;
     };
-  }, [selectedNodeId, sessionId, isFocusPeripheral, isCurrentFocusMethod, focusMethod]);
+  }, [selectedNodeId, sessionId, isCurrentFocusMethod, focusMethod]);
 
   const canFocusScan =
     !!node &&
@@ -357,10 +353,6 @@ export function ClassDetailSheet() {
                 incoming={incoming}
                 outgoing={outgoing}
                 allNodes={allNodes}
-                isFocusPeripheral={isFocusPeripheral}
-                canFocusScan={canFocusScan}
-                isFocusing={isFocusing}
-                onFocusScan={requestFocusScanClass}
                 selectNode={selectNode}
               />
             )}
@@ -588,10 +580,6 @@ interface ClassViewProps {
   incoming: Connection[];
   outgoing: Connection[];
   allNodes: Map<string, ClassNodeData>;
-  isFocusPeripheral: boolean;
-  canFocusScan: boolean;
-  isFocusing: boolean;
-  onFocusScan: () => void;
   selectNode: (id: string) => void;
 }
 
@@ -603,10 +591,6 @@ function ClassView({
   incoming,
   outgoing,
   allNodes,
-  isFocusPeripheral,
-  canFocusScan,
-  isFocusing,
-  onFocusScan,
   selectNode,
 }: ClassViewProps) {
   return (
@@ -629,34 +613,26 @@ function ClassView({
       </TabsList>
 
       <TabsContent value="source" className="flex-1 px-6 pb-6 pt-4">
-        {isFocusPeripheral ? (
-          <PeripheralSourcePlaceholder
-            canFocusScan={canFocusScan}
-            isFocusing={isFocusing}
-            onFocusScan={onFocusScan}
-          />
-        ) : (
-          <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--border-silver)] shadow-[var(--shadow-md)]">
-            {error && (
-              <div className="cm-accent-bar-left border-b border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-3 py-2 pl-4 text-xs text-[var(--bordo)]">
-                {error}
-              </div>
-            )}
-            <div className="flex-1 overflow-hidden bg-[#0A0A0A]">
-              {loading || source === null ? (
-                <Skeleton className="h-full w-full" />
-              ) : (
-                <MonacoEditor
-                  height="100%"
-                  defaultLanguage="java"
-                  value={source}
-                  theme="vs-dark"
-                  options={MONACO_OPTIONS}
-                />
-              )}
+        <div className="flex h-full flex-col overflow-hidden rounded-md border border-[var(--border-silver)] shadow-[var(--shadow-md)]">
+          {error && (
+            <div className="cm-accent-bar-left border-b border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-3 py-2 pl-4 text-xs text-[var(--bordo)]">
+              {error}
             </div>
+          )}
+          <div className="flex-1 overflow-hidden bg-[#0A0A0A]">
+            {loading || source === null ? (
+              <Skeleton className="h-full w-full" />
+            ) : (
+              <MonacoEditor
+                height="100%"
+                defaultLanguage="java"
+                value={source}
+                theme="vs-dark"
+                options={MONACO_OPTIONS}
+              />
+            )}
           </div>
-        )}
+        </div>
       </TabsContent>
 
       <TabsContent value="incoming" className="flex-1 px-6 pb-6 pt-4">
@@ -1005,53 +981,6 @@ function Section({
 // ─────────────────────────────────────────────────────────────────────
 // Shared bits
 // ─────────────────────────────────────────────────────────────────────
-
-function PeripheralSourcePlaceholder({
-  canFocusScan,
-  isFocusing,
-  onFocusScan,
-}: {
-  canFocusScan: boolean;
-  isFocusing: boolean;
-  onFocusScan: () => void;
-}) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-[var(--border-silver)] bg-[var(--bg-input)]/40 p-8 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[var(--bordo)]/40 bg-[var(--bordo)]/10">
-        <Crosshair className="h-6 w-6 text-[var(--bordo)]" strokeWidth={1.6} />
-      </div>
-      <div className="flex flex-col gap-2">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--bordo)]">
-          Nivel 1 — código no cargado
-        </span>
-        <p className="max-w-xs text-sm text-[var(--fg-secondary)]">
-          El código fuente de los nodos del nivel 1 se carga al re-enfocar el
-          análisis sobre esa clase.
-        </p>
-      </div>
-      {canFocusScan && (
-        <Button
-          size="sm"
-          onClick={onFocusScan}
-          disabled={isFocusing}
-          className="bg-[var(--bordo)] font-mono text-[11px] uppercase tracking-[0.16em] text-white shadow-[0_0_18px_rgba(185,28,66,0.4)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_24px_rgba(185,28,66,0.6)] disabled:opacity-70"
-        >
-          {isFocusing ? (
-            <>
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              Enfocando...
-            </>
-          ) : (
-            <>
-              <Crosshair className="mr-1.5 h-3.5 w-3.5" />
-              Foco Scaner sobre esta clase
-            </>
-          )}
-        </Button>
-      )}
-    </div>
-  );
-}
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (

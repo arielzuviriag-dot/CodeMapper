@@ -130,7 +130,11 @@ function FocusGraphInner() {
         nodesConnectable={false}
         elementsSelectable={false}
         defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
-        onNodeClick={(_, node) => selectNode(node.id)}
+        onNodeClick={(_, node) => {
+          // [debug] flagging while we stabilise focus mode — remove once stable
+          console.log("[CodeMapper] FocusGraph onNodeClick:", node.id);
+          selectNode(node.id);
+        }}
       >
         <Background
           variant={BackgroundVariant.Dots}

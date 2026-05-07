@@ -234,6 +234,12 @@ public class FocusTracerService {
         int position = 0;
         for (PendingConnection pc : toEmit) {
             position++;
+            // Persist real class peripherals so /api/analyze/source/{sessionId}/{classId}
+            // can serve their source when the user clicks the node in the graph.
+            // Synthetic property-file entries have no real .java file → skip them.
+            if (pc.connectionType != FocusConnectionType.USES_PROPERTIES) {
+                session.getParsedClasses().add(pc.parsed);
+            }
             sink.accept(new FocusConnectionEvent(
                     pc.parsed.getId(),
                     pc.parsed.getFullyQualifiedName(),
