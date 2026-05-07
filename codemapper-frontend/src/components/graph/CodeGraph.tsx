@@ -148,10 +148,16 @@ function CodeGraphInner() {
       });
 
       // First pass: count edges per (source, target) so each edge knows
-      // its index among siblings — used by the StackedLabelEdge to spread
-      // labels vertically and avoid overlap.
+      // its index among siblings — used by the StackedLabelEdge to bow
+      // the curves perpendicularly and keep labels from colliding.
+      // Also filter out edges whose ConnectionType is unchecked in the
+      // EdgeLegend ("CONEXIONES") panel.
+      const connTypeFilters = filters.connectionTypeFilters;
       const visibleConns = state.edges.filter(
-        (c) => visibleIds.has(c.from) && visibleIds.has(c.to),
+        (c) =>
+          visibleIds.has(c.from) &&
+          visibleIds.has(c.to) &&
+          connTypeFilters[c.type] !== false,
       );
       const pairCounts = new Map<string, number>();
       for (const c of visibleConns) {

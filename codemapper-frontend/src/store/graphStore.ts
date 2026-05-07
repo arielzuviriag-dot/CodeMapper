@@ -27,6 +27,10 @@ export interface FilterState {
   hideGettersSetters: boolean;
   annotationFilters: Record<string, boolean>;
   classTypeFilters: Record<string, boolean>;
+  /** Toggle visibility of edges by their ConnectionType (extends, implements,
+   *  composition, dependency_injection, annotation_usage). Toggled from the
+   *  EdgeLegend panel; applied in CodeGraph's filter pass. */
+  connectionTypeFilters: Record<string, boolean>;
   searchQuery: string;
 }
 
@@ -109,6 +113,7 @@ interface GraphState {
   updateFilter: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
   toggleAnnotationFilter: (annotation: string) => void;
   toggleClassTypeFilter: (kind: string) => void;
+  toggleConnectionTypeFilter: (kind: string) => void;
   resetFilters: () => void;
   setStatus: (status: SessionStatus) => void;
   setStats: (stats: Partial<ProjectStats>) => void;
@@ -149,6 +154,14 @@ const DEFAULT_FILTERS: FilterState = {
     ENUM: true,
     RECORD: true,
     ABSTRACT_CLASS: true,
+  },
+  connectionTypeFilters: {
+    EXTENDS: true,
+    IMPLEMENTS: true,
+    COMPOSITION: true,
+    DEPENDENCY_INJECTION: true,
+    METHOD_CALL: true,
+    ANNOTATION_USAGE: true,
   },
   searchQuery: "",
 };
@@ -434,6 +447,17 @@ export const useGraphStore = create<GraphState>((set) => ({
         classTypeFilters: {
           ...state.filters.classTypeFilters,
           [kind]: !state.filters.classTypeFilters[kind],
+        },
+      },
+    })),
+
+  toggleConnectionTypeFilter: (kind) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        connectionTypeFilters: {
+          ...state.filters.connectionTypeFilters,
+          [kind]: !state.filters.connectionTypeFilters[kind],
         },
       },
     })),
