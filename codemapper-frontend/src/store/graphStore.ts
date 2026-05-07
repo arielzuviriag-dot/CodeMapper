@@ -367,12 +367,15 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   setFocusMode: (enabled) => set({ focusMode: enabled }),
 
-  setFocusClass: (focus) =>
+  setFocusClass: (focus) => {
+    // [debug] flagging while we stabilise focus mode — remove once stable
+    console.log("[CodeMapper] setFocusClass called with:", focus);
     set((state) => ({
       focusMode: true,
       focusClass: focus,
       version: state.version + 1,
-    })),
+    }));
+  },
 
   addFocusConnection: (conn) =>
     set((state) => {

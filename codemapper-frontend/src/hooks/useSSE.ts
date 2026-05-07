@@ -115,6 +115,8 @@ export function useSSE(sessionId: string | null) {
         }
       },
       onEvent: (type, data) => {
+        // [debug] flagging while we stabilise focus mode — remove once stable
+        console.log("[CodeMapper] event received:", type, data);
         switch (type) {
           case "session_start": {
             const p = data as SessionStartPayload;

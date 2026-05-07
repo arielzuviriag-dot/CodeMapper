@@ -66,17 +66,27 @@ export interface ClassSourceResponse {
   lineCount?: number;
 }
 
-export type SSEEventType =
-  | "session_start"
-  | "package_found"
-  | "class_found"
-  | "fields_parsed"
-  | "methods_parsed"
-  | "connection_found"
-  | "session_complete"
-  | "limit_reached"
-  | "focus_class_loaded"
-  | "error";
+/**
+ * Single source of truth for SSE event names. The runtime list MUST stay in
+ * sync with the backend's `BaseEvent.eventName()` values — every name here
+ * gets an `addEventListener(name, …)` registration in `lib/sse.ts`. Adding a
+ * value here automatically grows `SSEEventType` so the switch in `useSSE`
+ * exhaustiveness-checks at compile time.
+ */
+export const SSE_EVENT_NAMES = [
+  "session_start",
+  "package_found",
+  "class_found",
+  "fields_parsed",
+  "methods_parsed",
+  "connection_found",
+  "session_complete",
+  "limit_reached",
+  "focus_class_loaded",
+  "error",
+] as const;
+
+export type SSEEventType = (typeof SSE_EVENT_NAMES)[number];
 
 export type FocusConnectionType =
   | "EXTENDS"

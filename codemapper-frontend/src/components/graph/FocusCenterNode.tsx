@@ -13,6 +13,8 @@ interface CenterData extends Record<string, unknown> {
 const FIELD_STAGGER_S = 0.2;
 
 function FocusCenterNodeComponent({ data }: NodeProps) {
+  // [debug] flagging while we stabilise focus mode — remove once stable
+  console.log("[CodeMapper] FocusCenterNode render, data:", data);
   const { focus } = data as CenterData;
   const fields = focus.fields ?? [];
   const methods = focus.methods ?? [];

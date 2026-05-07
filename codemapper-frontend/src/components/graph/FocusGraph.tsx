@@ -51,6 +51,9 @@ function FocusGraphInner() {
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // [debug] flagging while we stabilise focus mode — remove once stable
+  console.log("[CodeMapper] FocusGraph render, focusClass:", focusClass);
+
   const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
     if (!focusClass) {
       return { nodes: [], edges: [] };

@@ -1,4 +1,4 @@
-import type { SSEEventType } from "./types";
+import { SSE_EVENT_NAMES, type SSEEventType } from "./types";
 
 export interface SSEHandlers {
   onEvent: (type: SSEEventType, payload: unknown) => void;
@@ -6,23 +6,13 @@ export interface SSEHandlers {
   onError?: (err: Event) => void;
 }
 
-const KNOWN_EVENTS: SSEEventType[] = [
-  "session_start",
-  "package_found",
-  "class_found",
-  "fields_parsed",
-  "methods_parsed",
-  "connection_found",
-  "session_complete",
-  "error",
-];
-
 export function openStream(url: string, handlers: SSEHandlers): EventSource {
   const es = new EventSource(url);
 
   es.onopen = () => handlers.onOpen?.();
   es.onerror = (err) => handlers.onError?.(err);
 
+  // Default `message` channel — only fires for events without an `event:` field.
   es.onmessage = (msg) => {
     try {
       const parsed = JSON.parse(msg.data) as { type: SSEEventType; data: unknown };
@@ -34,7 +24,9 @@ export function openStream(url: string, handlers: SSEHandlers): EventSource {
     }
   };
 
-  KNOWN_EVENTS.forEach((evt) => {
+  // Named events (`event:foo\ndata:{…}`) MUST be subscribed by name. The list
+  // is driven by SSE_EVENT_NAMES so every type the union exposes ends up wired.
+  SSE_EVENT_NAMES.forEach((evt) => {
     es.addEventListener(evt, (raw) => {
       const me = raw as MessageEvent<string>;
       try {
