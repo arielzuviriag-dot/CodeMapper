@@ -19,7 +19,6 @@ import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useRef } from "react";
 import { ClassNode } from "./ClassNode";
 import { EdgeLegend } from "./EdgeLegend";
-import { FilterPanel } from "./FilterPanel";
 import { GraphControls } from "./GraphControls";
 import { useGraphStore } from "@/store/graphStore";
 import { applyDagreLayout } from "@/lib/layout";
@@ -85,6 +84,7 @@ function CodeGraphInner() {
   const userInteracted = useGraphStore((s) => s.userInteracted);
   const markUserInteracted = useGraphStore((s) => s.markUserInteracted);
   const sessionStatus = useGraphStore((s) => s.sessionStatus);
+  const layoutResetTick = useGraphStore((s) => s.layoutResetTick);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -205,10 +205,23 @@ function CodeGraphInner() {
     });
   }, [edges, scheduleFit, setNodes]);
 
+  // React to "Reset layout" clicks fired from the FilterPanel that lives in
+  // the outer sidebar — keeps the layout function local to the graph but
+  // exposes a trigger via the store. Skips the initial render.
+  const lastLayoutTick = useRef(layoutResetTick);
+  useEffect(() => {
+    if (layoutResetTick === lastLayoutTick.current) return;
+    lastLayoutTick.current = layoutResetTick;
+    onRelayout();
+  }, [layoutResetTick, onRelayout]);
+
   return (
     <div className="relative h-full w-full bg-[var(--bg-base)]">
-      <aside className="absolute left-4 top-4 z-10 flex w-[260px] flex-col gap-3">
-        <FilterPanel onResetLayout={onRelayout} />
+      {/* Edge legend pinned to the top-right corner of the graph area —
+          out of the way of the graph itself, doesn't compete with the
+          minimap which sits at bottom-right. The Filters panel lives in
+          the page's outer left sidebar. */}
+      <aside className="absolute right-4 top-4 z-10 w-[220px]">
         <EdgeLegend />
       </aside>
 

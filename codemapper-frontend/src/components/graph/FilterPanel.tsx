@@ -37,16 +37,13 @@ const ANNOTATION_DOT: Record<string, string> = {
   Configuration:  "#A8A8B0",
 };
 
-interface Props {
-  onResetLayout: () => void;
-}
-
-export function FilterPanel({ onResetLayout }: Props) {
+export function FilterPanel() {
   const filters = useGraphStore((s) => s.filters);
   const updateFilter = useGraphStore((s) => s.updateFilter);
   const toggleAnnotation = useGraphStore((s) => s.toggleAnnotationFilter);
   const toggleType = useGraphStore((s) => s.toggleClassTypeFilter);
   const reset = useGraphStore((s) => s.resetFilters);
+  const triggerLayoutReset = useGraphStore((s) => s.triggerLayoutReset);
 
   return (
     <div className="flex flex-col gap-4 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-3 shadow-[var(--shadow-md)]">
@@ -141,7 +138,7 @@ export function FilterPanel({ onResetLayout }: Props) {
       <Button
         size="sm"
         variant="outline"
-        onClick={onResetLayout}
+        onClick={triggerLayoutReset}
         className="border-[var(--border-silver)] bg-transparent text-xs uppercase tracking-[0.14em] hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)]"
       >
         <RotateCcw className="mr-2 h-3.5 w-3.5" /> Reset layout

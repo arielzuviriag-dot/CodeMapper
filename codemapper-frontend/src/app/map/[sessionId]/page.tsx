@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnalysisLoadingScreen } from "@/components/loading/AnalysisLoadingScreen";
 import { InlineGraphLoading } from "@/components/loading/InlineGraphLoading";
 import { StreamingIndicator } from "@/components/loading/StreamingIndicator";
+import { FilterPanel } from "@/components/graph/FilterPanel";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
@@ -275,7 +276,10 @@ export default function MapPage() {
                 <FocusMethodsBlock />
               </>
             ) : (
-              <ProjectStats />
+              <>
+                <ProjectStats />
+                <FilterPanel />
+              </>
             )}
             <AnimatePresence>
               {sessionStatus === "streaming" &&

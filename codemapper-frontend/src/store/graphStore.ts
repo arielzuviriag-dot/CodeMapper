@@ -84,6 +84,10 @@ interface GraphState {
    *  in-graph loader so the header + sidebar stay visible during the
    *  transition. Survives `reset()` so it can carry across the session change. */
   pendingReanalysis: boolean;
+  /** Increments whenever the user clicks "Reset layout" in the FilterPanel.
+   *  CodeGraph subscribes and re-runs dagre when the value changes. Decoupled
+   *  from CodeGraph internals so the FilterPanel can live in the outer sidebar. */
+  layoutResetTick: number;
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
 
@@ -122,6 +126,7 @@ interface GraphState {
   /** Open the sheet on a specific method of a class node. */
   openMethodSheet: (classNodeId: string, method: ParsedMethod) => void;
   setPendingReanalysis: (pending: boolean) => void;
+  triggerLayoutReset: () => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   reset: () => void;
@@ -238,6 +243,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   focusMethod: null,
   focusMethodMode: false,
   pendingReanalysis: false,
+  layoutResetTick: 0,
   version: 0,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -510,6 +516,9 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   setPendingReanalysis: (pending) => set({ pendingReanalysis: pending }),
 
+  triggerLayoutReset: () =>
+    set((state) => ({ layoutResetTick: state.layoutResetTick + 1 })),
+
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
 
@@ -539,6 +548,7 @@ export const useGraphStore = create<GraphState>((set) => ({
       selectedMethod: null,
       focusMethod: null,
       focusMethodMode: false,
+      layoutResetTick: 0,
       version: 0,
     }),
 }));
