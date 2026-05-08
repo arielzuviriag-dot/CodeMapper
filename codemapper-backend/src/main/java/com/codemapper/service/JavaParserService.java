@@ -54,6 +54,7 @@ public class JavaParserService {
     private final MethodExtractor methodExtractor;
     private final ConnectionResolver connectionResolver;
     private final SymbolSolverConfigurer symbolSolverConfigurer;
+    private final JavaVersionDetector javaVersionDetector;
 
     @Value("${codemapper.limits.free-max-files:100}")
     private int freeMaxFiles;
@@ -63,9 +64,11 @@ public class JavaParserService {
         Path projectRoot = session.getProjectPath();
         session.setStatus(SessionData.Status.PARSING);
 
-        symbolSolverConfigurer.configure(projectRoot);
+        String detectedJavaVersion = javaVersionDetector.detect(projectRoot);
+        session.setDetectedJavaVersion(detectedJavaVersion);
+        symbolSolverConfigurer.configure(projectRoot, detectedJavaVersion);
 
-        sink.accept(new SessionStartEvent(session.getTotalFiles(), session.getProjectName(), start));
+        sink.accept(new SessionStartEvent(session.getTotalFiles(), session.getProjectName(), start, detectedJavaVersion));
 
         Set<String> seenPackages = new HashSet<>();
         List<ConnectionResolver.TypedClass> typedClasses = new ArrayList<>();

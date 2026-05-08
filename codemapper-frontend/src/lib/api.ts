@@ -5,6 +5,7 @@ import type {
   ClassSourceResponse,
   FocusClassLoadedPayload,
   FocusConnectionPayload,
+  ImpactReport,
 } from "./types";
 
 export const API_BASE_URL =
@@ -188,4 +189,21 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 export function streamUrl(sessionId: string): string {
   return `${API_BASE_URL}/api/analyze/stream/${encodeURIComponent(sessionId)}`;
+}
+
+/**
+ * F4 — fetch the transitive impact report for the focus class. Re-walks the
+ * project on the backend, so the call can take seconds on large repos. The
+ * report shape differs by plan: FREE returns counts + cycle flag; PRO adds
+ * the full FQN lists that drive the simulate-change overlay.
+ */
+export async function getImpactReport(
+  sessionId: string,
+  depth: number = 4,
+): Promise<ImpactReport> {
+  const { data } = await api.get<ImpactReport>(
+    `/api/analyze/focus/${encodeURIComponent(sessionId)}/impact`,
+    { params: { depth }, timeout: 60_000 },
+  );
+  return data;
 }

@@ -16,10 +16,12 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClassNode } from "./ClassNode";
 import { EdgeLegend } from "./EdgeLegend";
+import { ClassKindLegend } from "./ClassKindLegend";
 import { GraphControls } from "./GraphControls";
+import { GraphSearchInput } from "./GraphSearchInput";
 import { StackedLabelEdge } from "./StackedLabelEdge";
 import { useGraphStore } from "@/store/graphStore";
 import { applyDagreLayout } from "@/lib/layout";
@@ -240,12 +242,20 @@ function CodeGraphInner() {
 
   return (
     <div className="relative h-full w-full bg-[var(--bg-base)]">
+      {/* Floating search input — centered at the top of the graph area.
+          Lives outside FilterPanel so it doesn't compete with the
+          ANOTACIONES block in the left sidebar. */}
+      <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
+        <GraphSearchInput />
+      </div>
+
       {/* Edge legend lives below the zoom controls (which are pinned at
           right-4 top-4) so the two sit as separate blocks in the same
           right column. Doesn't compete with the minimap at bottom-right;
           Filters panel lives in the page's outer left sidebar. */}
-      <aside className="absolute right-4 top-[64px] z-10 w-[170px]">
+      <aside className="absolute right-4 top-[64px] z-10 flex w-[170px] flex-col gap-2">
         <EdgeLegend />
+        <ClassKindLegend />
       </aside>
 
       <ReactFlow
@@ -265,7 +275,6 @@ function CodeGraphInner() {
         proOptions={{ hideAttribution: true }}
         minZoom={0.1}
         maxZoom={2}
-        onlyRenderVisibleElements
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -295,8 +304,9 @@ function CodeGraphInner() {
                 return "#3A3A3A"; // border-default
             }
           }}
-          nodeStrokeColor="rgba(192, 192, 200, 0.3)"
-          nodeStrokeWidth={1}
+          nodeStrokeColor="rgba(192, 192, 200, 0.5)"
+          nodeStrokeWidth={3}
+          nodeBorderRadius={2}
           maskColor="rgba(10, 10, 10, 0.6)"
           pannable
           zoomable

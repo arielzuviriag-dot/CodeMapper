@@ -3,9 +3,21 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { Box, CircleDashed, CircleDot, FileCode, Shapes } from "lucide-react";
+import {
+  AlertTriangle,
+  Box,
+  CircleDashed,
+  CircleDot,
+  FileCode,
+  GitBranch,
+  RefreshCw,
+  Shapes,
+  Shield,
+  Triangle,
+} from "lucide-react";
 import type {
   ClassKind,
+  ControlContext,
   FocusConnectionPayload,
   FocusConnectionType,
 } from "@/lib/types";
@@ -26,7 +38,20 @@ const TYPE_THEME: Record<FocusConnectionType, { bg: string; fg: string; label: s
   EXTENDS: { bg: "#C0C0C8", fg: "#0A0A0A", label: "Extiende" },
   IMPLEMENTS: { bg: "#A8A8B0", fg: "#0A0A0A", label: "Implementa" },
   USES_PROPERTIES: { bg: "#8B0F2A", fg: "#FFFFFF", label: "Usa props" },
-  INVOKES_METHOD: { bg: "#B91C42", fg: "#FFFFFF", label: "Invoca" },
+  INVOKES_METHOD: { bg: "#5C0A1A", fg: "#FFFFFF", label: "Invocado" },
+  INVOKES_OUTGOING: { bg: "#B91C42", fg: "#FFFFFF", label: "Invoca" },
+};
+
+const CONTROL_THEME: Record<
+  ControlContext,
+  { label: string; icon: React.ComponentType<{ className?: string }> }
+> = {
+  IF_THEN: { label: "if (true)", icon: Triangle },
+  IF_ELSE: { label: "if (false)", icon: Triangle },
+  LOOP: { label: "loop", icon: RefreshCw },
+  TRY: { label: "try", icon: Shield },
+  CATCH: { label: "catch", icon: AlertTriangle },
+  SWITCH_CASE: { label: "switch", icon: GitBranch },
 };
 
 function KindIcon({ kind }: { kind: ClassKind }) {
@@ -47,6 +72,30 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
   const theme = TYPE_THEME[payload.connectionType];
   const isProperties = payload.connectionType === "USES_PROPERTIES";
 
+  const controlTheme = payload.controlContext
+    ? CONTROL_THEME[payload.controlContext]
+    : null;
+  const ControlIcon = controlTheme?.icon;
+  // Subline showing which method on the source side originates the link, or
+  // (for outgoing method-focus calls) which method is invoked on the target.
+  const ct = payload.connectionType;
+  let viaText: string | null = null;
+  if (ct === "INVOKES_OUTGOING" && payload.viaMethodInTarget) {
+    viaText = `${payload.viaMethodInTarget}()`;
+  } else if (ct === "INVOKES_METHOD" && payload.viaMethodInSource) {
+    viaText = `desde ${payload.viaMethodInSource}()`;
+  } else if (ct === "CALLED_BY" || ct === "CALLS") {
+    // "via import" fallback for callers detected via their import statement
+    // when no specific method could be linked (dead imports / hard-to-resolve
+    // expressions). For CALLS we leave it null since we control the focus
+    // side and a missing method there is a real bug, not a dead import.
+    viaText = payload.viaMethodInSource
+      ? `via ${payload.viaMethodInSource}()`
+      : ct === "CALLED_BY"
+        ? "via import"
+        : null;
+  }
+
   return (
     <motion.div
       initial={{ scale: 0.6, opacity: 0 }}
@@ -58,10 +107,10 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
       }}
       className="relative flex w-[220px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)]"
     >
-      <Handle type="target" position={Position.Top} className="!opacity-0" />
-      <Handle type="target" position={Position.Bottom} className="!opacity-0" />
-      <Handle type="target" position={Position.Left} className="!opacity-0" />
-      <Handle type="target" position={Position.Right} className="!opacity-0" />
+      <Handle type="target" id="tgt-top" position={Position.Top} className="!opacity-0" />
+      <Handle type="target" id="tgt-bottom" position={Position.Bottom} className="!opacity-0" />
+      <Handle type="target" id="tgt-left" position={Position.Left} className="!opacity-0" />
+      <Handle type="target" id="tgt-right" position={Position.Right} className="!opacity-0" />
 
       {/* connection-type ribbon */}
       <div
@@ -74,6 +123,12 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
           <KindIcon kind={payload.type} />
         )}
         <span className="truncate">{theme.label}</span>
+        {controlTheme && ControlIcon ? (
+          <span className="ml-auto flex items-center gap-1 rounded-sm border border-white/30 bg-white/10 px-1.5 py-0.5 font-mono text-[8px] tracking-[0.14em]">
+            <ControlIcon className="h-2.5 w-2.5" />
+            {controlTheme.label}
+          </span>
+        ) : null}
       </div>
 
       {/* name + annotations */}
@@ -81,6 +136,11 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           <span className="truncate">{payload.name}</span>
         </div>
+        {viaText ? (
+          <div className="truncate font-mono text-[10px] text-[var(--bordo)]">
+            {viaText}
+          </div>
+        ) : null}
         {payload.annotations.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {payload.annotations.slice(0, 3).map((a, i) => (

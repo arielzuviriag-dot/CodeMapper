@@ -15,6 +15,9 @@ public class SessionStartEvent extends BaseEvent {
     private int totalFiles;
     private String projectName;
     private Instant startTime;
+    /** Major Java version detected from the project manifest ("8","11","17","21").
+     *  Null when no manifest was parseable — frontend renders the "Java ?" badge. */
+    private String detectedJavaVersion;
 
     @Override
     public String eventName() {

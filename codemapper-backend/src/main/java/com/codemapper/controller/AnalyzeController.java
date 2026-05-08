@@ -6,6 +6,7 @@ import com.codemapper.model.dto.AnalyzeGithubRequest;
 import com.codemapper.model.dto.AnalyzePathRequest;
 import com.codemapper.model.dto.AnalyzeResponse;
 import com.codemapper.model.dto.ClassSourceResponse;
+import com.codemapper.model.dto.ImpactReport;
 import com.codemapper.service.AnalysisService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -102,6 +103,23 @@ public class AnalyzeController {
     public ResponseEntity<ClassSourceResponse> getSource(@PathVariable String sessionId,
                                                          @PathVariable String classId) throws IOException {
         return ResponseEntity.ok(analysisService.getClassSource(sessionId, classId));
+    }
+
+    /**
+     * F4 — "Simular cambio". Returns transitive impact of changing the focus
+     * class: counts of affected classes/tests, cycle flag, and (PRO only) the
+     * full FQN lists driving the highlight overlay on the frontend.
+     *
+     * @param depth max BFS depth (1–6). Default 4 — empirically the sweet
+     *              spot between visible scope and walk cost.
+     */
+    @GetMapping("/focus/{sessionId}/impact")
+    public ResponseEntity<ImpactReport> getImpact(@PathVariable String sessionId,
+                                                  @RequestParam(value = "depth", defaultValue = "4") int depth)
+            throws IOException {
+        int clamped = Math.max(1, Math.min(6, depth));
+        log.info("Impact analysis requested for session {} (depth={})", sessionId, clamped);
+        return ResponseEntity.ok(analysisService.computeImpact(sessionId, clamped));
     }
 
     @DeleteMapping("/session/{sessionId}")

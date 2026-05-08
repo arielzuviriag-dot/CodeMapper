@@ -25,15 +25,15 @@ export function UploadTabs() {
     <Tabs defaultValue="upload" className="w-full">
       <TabsList className="grid w-full grid-cols-4 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
         <TabsTrigger value="upload" className={TRIGGER_CLASS}>
-          <Upload className="h-3.5 w-3.5" /> Subir
+          <Upload className="h-3.5 w-3.5" /> Aplicación
         </TabsTrigger>
         <TabsTrigger value="local" className={TRIGGER_CLASS}>
-          <Folder className="h-3.5 w-3.5" /> Ruta local
+          <Folder className="h-3.5 w-3.5" /> Proyecto Java
         </TabsTrigger>
         <TabsTrigger value="github" className={TRIGGER_CLASS}>
           <Github className="h-3.5 w-3.5" /> GitHub
         </TabsTrigger>
-        <TabsTrigger value="focus" className={TRIGGER_CLASS}>
+        <TabsTrigger value="focus" className={`${TRIGGER_CLASS} normal-case`}>
           <Crosshair className="h-3.5 w-3.5" /> Foco
         </TabsTrigger>
       </TabsList>

@@ -10,11 +10,17 @@ import type {
   FocusClassLoadedPayload,
   FocusConnectionPayload,
   FocusMethodLoadedPayload,
+  ImpactReport,
   MethodsParsedPayload,
   ParsedField,
   ParsedMethod,
   SheetMode,
+  UnresolvedReferencePayload,
 } from "@/lib/types";
+
+/** F-deep — single diagnostic surface from the backend (body of the SSE
+ *  payload, with the wrapper unwrapped). Drives DiagnosticsPanel. */
+export type Diagnostic = UnresolvedReferencePayload["reference"];
 
 export type SessionStatus =
   | "idle"
@@ -31,6 +37,11 @@ export interface FilterState {
    *  composition, dependency_injection, annotation_usage). Toggled from the
    *  EdgeLegend panel; applied in CodeGraph's filter pass. */
   connectionTypeFilters: Record<string, boolean>;
+  /** Toggle visibility of FOCO peripherals by their FocusConnectionType
+   *  (CALLS / CALLED_BY / EXTENDS / IMPLEMENTS / USES_PROPERTIES /
+   *  INVOKES_METHOD / INVOKES_OUTGOING). Applied in FocusGraph and
+   *  FocusMethodGraph's filter passes. */
+  focusConnectionTypeFilters: Record<string, boolean>;
   searchQuery: string;
 }
 
@@ -80,6 +91,11 @@ interface GraphState {
   sheetMode: SheetMode;
   selectedVariable: ParsedField | null;
   selectedMethod: ParsedMethod | null;
+  /** Tokens to highlight inside the displayed method body when the method
+   *  sheet was opened from a connection chip — typically the called method
+   *  or the partner class. Cleared whenever the sheet is opened from a
+   *  context that has no specific call site to mark. */
+  methodSheetHighlight: { className?: string | null; methodName?: string | null } | null;
   /** Method-as-focus payload (FOCUS_METHOD mode). */
   focusMethod: FocusMethodLoadedPayload | null;
   focusMethodMode: boolean;
@@ -94,6 +110,34 @@ interface GraphState {
   layoutResetTick: number;
   /** Incrementa en cada flush. Usalo como dep estable en lugar del Map/array. */
   version: number;
+  /** True when the session is running in PRO mode (caps lifted). Driven by
+   *  `?demoMode=pro` today; will be driven by real billing in productive
+   *  release. Centralized here so any component (graph, modal, badge) can
+   *  read the same source of truth instead of duplicating useState. */
+  isPro: boolean;
+  /** Major Java version detected from the project manifest, set when SSE
+   *  emits `session_start`. Null when no manifest was parseable. Drives
+   *  per-feature compatibility decisions and the JavaVersionBadge UI. */
+  detectedJavaVersion: string | null;
+  /** Toggle for F3 — when false (default) test peripherals are hidden from
+   *  the focus graph so the runtime topology stays clean. Persisted in the
+   *  store so the dev's preference survives view changes. */
+  showTests: boolean;
+  /** F4 — currently active "Simular cambio" report. Null when the dev hasn't
+   *  triggered the simulation yet, or has dismissed it. When non-null, the
+   *  graph applies the impact overlay (atenuación + highlights). */
+  impactReport: ImpactReport | null;
+  /** F4 — true while the impact request is in flight. Drives the loader on
+   *  the simulate-change button so the user sees progress on slow projects. */
+  impactLoading: boolean;
+  /** Identifier of the help popover currently open, or null when no popover
+   *  is visible. Centralized so opening one (Java badge, conexiones legend,
+   *  tipos legend, sidebar foco glosario, etc.) auto-closes any other.
+   *  Each consumer picks a stable string id and reads/writes through this. */
+  openHelpPopover: string | null;
+  /** F-deep — diagnostics streamed from the backend during deep body
+   *  analysis. Reset on every new FOCO. Drives the DiagnosticsPanel. */
+  diagnostics: Diagnostic[];
 
   setSessionId: (id: string | null) => void;
   addClass: (payload: ClassFoundPayload) => void;
@@ -114,6 +158,7 @@ interface GraphState {
   toggleAnnotationFilter: (annotation: string) => void;
   toggleClassTypeFilter: (kind: string) => void;
   toggleConnectionTypeFilter: (kind: string) => void;
+  toggleFocusConnectionTypeFilter: (kind: string) => void;
   resetFilters: () => void;
   setStatus: (status: SessionStatus) => void;
   setStats: (stats: Partial<ProjectStats>) => void;
@@ -128,12 +173,36 @@ interface GraphState {
   setFocusMethod: (focus: FocusMethodLoadedPayload) => void;
   /** Open the sheet on a specific variable of a class node. */
   openVariableSheet: (classNodeId: string, field: ParsedField) => void;
-  /** Open the sheet on a specific method of a class node. */
-  openMethodSheet: (classNodeId: string, method: ParsedMethod) => void;
+  /** Open the sheet on a specific method of a class node. Optional `highlight`
+   *  marks the line(s) inside the body that match either token in red. */
+  openMethodSheet: (
+    classNodeId: string,
+    method: ParsedMethod,
+    highlight?: { className?: string | null; methodName?: string | null } | null,
+  ) => void;
+  /** Open the class sheet with a highlight pointing at the import line of
+   *  `focusClassName`. Used by the "via import" fallback chip — the dev
+   *  jumps to the file and the import line is marked red so they see
+   *  exactly where the dependency is declared. */
+  openClassSheetWithImportHighlight: (
+    classNodeId: string,
+    focusClassName: string,
+  ) => void;
   setPendingReanalysis: (pending: boolean) => void;
   triggerLayoutReset: () => void;
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
+  setIsPro: (pro: boolean) => void;
+  setDetectedJavaVersion: (version: string | null) => void;
+  setShowTests: (show: boolean) => void;
+  setImpactReport: (report: ImpactReport | null) => void;
+  setImpactLoading: (loading: boolean) => void;
+  /** Open the popover identified by `id` and close any other open popover.
+   *  Pass null to close all popovers explicitly. */
+  setOpenHelpPopover: (id: string | null) => void;
+  /** F-deep — append a new diagnostic to the list. Called by useSSE for
+   *  every `unresolved_reference` event. */
+  addDiagnostic: (d: Diagnostic) => void;
   reset: () => void;
 }
 
@@ -162,6 +231,15 @@ const DEFAULT_FILTERS: FilterState = {
     DEPENDENCY_INJECTION: true,
     METHOD_CALL: true,
     ANNOTATION_USAGE: true,
+  },
+  focusConnectionTypeFilters: {
+    CALLS: true,
+    CALLED_BY: true,
+    EXTENDS: true,
+    IMPLEMENTS: true,
+    USES_PROPERTIES: true,
+    INVOKES_METHOD: true,
+    INVOKES_OUTGOING: true,
   },
   searchQuery: "",
 };
@@ -253,11 +331,19 @@ export const useGraphStore = create<GraphState>((set) => ({
   sheetMode: "class",
   selectedVariable: null,
   selectedMethod: null,
+  methodSheetHighlight: null,
   focusMethod: null,
   focusMethodMode: false,
   pendingReanalysis: false,
   layoutResetTick: 0,
   version: 0,
+  isPro: false,
+  detectedJavaVersion: null,
+  showTests: false,
+  impactReport: null,
+  impactLoading: false,
+  openHelpPopover: null,
+  diagnostics: [],
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -417,6 +503,7 @@ export const useGraphStore = create<GraphState>((set) => ({
       sheetMode: "class",
       selectedVariable: null,
       selectedMethod: null,
+      methodSheetHighlight: null,
     }),
   clearSelection: () =>
     set({
@@ -424,6 +511,7 @@ export const useGraphStore = create<GraphState>((set) => ({
       sheetMode: "class",
       selectedVariable: null,
       selectedMethod: null,
+      methodSheetHighlight: null,
     }),
 
   updateFilter: (key, value) =>
@@ -458,6 +546,17 @@ export const useGraphStore = create<GraphState>((set) => ({
         connectionTypeFilters: {
           ...state.filters.connectionTypeFilters,
           [kind]: !state.filters.connectionTypeFilters[kind],
+        },
+      },
+    })),
+
+  toggleFocusConnectionTypeFilter: (kind) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        focusConnectionTypeFilters: {
+          ...state.filters.focusConnectionTypeFilters,
+          [kind]: !state.filters.focusConnectionTypeFilters[kind],
         },
       },
     })),
@@ -530,12 +629,22 @@ export const useGraphStore = create<GraphState>((set) => ({
       selectedMethod: null,
     }),
 
-  openMethodSheet: (classNodeId, method) =>
+  openMethodSheet: (classNodeId, method, highlight = null) =>
     set({
       selectedNodeId: classNodeId,
       sheetMode: "method",
       selectedVariable: null,
       selectedMethod: method,
+      methodSheetHighlight: highlight,
+    }),
+
+  openClassSheetWithImportHighlight: (classNodeId, focusClassName) =>
+    set({
+      selectedNodeId: classNodeId,
+      sheetMode: "class",
+      selectedVariable: null,
+      selectedMethod: null,
+      methodSheetHighlight: { className: focusClassName, methodName: null },
     }),
 
   setPendingReanalysis: (pending) => set({ pendingReanalysis: pending }),
@@ -545,6 +654,15 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   markUserInteracted: () => set({ userInteracted: true }),
   resetUserInteraction: () => set({ userInteracted: false }),
+
+  setIsPro: (pro) => set({ isPro: pro }),
+  setDetectedJavaVersion: (version) => set({ detectedJavaVersion: version }),
+  setShowTests: (show) => set({ showTests: show }),
+  setImpactReport: (report) => set({ impactReport: report }),
+  setImpactLoading: (loading) => set({ impactLoading: loading }),
+  setOpenHelpPopover: (id) => set({ openHelpPopover: id }),
+  addDiagnostic: (d) =>
+    set((state) => ({ diagnostics: [...state.diagnostics, d] })),
 
   // NOTE: `projectPath` and `pendingReanalysis` are intentionally NOT
   // cleared here. Both must survive the map page's reset() on session
@@ -570,9 +688,22 @@ export const useGraphStore = create<GraphState>((set) => ({
       sheetMode: "class",
       selectedVariable: null,
       selectedMethod: null,
+      methodSheetHighlight: null,
       focusMethod: null,
       focusMethodMode: false,
       layoutResetTick: 0,
       version: 0,
+      // isPro NOT cleared — it reflects the user's plan/demo flag for this
+      // browser session, not per-analysis state. detectedJavaVersion IS
+      // cleared because it's per-project — the next session will repopulate.
+      detectedJavaVersion: null,
+      // Impact report is per-session — wipe so the next FOCO doesn't inherit
+      // a stale overlay.
+      impactReport: null,
+      impactLoading: false,
+      // Close any open help popover when the session resets.
+      openHelpPopover: null,
+      // F-deep — diagnostics are per-session.
+      diagnostics: [],
     }),
 }));

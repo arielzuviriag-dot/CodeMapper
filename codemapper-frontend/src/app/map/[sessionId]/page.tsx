@@ -10,6 +10,7 @@ import {
   Crosshair,
   Download,
   FileText,
+  HelpCircle,
   Info,
   Loader2,
   Search,
@@ -71,7 +72,8 @@ export default function MapPage() {
   const focusConnectionCount = focusConnections.length;
   const setPendingReanalysis = useGraphStore((s) => s.setPendingReanalysis);
 
-  const [isPro, setIsPro] = useState(false);
+  const isPro = useGraphStore((s) => s.isPro);
+  const setIsPro = useGraphStore((s) => s.setIsPro);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   /** Auto-dismiss the FREE limit banner after 5s — long enough to read,
    *  short enough to not steal real estate from the graph. */
@@ -197,13 +199,10 @@ export default function MapPage() {
           </Button>
 
           <div className="flex items-center gap-3">
-            {inAnyFocusMode ? (
-              <Crosshair
-                className="h-4 w-4 text-[var(--bordo)]"
-                strokeWidth={2}
-                style={{ filter: "drop-shadow(0 0 6px rgba(185,28,66,0.6))" }}
-              />
-            ) : (
+            {/* Crosshair removido — el badge "Foco" ya comunica el modo y
+                no hace falta el icono extra. Mantenemos el dot bordó solo
+                para los modos no-foco. */}
+            {!inAnyFocusMode && (
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--bordo)] shadow-[0_0_8px_rgba(185,28,66,0.6)]" />
             )}
             <div className="flex flex-col items-center gap-0.5">
@@ -283,6 +282,7 @@ export default function MapPage() {
               <>
                 <FocusSidebarInfo />
                 <FocusFieldsBlock />
+                <FocusConstructorsBlock />
                 <FocusMethodsBlock />
               </>
             ) : (
@@ -384,7 +384,6 @@ function HeaderStats({
   if (focusMode) {
     return (
       <span className={baseCls}>
-        Nivel 1 ·{" "}
         <span className="tabular-nums text-[var(--silver)]">
           {focusConnections}
         </span>{" "}
@@ -515,9 +514,14 @@ function FocusMethodSidebarInfo() {
   );
 }
 
+const FOCUS_SIDEBAR_POPOVER_ID = "focus-sidebar-info";
+
 function FocusSidebarInfo() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const connectionCount = useGraphStore((s) => s.focusConnections.length);
+  const openHelpPopover = useGraphStore((s) => s.openHelpPopover);
+  const setOpenHelpPopover = useGraphStore((s) => s.setOpenHelpPopover);
+  const helpOpen = openHelpPopover === FOCUS_SIDEBAR_POPOVER_ID;
 
   if (!focusClass) {
     return (
@@ -529,15 +533,26 @@ function FocusSidebarInfo() {
   }
 
   return (
-    <div className="cm-hairline-top flex flex-col gap-3 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3">
-      <div className="flex items-center gap-2">
-        <Crosshair
-          className="h-3.5 w-3.5 shrink-0 text-[var(--bordo)]"
-          style={{ filter: "drop-shadow(0 0 4px rgba(185,28,66,0.55))" }}
-        />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
-          Archivo Foco
-        </span>
+    <div className="cm-hairline-top relative flex flex-col gap-3 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Crosshair
+            className="h-3.5 w-3.5 shrink-0 text-[var(--bordo)]"
+            style={{ filter: "drop-shadow(0 0 4px rgba(185,28,66,0.55))" }}
+          />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
+            Archivo Foco
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpenHelpPopover(helpOpen ? null : FOCUS_SIDEBAR_POPOVER_ID)}
+          aria-label="Qué significa cada campo del archivo foco"
+          aria-expanded={helpOpen}
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--silver-dark)] transition-colors hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+        </button>
       </div>
       <div className="flex flex-col gap-1">
         <span className="break-words text-sm font-semibold text-[var(--fg-primary)]">
@@ -552,6 +567,75 @@ function FocusSidebarInfo() {
         <SidebarMetric value={focusClass.methods.length} label="Métodos" />
         <SidebarMetric value={connectionCount} label="Conexiones" />
       </div>
+
+      {helpOpen && (
+        <div
+          role="dialog"
+          aria-label="Glosario archivo foco"
+          className="fixed left-[296px] top-[76px] z-30 flex w-[300px] flex-col gap-2.5 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-3 shadow-[var(--shadow-lg)]"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--silver-dark)]">
+              Glosario
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpenHelpPopover(null)}
+              aria-label="Cerrar"
+              className="flex h-4 w-4 items-center justify-center rounded-full text-[var(--silver-dark)] transition-colors hover:text-[var(--bordo)]"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <ul className="flex flex-col gap-2">
+            <li className="flex flex-col gap-0.5">
+              <span className="font-mono text-[11px] font-semibold text-[var(--fg-primary)]">
+                Nombre de la clase
+              </span>
+              <span className="text-[10px] leading-snug text-[var(--fg-secondary)]">
+                Nombre simple de la clase Java que estás analizando con el Foco Scaner.
+              </span>
+            </li>
+            <li className="flex flex-col gap-0.5">
+              <span className="font-mono text-[11px] font-semibold text-[var(--fg-primary)]">
+                Paquete
+              </span>
+              <span className="text-[10px] leading-snug text-[var(--fg-secondary)]">
+                Ruta completa del paquete Java donde vive la clase
+                (com.empresa.modulo).
+              </span>
+            </li>
+            <li className="flex flex-col gap-0.5">
+              <span className="font-mono text-[11px] font-semibold text-[var(--fg-primary)]">
+                Campos
+              </span>
+              <span className="text-[10px] leading-snug text-[var(--fg-secondary)]">
+                Cantidad de variables/atributos declarados en la clase
+                (fields, properties).
+              </span>
+            </li>
+            <li className="flex flex-col gap-0.5">
+              <span className="font-mono text-[11px] font-semibold text-[var(--fg-primary)]">
+                Métodos
+              </span>
+              <span className="text-[10px] leading-snug text-[var(--fg-secondary)]">
+                Cantidad de métodos definidos en la clase, incluyendo el
+                constructor.
+              </span>
+            </li>
+            <li className="flex flex-col gap-0.5">
+              <span className="font-mono text-[11px] font-semibold text-[var(--fg-primary)]">
+                Conexiones
+              </span>
+              <span className="text-[10px] leading-snug text-[var(--fg-secondary)]">
+                Total de relaciones que esta clase tiene con otras del proyecto:
+                a quién llama, quién la llama, qué extiende/implementa y a qué
+                campos accede.
+              </span>
+            </li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -649,6 +733,80 @@ function FocusFieldsBlock() {
   );
 }
 
+/** Constructors of the focus class — same lookalike as FocusMethodsBlock
+ *  but filtered to {@code returnType === "<constructor>"}. Sits between
+ *  variables and methods. Hidden when the class has no constructors. */
+function FocusConstructorsBlock() {
+  const focusClass = useGraphStore((s) => s.focusClass);
+  const openMethodSheet = useGraphStore((s) => s.openMethodSheet);
+  const isFirstMount = useRef(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      isFirstMount.current = false;
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Constructors come right after fields — same delay base so the stagger
+  // continues smoothly into the methods block below.
+  const fieldsDelay = (focusClass?.fields.length ?? 0) * 0.2 + 0.2;
+  const constructors = (focusClass?.methods ?? []).filter(
+    (m) => m.returnType === "<constructor>",
+  );
+
+  if (!focusClass || constructors.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: fieldsDelay }}
+      className="cm-hairline-top flex flex-col gap-2 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3"
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)]">
+        Constructor{" "}
+        <span className="text-[var(--silver)] tabular-nums">
+          ({constructors.length})
+        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        <AnimatePresence initial={false}>
+          {constructors.map((c, i) => (
+            <motion.button
+              key={`ctor-${i}-${c.parameters.length}`}
+              type="button"
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -6, transition: { duration: 0.15 } }}
+              transition={{
+                duration: 0.22,
+                delay: isFirstMount.current ? fieldsDelay + i * 0.1 : 0,
+              }}
+              onClick={() => openMethodSheet(focusClass.id, c)}
+              className="flex flex-wrap items-baseline gap-1 rounded-sm px-1 py-0.5 text-left font-mono text-[11px] leading-tight transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
+              title={`${c.name}(${c.parameters.map((p) => `${p.type} ${p.name}`).join(", ")})`}
+            >
+              <span className="truncate text-[var(--fg-primary)]">
+                {c.name}
+              </span>
+              <span className="text-[var(--fg-muted)]">
+                (
+                {c.parameters.length === 0
+                  ? ""
+                  : c.parameters
+                      .map((p) => `${p.type} ${p.name}`)
+                      .join(", ")}
+                )
+              </span>
+            </motion.button>
+          ))}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
 function FocusMethodsBlock() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const openMethodSheet = useGraphStore((s) => s.openMethodSheet);
@@ -669,7 +827,11 @@ function FocusMethodsBlock() {
   const trimmed = query.trim();
   const isFiltering = trimmed.length >= 3;
   const lower = trimmed.toLowerCase();
-  const allMethods = focusClass?.methods ?? [];
+  // Constructors are surfaced in their own FocusConstructorsBlock above this
+  // one; keep this list to "real" methods only.
+  const allMethods = (focusClass?.methods ?? []).filter(
+    (m) => m.returnType !== "<constructor>",
+  );
   const filtered = useMemo(
     () =>
       isFiltering

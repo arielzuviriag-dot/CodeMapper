@@ -18,6 +18,7 @@ import type {
   PackageFoundPayload,
   SessionCompletePayload,
   SessionStartPayload,
+  UnresolvedReferencePayload,
 } from "@/lib/types";
 
 const FLUSH_INTERVAL_MS = 100;
@@ -52,6 +53,8 @@ export function useSSE(sessionId: string | null) {
   const setFocusClass = useGraphStore((s) => s.setFocusClass);
   const addFocusConnection = useGraphStore((s) => s.addFocusConnection);
   const setFocusMethod = useGraphStore((s) => s.setFocusMethod);
+  const setDetectedJavaVersion = useGraphStore((s) => s.setDetectedJavaVersion);
+  const addDiagnostic = useGraphStore((s) => s.addDiagnostic);
 
   const bufferRef = useRef<Buffer>(emptyBuffer());
 
@@ -126,6 +129,7 @@ export function useSSE(sessionId: string | null) {
               projectName: p.projectName ?? "Proyecto",
               parseStartTime: p.startedAt ?? Date.now(),
             });
+            setDetectedJavaVersion(p.detectedJavaVersion ?? null);
             break;
           }
           case "package_found": {
@@ -144,13 +148,17 @@ export function useSSE(sessionId: string | null) {
             break;
           case "connection_found":
             totalConnsSeen++;
-            if (useGraphStore.getState().focusMode) {
-              // FOCUS mode: payload is a class node + connectionType + position.
-              // Skip the batched buffer and write directly so the radial UI can
-              // animate connections one-by-one.
-              addFocusConnection(data as FocusConnectionPayload);
-            } else {
-              bufferRef.current.connections.push(data as ConnectionFoundPayload);
+            {
+              const state = useGraphStore.getState();
+              if (state.focusMode || state.focusMethodMode) {
+                // Both class- and method-focus modes share this event name but
+                // ship a richer payload (connectionType + position + via-method).
+                // Skip the batched buffer and write directly so the focus UI
+                // can animate connections one-by-one.
+                addFocusConnection(data as FocusConnectionPayload);
+              } else {
+                bufferRef.current.connections.push(data as ConnectionFoundPayload);
+              }
             }
             break;
           case "focus_class_loaded": {
@@ -200,6 +208,14 @@ export function useSSE(sessionId: string | null) {
               parsed: p.filesParsed,
               message: p.message,
             });
+            break;
+          }
+          case "unresolved_reference": {
+            const p = data as UnresolvedReferencePayload;
+            // Stream straight into the diagnostics list — no batching, the
+            // panel populates as the backend reports findings during deep
+            // body analysis.
+            if (p?.reference) addDiagnostic(p.reference);
             break;
           }
           case "error": {

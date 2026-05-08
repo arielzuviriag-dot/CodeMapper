@@ -33,6 +33,12 @@ export interface ParsedMethod {
   startLine?: number;
   /** 1-based inclusive end line of the method body (0 if unknown). */
   endLine?: number;
+  /** Simple class names from the `throws` clause. Empty when the method
+   *  declares none. F1 contract surface — drives the exception cluster. */
+  thrownExceptions?: string[];
+  /** Subset of `annotations` that match Spring/JSR security gates. F1 contract
+   *  surface — drives the shield badge next to the method pin. */
+  securityAnnotations?: string[];
 }
 
 export interface ClassNodeData {
@@ -88,6 +94,7 @@ export const SSE_EVENT_NAMES = [
   "limit_reached",
   "focus_class_loaded",
   "focus_method_loaded",
+  "unresolved_reference",
   "error",
 ] as const;
 
@@ -99,7 +106,19 @@ export type FocusConnectionType =
   | "CALLED_BY"
   | "CALLS"
   | "USES_PROPERTIES"
-  | "INVOKES_METHOD";
+  | "INVOKES_METHOD"
+  | "INVOKES_OUTGOING";
+
+/** Optional enclosing control-flow context for a call site. Populated by the
+ *  outgoing side of method focus when the call sits inside an if/loop/try/
+ *  switch — drives the chip rendered on the peripheral node. */
+export type ControlContext =
+  | "IF_THEN"
+  | "IF_ELSE"
+  | "LOOP"
+  | "TRY"
+  | "CATCH"
+  | "SWITCH_CASE";
 
 /** Drives which view the right-hand sheet renders. */
 export type SheetMode = "class" | "variable" | "method";
@@ -113,6 +132,10 @@ export interface SessionStartPayload {
   sessionId: string;
   projectName?: string;
   startedAt?: number;
+  /** Major Java version detected from pom.xml/build.gradle ("8","11","17","21").
+   *  Null when no manifest could be parsed — UI shows "Java ?" instead of a
+   *  concrete version, and the help popover lists everything CodeMapper supports. */
+  detectedJavaVersion?: string | null;
 }
 
 export interface PackageFoundPayload {
@@ -166,6 +189,19 @@ export interface LimitReachedPayload {
   message: string;
 }
 
+/** A detected behavioral annotation (Spring/JSR) on the focus class or one
+ *  of its methods. F2 contract — feeds the BehaviorChipBar. */
+export interface BehaviorChip {
+  /** Annotation simple name with leading "@" (e.g. "@Transactional"). */
+  annotation: string;
+  /** Single-string argument when present (e.g. "auth" for `@Cacheable("auth")`),
+   *  or a key=value pair for the first non-string arg (e.g. "fixedRate=5000").
+   *  Null for marker annotations. */
+  value: string | null;
+  /** Method this annotation lives on, or null when it's at class level. */
+  methodName: string | null;
+}
+
 export interface FocusClassLoadedPayload {
   id: string;
   fullyQualifiedName: string;
@@ -180,6 +216,15 @@ export interface FocusClassLoadedPayload {
   extendsClass: string | null;
   sourceFile: string;
   lineCount: number;
+  /** Behavioral chips (@Transactional, @Cacheable, @Async, etc.) detected on
+   *  the focus class. Empty array when none — frontend hides the bar. */
+  behaviorAnnotations?: BehaviorChip[];
+  /** Class-level Jacoco LINE coverage 0–100. Null when no jacoco.xml found
+   *  in the project — donut hidden, sheet tab grays out. */
+  coveragePercent?: number | null;
+  /** Per-method Jacoco coverage keyed by simple method name. Empty when no
+   *  report. Drives the per-method drill-down in the sheet's Cobertura tab. */
+  methodCoverage?: Record<string, number>;
 }
 
 export interface FocusConnectionPayload {
@@ -195,6 +240,56 @@ export interface FocusConnectionPayload {
   /** 1-based emission order from backend. */
   position: number;
   sourceFile: string;
+  /** Method on the SOURCE side that produces this relationship. For
+   *  CALLED_BY / INVOKES_METHOD, the caller class's method that contains the
+   *  call expression. For CALLS / INVOKES_OUTGOING, the focus method that
+   *  originates the call. Null when the relationship is signature-only. */
+  viaMethodInSource?: string | null;
+  /** Method on the TARGET side. For INVOKES_OUTGOING, the simple name of the
+   *  method invoked on the target class. Null otherwise (or redundant). */
+  viaMethodInTarget?: string | null;
+  /** Enclosing control-flow context for INVOKES_OUTGOING call sites. Null
+   *  when the call lives in the linear top-level body. */
+  controlContext?: ControlContext | null;
+  /** True when this peripheral lives under a `/test/java/` source root —
+   *  drives the dashed grey edge style and the "Mostrar tests" toggle. */
+  isTest?: boolean;
+  /** True when this peripheral is a test that mocks the focus (declares a
+   *  field annotated @Mock/@MockBean/@SpyBean/@InjectMocks whose type
+   *  matches the focus). Drives the mask icon on the edge. */
+  isMock?: boolean;
+}
+
+/** F-deep — diagnostic finding from deep body analysis. Three kinds:
+ *  - UNRESOLVED: parser couldn't resolve an expression that may reference the focus
+ *  - FALSE_NEGATIVE: focus simple-name appears in body but no symbol confirmed
+ *  - UNPARSEABLE: file couldn't be parsed at all (broken syntax, etc.) */
+export type UnresolvedReferenceKind =
+  | "UNRESOLVED"
+  | "FALSE_NEGATIVE"
+  | "UNPARSEABLE";
+
+export interface UnresolvedReferencePayload {
+  reference: {
+    kind: UnresolvedReferenceKind;
+    file: string;
+    line: number;
+    snippet: string;
+    reason: string;
+  };
+}
+
+/** F4 — "Simular cambio" report. Counts always populated; the FQN lists are
+ *  only populated for PRO sessions, FREE leaves them empty (frontend then
+ *  shows just the counter + CTA without the overlay highlight). */
+export interface ImpactReport {
+  totalImpact: number;
+  totalTests: number;
+  hasCycles: boolean;
+  directCallers: string[];
+  transitiveCallers: string[];
+  affectedTests: string[];
+  cycles: string[][];
 }
 
 export interface FocusMethodLoadedPayload {

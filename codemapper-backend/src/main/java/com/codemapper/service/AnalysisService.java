@@ -39,6 +39,7 @@ public class AnalysisService {
     private final JavaParserService javaParserService;
     private final FocusTracerService focusTracerService;
     private final FocusMethodTracerService focusMethodTracerService;
+    private final ImpactAnalysisService impactAnalysisService;
     private final ExecutorService analysisExecutor;
 
     @Value("${codemapper.upload-dir:./tmp-uploads}")
@@ -298,5 +299,21 @@ public class AnalysisService {
     private String stripExtension(String name) {
         int dot = name.lastIndexOf('.');
         return dot > 0 ? name.substring(0, dot) : name;
+    }
+
+    /**
+     * F4 — compute the transitive impact of changing the focus class. Re-walks
+     * the project's java sources to build the inverse callgraph, runs BFS, and
+     * returns counts (and, for PRO sessions, the full FQN lists). FREE sessions
+     * get only the counters and the cycle flag — the lists come back empty,
+     * which is what gates the simulate-change overlay on the frontend.
+     */
+    public com.codemapper.model.dto.ImpactReport computeImpact(String sessionId, int depth) throws IOException {
+        SessionData session = sessionService.getSession(sessionId);
+        String focusFqn = session.getParsedClasses().stream()
+                .findFirst()
+                .map(ParsedClass::getFullyQualifiedName)
+                .orElse(null);
+        return impactAnalysisService.computeImpact(session, focusFqn, depth);
     }
 }

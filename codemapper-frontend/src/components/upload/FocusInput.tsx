@@ -62,6 +62,11 @@ export function FocusInput() {
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="rounded-md border border-[var(--border-silver)] bg-[var(--bg-panel)]/40 px-3 py-2.5 text-xs leading-relaxed text-[var(--fg-secondary)]">
+        El servidor va a trabajar desde un marco de trabajo, de un marco de
+        proyecto más un archivo en específico, ejemplo un .java.
+      </p>
+
       <div className="flex items-center gap-3 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-2 transition-colors focus-within:border-[var(--bordo)] focus-within:shadow-[0_0_16px_rgba(185,28,66,0.25)]">
         <Folder className="h-4 w-4 shrink-0 text-[var(--silver-dark)]" />
         <Input

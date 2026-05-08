@@ -37,6 +37,10 @@ public class SessionData {
     private Path focusFile;
     /** Method name to trace when mode == FOCUS_METHOD. */
     private String focusMethodName;
+    /** Major Java version detected from pom.xml/build.gradle ("8","11","17","21").
+     *  Null when no manifest could be parsed — parser falls back to BLEEDING_EDGE
+     *  and per-feature compat checks treat unknown as "show everything supported". */
+    private String detectedJavaVersion;
 
     private final List<ParsedClass> parsedClasses = new CopyOnWriteArrayList<>();
     private final List<Connection> connections = new CopyOnWriteArrayList<>();

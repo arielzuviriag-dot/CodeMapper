@@ -1,17 +1,21 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useReactFlow } from "@xyflow/react";
 import { motion } from "framer-motion";
 import {
+  Box,
   ChevronRight,
+  CircleDashed,
+  CircleDot,
   Crosshair,
   FileCode,
   GitBranch,
   Hash,
   Loader2,
+  Shapes,
+  Square,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -36,8 +40,10 @@ import {
   resolveDemoMode,
 } from "@/lib/api";
 import type {
+  ClassKind,
   ClassNodeData,
   Connection,
+  FocusConnectionPayload,
   ParsedField,
   ParsedMethod,
 } from "@/lib/types";
@@ -49,17 +55,70 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 const MONACO_OPTIONS = {
   readOnly: true,
-  minimap: { enabled: true },
+  minimap: { enabled: false },
   fontSize: 13,
   fontFamily: "'JetBrains Mono', var(--font-geist-mono), monospace",
   scrollBeyondLastLine: false,
   automaticLayout: true,
   renderLineHighlight: "gutter",
   smoothScrolling: true,
+  wordWrap: "off",
+  scrollbar: {
+    horizontal: "visible",
+    vertical: "visible",
+    horizontalScrollbarSize: 10,
+    verticalScrollbarSize: 10,
+    alwaysConsumeMouseWheel: false,
+  },
+  // Find widget — never seed the search box from the cursor/selection so it
+  // opens empty (without "package", the first word, etc.).
+  find: {
+    seedSearchStringFromSelection: "never",
+    autoFindInSelection: "never",
+    addExtraSpaceOnTop: false,
+  },
 } as const;
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Find 1-based line numbers in `body` that mention either the called class
+ *  or method. Methods are matched as call sites (`name(`); classes match any
+ *  identifier reference, including the conventional lowerCamelCase variant
+ *  used for fields and locals (e.g. `AuthService` → also matches `authService`).
+ *  Without that, we'd only flag the type declaration line and miss the actual
+ *  invocation lines like `authService.foo()`. Empty array when neither token
+ *  is provided. */
+function findCallSiteLines(
+  body: string,
+  highlight: { className?: string | null; methodName?: string | null } | null,
+): number[] {
+  if (!body || !highlight) return [];
+  const { className, methodName } = highlight;
+  if (!className && !methodName) return [];
+  const methodRe = methodName
+    ? new RegExp(`\\b${escapeRegex(methodName)}\\s*\\(`)
+    : null;
+  // Build an alternation that catches both the type form and the field-name
+  // form. Java fields/locals overwhelmingly use the lowerCamelCase of the
+  // class name, so highlighting both surfaces the actual call sites.
+  const classRe = className
+    ? new RegExp(
+        `\\b(?:${escapeRegex(className)}|${escapeRegex(
+          className.charAt(0).toLowerCase() + className.slice(1),
+        )})\\b`,
+      )
+    : null;
+  const lines = body.split("\n");
+  const hits: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if ((methodRe && methodRe.test(line)) || (classRe && classRe.test(line))) {
+      hits.push(i + 1);
+    }
+  }
+  return hits;
 }
 
 function computeRelativeFocusFile(
@@ -155,14 +214,51 @@ export function ClassDetailSheet() {
   const isCurrentFocusMethod =
     focusMethodMode && focusMethod !== null && focusMethod.id === selectedNodeId;
 
-  const incoming = useMemo(
-    () => allEdges.filter((e) => e.to === selectedNodeId),
-    [allEdges, selectedNodeId],
-  );
-  const outgoing = useMemo(
-    () => allEdges.filter((e) => e.from === selectedNodeId),
-    [allEdges, selectedNodeId],
-  );
+  // Incoming/outgoing for the regular class graph come from `allEdges` (the
+  // store's flat edge list). In FOCO mode that list is empty — connections
+  // live in `focusConnections` instead — so we derive both from there when
+  // the user opens the sheet on the focus class itself. Without this, the
+  // Entrantes/Salientes tabs would always read (0) in FOCO.
+  const incoming = useMemo<Connection[]>(() => {
+    if (isCurrentFocusClass && focusClass) {
+      return focusConnections
+        .filter((c) => c.connectionType === "CALLED_BY")
+        .map((c) => ({
+          from: c.id,
+          to: focusClass.id,
+          type: "METHOD_CALL",
+          label: c.viaMethodInSource ?? c.name,
+        }));
+    }
+    return allEdges.filter((e) => e.to === selectedNodeId);
+  }, [allEdges, selectedNodeId, isCurrentFocusClass, focusClass, focusConnections]);
+
+  const outgoing = useMemo<Connection[]>(() => {
+    if (isCurrentFocusClass && focusClass) {
+      return focusConnections
+        .filter(
+          (c) =>
+            c.connectionType === "CALLS" ||
+            c.connectionType === "EXTENDS" ||
+            c.connectionType === "IMPLEMENTS" ||
+            c.connectionType === "USES_PROPERTIES",
+        )
+        .map((c) => ({
+          from: focusClass.id,
+          to: c.id,
+          type:
+            c.connectionType === "EXTENDS"
+              ? "EXTENDS"
+              : c.connectionType === "IMPLEMENTS"
+                ? "IMPLEMENTS"
+                : c.connectionType === "USES_PROPERTIES"
+                  ? "ANNOTATION_USAGE"
+                  : "METHOD_CALL",
+          label: c.viaMethodInSource ?? c.name,
+        }));
+    }
+    return allEdges.filter((e) => e.from === selectedNodeId);
+  }, [allEdges, selectedNodeId, isCurrentFocusClass, focusClass, focusConnections]);
 
   // Fetch class source — only for class-mode views, OR when we need to slice
   // a method body from the class file (variable/method modes on a regular class).
@@ -338,6 +434,8 @@ export function ClassDetailSheet() {
               onFocusScanMethod={requestFocusScanMethod}
               nodeName={node?.name ?? focusMethod?.containingClass ?? ""}
               nodeFqn={node?.fullyQualifiedName ?? ""}
+              classType={node?.type ?? null}
+              lineCount={node?.lineCount ?? 0}
               variable={selectedVariable}
               method={selectedMethod}
               focusMethodReturnType={focusMethod?.returnType}
@@ -387,6 +485,48 @@ export function ClassDetailSheet() {
 // Header
 // ─────────────────────────────────────────────────────────────────────
 
+const KIND_META: Record<
+  ClassKind,
+  { label: string; Icon: typeof Box }
+> = {
+  CLASS: { label: "Clase", Icon: Box },
+  INTERFACE: { label: "Interface", Icon: CircleDashed },
+  ENUM: { label: "Enum", Icon: Shapes },
+  RECORD: { label: "Record", Icon: CircleDot },
+  ABSTRACT_CLASS: { label: "Abstract", Icon: Square },
+};
+
+/** Compact metadata chip — class kind + line count. Sits next to the FOCO
+ *  SCANER button so the user can read the validation surface (what kind of
+ *  Java type, how many lines) at a glance before triggering a scan. */
+function KindBadge({
+  kind,
+  lineCount,
+}: {
+  kind: ClassKind;
+  lineCount: number;
+}) {
+  const meta = KIND_META[kind];
+  const Icon = meta.Icon;
+  return (
+    <span
+      className="flex items-center gap-1.5 rounded-sm border border-[var(--border-silver)] bg-[var(--bg-input)] px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--silver)]"
+      title={`${meta.label} · ${lineCount} líneas`}
+    >
+      <Icon className="h-3 w-3 text-[var(--bordo)]" />
+      <span>{meta.label}</span>
+      {lineCount > 0 && (
+        <>
+          <span className="text-[var(--border-silver)]">·</span>
+          <span className="tabular-nums normal-case tracking-tight text-[var(--silver-dark)]">
+            {lineCount} <span className="lowercase">líneas</span>
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
 function SheetHeaderForMode({
   sheetMode,
   isCurrentFocusClass,
@@ -397,6 +537,8 @@ function SheetHeaderForMode({
   onFocusScanMethod,
   nodeName,
   nodeFqn,
+  classType,
+  lineCount,
   variable,
   method,
   focusMethodReturnType,
@@ -411,6 +553,8 @@ function SheetHeaderForMode({
   onFocusScanMethod: () => void;
   nodeName: string;
   nodeFqn: string;
+  classType: ClassKind | null;
+  lineCount: number;
   variable: ParsedField | null;
   method: ParsedMethod | null;
   focusMethodReturnType?: string;
@@ -418,7 +562,7 @@ function SheetHeaderForMode({
 }) {
   if (sheetMode === "variable" && variable) {
     return (
-      <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] px-6 py-4">
+      <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] py-4 pl-6 pr-12">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
             <SheetTitle className="flex items-center gap-2 text-[var(--fg-primary)]">
@@ -445,7 +589,7 @@ function SheetHeaderForMode({
     const ret = method?.returnType ?? focusMethodReturnType ?? "";
     const isConstructor = ret === "<constructor>";
     return (
-      <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] px-6 py-4">
+      <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] py-4 pl-6 pr-12">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
             <SheetTitle className="flex items-center gap-2 text-[var(--fg-primary)]">
@@ -512,7 +656,7 @@ function SheetHeaderForMode({
 
   // class mode (default)
   return (
-    <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] px-6 py-4">
+    <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] py-4 pl-6 pr-12">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <SheetTitle className="flex items-center gap-2 text-[var(--fg-primary)]">
@@ -532,37 +676,39 @@ function SheetHeaderForMode({
           </SheetDescription>
         </div>
 
-        {isCurrentFocusClass ? (
-          <span className="shrink-0 self-start rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--bordo)]">
-            Clase enfocada
-          </span>
-        ) : canFocusScan ? (
-          <motion.div
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.25 }}
-            className="shrink-0"
-          >
-            <Button
-              size="sm"
-              onClick={onFocusScanClass}
-              disabled={isFocusing}
-              className="bg-[var(--bordo)] font-mono text-[11px] uppercase tracking-[0.16em] text-white shadow-[0_0_18px_rgba(185,28,66,0.4)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_24px_rgba(185,28,66,0.6)] disabled:bg-[var(--bordo)] disabled:opacity-70"
+        <div className="flex shrink-0 items-center gap-2 self-start">
+          {classType && <KindBadge kind={classType} lineCount={lineCount} />}
+          {isCurrentFocusClass ? (
+            <span className="rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--bordo)]">
+              Clase enfocada
+            </span>
+          ) : canFocusScan ? (
+            <motion.div
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25 }}
             >
-              {isFocusing ? (
-                <>
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  Enfocando...
-                </>
-              ) : (
-                <>
-                  <Crosshair className="mr-1.5 h-3.5 w-3.5" />
-                  Foco Scaner
-                </>
-              )}
-            </Button>
-          </motion.div>
-        ) : null}
+              <Button
+                size="sm"
+                onClick={onFocusScanClass}
+                disabled={isFocusing}
+                className="bg-[var(--bordo)] font-mono text-[11px] uppercase tracking-[0.16em] text-white shadow-[0_0_18px_rgba(185,28,66,0.4)] hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_24px_rgba(185,28,66,0.6)] disabled:bg-[var(--bordo)] disabled:opacity-70"
+              >
+                {isFocusing ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Enfocando...
+                  </>
+                ) : (
+                  <>
+                    <Crosshair className="mr-1.5 h-3.5 w-3.5" />
+                    Foco Scaner
+                  </>
+                )}
+              </Button>
+            </motion.div>
+          ) : null}
+        </div>
       </div>
     </SheetHeader>
   );
@@ -593,15 +739,99 @@ function ClassView({
   allNodes,
   selectNode,
 }: ClassViewProps) {
+  // Highlight token from the store (set by FocusEdge's "via import" / "desde
+  // uso interno" / "invocación oblicua" fallback chips). When present, we
+  // mark every line in this class's source that mentions the token — the
+  // import line at the top + any textual reference inside the body.
+  const highlight = useGraphStore((s) => s.methodSheetHighlight);
+  const highlightLines = useMemo(
+    () => findCallSiteLines(source ?? "", highlight),
+    [source, highlight],
+  );
+  // Refs to apply Monaco line decorations on mount and whenever the
+  // highlight target changes. Same pattern as MethodView's editor.
+  type EditorRef = {
+    deltaDecorations: (
+      old: string[],
+      n: { range: unknown; options: unknown }[],
+    ) => string[];
+    revealLineInCenterIfOutsideViewport?: (line: number) => void;
+  };
+  type MonacoNs = {
+    Range: new (a: number, b: number, c: number, d: number) => unknown;
+  };
+  const classEditorRef = useRef<EditorRef | null>(null);
+  const classMonacoRef = useRef<MonacoNs | null>(null);
+  const classDecorationsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const editor = classEditorRef.current;
+    const monaco = classMonacoRef.current;
+    if (!editor || !monaco) return;
+    const newDecs = highlightLines.map((line) => ({
+      range: new monaco.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: "cm-call-site-line",
+        linesDecorationsClassName: "cm-call-site-glyph",
+      },
+    }));
+    classDecorationsRef.current = editor.deltaDecorations(
+      classDecorationsRef.current,
+      newDecs,
+    );
+    if (highlightLines.length > 0 && editor.revealLineInCenterIfOutsideViewport) {
+      editor.revealLineInCenterIfOutsideViewport(highlightLines[0]);
+    }
+  }, [highlightLines]);
+
+  // Tabs simplified to Código + Métricas only — Entrantes/Salientes tabs
+  // were removed (no real value: the relationships are already visible in
+  // the graph itself, and on a peripheral they'd be empty anyway).
+  const tabs = [
+    { v: "source", label: "Código" },
+    { v: "metrics", label: "Métricas" },
+  ];
+
+  // Accordion-style expansion for the metrics tab. One section open at a
+  // time — clicking the same metric again collapses it.
+  const [expandedMetric, setExpandedMetric] = useState<
+    "fields" | "methods" | "connections" | "complexity" | null
+  >(null);
+  const toggleMetric = (key: NonNullable<typeof expandedMetric>) =>
+    setExpandedMetric((prev) => (prev === key ? null : key));
+
+  // Connection counts and breakdown — when this is the focus class we use
+  // focusConnections directly so the list is meaningful in FOCO. Otherwise
+  // fall back to the regular incoming/outgoing arrays (the project-wide
+  // graph). Empty for FOCO peripherals — the row stays clickable but the
+  // expanded list will explain there's no data.
+  const focusModeFlag = useGraphStore((s) => s.focusMode);
+  const focusClassFromStore = useGraphStore((s) => s.focusClass);
+  const isFocusClass =
+    focusModeFlag && focusClassFromStore?.id === node.id;
+  const focusConnsForNode = useGraphStore((s) => s.focusConnections);
+  const isPro = useGraphStore((s) => s.isPro);
+  const limitReached = useGraphStore((s) => s.limitReached);
+  const connectionsCount = isFocusClass
+    ? focusConnsForNode.length
+    : incoming.length + outgoing.length;
+  // FREE cap awareness — when the backend trimmed the connection list, we
+  // surface that on both the Conexiones and Complejidad rows so the dev
+  // doesn't read "10" as the absolute truth.
+  const isCappedByFree =
+    isFocusClass && !isPro && limitReached.reached && limitReached.totalAvailable > 0;
+  const realConnectionsCount = isCappedByFree
+    ? limitReached.totalAvailable
+    : connectionsCount;
+  const complexity =
+    node.fields.length + node.methods.length + connectionsCount;
+  const realComplexity =
+    node.fields.length + node.methods.length + realConnectionsCount;
   return (
     <Tabs defaultValue="source" className="flex flex-1 flex-col overflow-hidden">
-      <TabsList className="mx-6 mt-4 grid grid-cols-4 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
-        {[
-          { v: "source", label: "Código" },
-          { v: "incoming", label: `Entrantes (${incoming.length})` },
-          { v: "outgoing", label: `Salientes (${outgoing.length})` },
-          { v: "metrics", label: "Métricas" },
-        ].map((t) => (
+      <TabsList className="mx-6 mt-4 grid grid-cols-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
+        {tabs.map((t) => (
           <TabsTrigger
             key={t.v}
             value={t.v}
@@ -629,43 +859,119 @@ function ClassView({
                 value={source}
                 theme="vs-dark"
                 options={MONACO_OPTIONS}
+                onMount={(editor, monaco) => {
+                  classEditorRef.current = editor as unknown as EditorRef;
+                  classMonacoRef.current = monaco as unknown as MonacoNs;
+                  // Apply current decorations on first mount.
+                  if (highlightLines.length > 0) {
+                    classDecorationsRef.current = (
+                      editor as unknown as EditorRef
+                    ).deltaDecorations(
+                      [],
+                      highlightLines.map((line) => ({
+                        range: new (monaco as unknown as MonacoNs).Range(
+                          line,
+                          1,
+                          line,
+                          1,
+                        ),
+                        options: {
+                          isWholeLine: true,
+                          className: "cm-call-site-line",
+                          linesDecorationsClassName: "cm-call-site-glyph",
+                        },
+                      })),
+                    );
+                    if (
+                      (editor as unknown as EditorRef)
+                        .revealLineInCenterIfOutsideViewport
+                    ) {
+                      (
+                        editor as unknown as EditorRef
+                      ).revealLineInCenterIfOutsideViewport!(highlightLines[0]);
+                    }
+                  }
+                  // Open Monaco's Find widget on mount so the user can search
+                  // within the source without hitting Ctrl+F first.
+                  setTimeout(() => {
+                    const action = (editor as unknown as {
+                      getAction: (id: string) => { run: () => void } | null;
+                    }).getAction("actions.find");
+                    action?.run();
+                  }, 50);
+                }}
               />
             )}
           </div>
         </div>
       </TabsContent>
 
-      <TabsContent value="incoming" className="flex-1 px-6 pb-6 pt-4">
-        <ConnectionList
-          items={incoming.map((e) => ({ id: e.from, type: e.type, label: e.label }))}
-          resolveName={(id) => allNodes.get(id)?.name ?? id.split(".").pop() ?? id}
-          onJump={(id) => selectNode(id)}
-        />
-      </TabsContent>
 
-      <TabsContent value="outgoing" className="flex-1 px-6 pb-6 pt-4">
-        <ConnectionList
-          items={outgoing.map((e) => ({ id: e.to, type: e.type, label: e.label }))}
-          resolveName={(id) => allNodes.get(id)?.name ?? id.split(".").pop() ?? id}
-          onJump={(id) => selectNode(id)}
-        />
-      </TabsContent>
-
-      <TabsContent value="metrics" className="flex-1 px-6 pb-6 pt-4">
+      <TabsContent value="metrics" className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
         <div className="flex flex-col gap-3 text-sm">
-          <Metric label="Campos" value={node.fields.length} />
-          <Metric label="Métodos" value={node.methods.length} />
-          <Metric label="Líneas" value={node.lineCount} />
-          <Metric label="Conexiones" value={incoming.length + outgoing.length} />
-          <Metric
+          <ExpandableMetric
+            label="Campos"
+            value={node.fields.length}
+            active={expandedMetric === "fields"}
+            onToggle={() => toggleMetric("fields")}
+          >
+            <FieldsList fields={node.fields} />
+          </ExpandableMetric>
+
+          <ExpandableMetric
+            label="Métodos"
+            value={node.methods.length}
+            active={expandedMetric === "methods"}
+            onToggle={() => toggleMetric("methods")}
+          >
+            <MethodsList methods={node.methods} />
+          </ExpandableMetric>
+
+          <ExpandableMetric
+            label="Conexiones"
+            value={connectionsCount}
+            cappedTotal={isCappedByFree ? realConnectionsCount : undefined}
+            active={expandedMetric === "connections"}
+            onToggle={() => toggleMetric("connections")}
+          >
+            {isCappedByFree && (
+              <FreeCapNotice
+                shown={connectionsCount}
+                total={realConnectionsCount}
+                what="conexiones"
+              />
+            )}
+            <ConnectionsList
+              isFocusClass={isFocusClass}
+              focusConnections={focusConnsForNode}
+              focusMethods={node.methods}
+            />
+          </ExpandableMetric>
+
+          <ExpandableMetric
             label="Complejidad estimada"
-            value={
-              node.fields.length +
-              node.methods.length +
-              incoming.length +
-              outgoing.length
-            }
-          />
+            value={complexity}
+            cappedTotal={isCappedByFree ? realComplexity : undefined}
+            active={expandedMetric === "complexity"}
+            onToggle={() => toggleMetric("complexity")}
+          >
+            {isCappedByFree && (
+              <FreeCapNotice
+                shown={complexity}
+                total={realComplexity}
+                what="el total real"
+              />
+            )}
+            <ComplexityBreakdown
+              fields={node.fields.length}
+              methods={node.methods.length}
+              connections={connectionsCount}
+              total={complexity}
+              realConnections={isCappedByFree ? realConnectionsCount : undefined}
+              realTotal={isCappedByFree ? realComplexity : undefined}
+            />
+          </ExpandableMetric>
+
           <Separator className="my-2 bg-[var(--border-silver)]" />
           <div className="flex flex-col gap-1">
             <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
@@ -675,35 +981,6 @@ function ClassView({
               {node.filePath}
             </code>
           </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
-              Tipo
-            </span>
-            <Badge
-              variant="outline"
-              className="w-fit border-[var(--bordo)]/40 bg-[var(--bordo)]/10 text-[var(--bordo)]"
-            >
-              {node.type}
-            </Badge>
-          </div>
-          {node.modifiers.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
-                Modificadores
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {node.modifiers.map((m) => (
-                  <Badge
-                    key={m}
-                    variant="secondary"
-                    className="border border-[var(--border-silver)] bg-[var(--bg-panel)] font-mono text-[10px] tracking-tight text-[var(--silver)]"
-                  >
-                    {m}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </TabsContent>
     </Tabs>
@@ -880,6 +1157,7 @@ function MethodView({
   focusMethodSignature?: string;
   focusConnectionsCount: number;
 }) {
+  const highlight = useGraphStore((s) => s.methodSheetHighlight);
   // Body code: prefer the explicit source (already sliced to the method when
   // this is the focus method center). Otherwise slice the class source by the
   // method's start/end lines.
@@ -889,6 +1167,47 @@ function MethodView({
     if (!method) return "";
     return sliceMethodSource(source, method.startLine, method.endLine);
   }, [source, method, isCurrentFocusMethod]);
+
+  const callSiteLines = useMemo(
+    () => findCallSiteLines(body, highlight),
+    [body, highlight],
+  );
+
+  // Refs to the Monaco instance so we can re-apply decorations when the body
+  // (or the highlight target) changes without remounting the editor.
+  // Typed loosely to dodge importing monaco types at the call site.
+  type EditorRef = {
+    deltaDecorations: (
+      old: string[],
+      n: { range: unknown; options: unknown }[],
+    ) => string[];
+    revealLineInCenterIfOutsideViewport?: (line: number) => void;
+  };
+  type MonacoNs = { Range: new (a: number, b: number, c: number, d: number) => unknown };
+  const editorRef = useRef<EditorRef | null>(null);
+  const monacoRef = useRef<MonacoNs | null>(null);
+  const decorationsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+    const newDecs = callSiteLines.map((line) => ({
+      range: new monaco.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: "cm-call-site-line",
+        linesDecorationsClassName: "cm-call-site-glyph",
+      },
+    }));
+    decorationsRef.current = editor.deltaDecorations(
+      decorationsRef.current,
+      newDecs,
+    );
+    if (callSiteLines.length > 0 && editor.revealLineInCenterIfOutsideViewport) {
+      editor.revealLineInCenterIfOutsideViewport(callSiteLines[0]);
+    }
+  }, [callSiteLines, body]);
 
   if (loading) {
     return (
@@ -926,6 +1245,32 @@ function MethodView({
                 value={body}
                 theme="vs-dark"
                 options={MONACO_OPTIONS}
+                onMount={(editor, monaco) => {
+                  editorRef.current = editor as unknown as EditorRef;
+                  monacoRef.current = monaco as unknown as MonacoNs;
+                  // Apply current decorations on first mount.
+                  if (callSiteLines.length > 0) {
+                    decorationsRef.current = (editor as unknown as EditorRef).deltaDecorations(
+                      [],
+                      callSiteLines.map((line) => ({
+                        range: new (monaco as unknown as MonacoNs).Range(line, 1, line, 1),
+                        options: {
+                          isWholeLine: true,
+                          className: "cm-call-site-line",
+                          linesDecorationsClassName: "cm-call-site-glyph",
+                        },
+                      })),
+                    );
+                  }
+                  // Open the Find widget by default — the dev shouldn't have
+                  // to remember Ctrl+F to start searching the body.
+                  setTimeout(() => {
+                    const action = (editor as unknown as {
+                      getAction: (id: string) => { run: () => void } | null;
+                    }).getAction("actions.find");
+                    action?.run();
+                  }, 50);
+                }}
               />
             </div>
           ) : (
@@ -996,64 +1341,329 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-interface ConnectionItem {
-  id: string;
-  type: string;
+/** Click-to-expand metric row. The header looks like {@link Metric}; when
+ *  active, children render in a panel below. When `cappedTotal` is provided,
+ *  the row reads as `value / cappedTotal` with a small "FREE" pill so the
+ *  user knows the displayed value is trimmed. */
+function ExpandableMetric({
+  label,
+  value,
+  cappedTotal,
+  active,
+  onToggle,
+  children,
+}: {
   label: string;
+  value: number;
+  cappedTotal?: number;
+  active: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const isCapped = typeof cappedTotal === "number" && cappedTotal > value;
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={active}
+        title={
+          isCapped
+            ? `Estás viendo ${value} de ${cappedTotal} (cap del plan FREE)`
+            : undefined
+        }
+        className={`flex items-center justify-between rounded-md border bg-[var(--bg-input)] px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60 ${
+          active
+            ? "border-[var(--bordo)] shadow-[0_0_14px_rgba(185,28,66,0.18)]"
+            : "border-[var(--border-silver)] hover:border-[var(--bordo)]/60"
+        }`}
+      >
+        <div className="flex items-center gap-2 text-[var(--silver-dark)]">
+          <Hash className="h-3.5 w-3.5" />
+          <span className="text-[10px] uppercase tracking-[0.16em]">{label}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {isCapped ? (
+            <>
+              <span className="font-mono text-base font-semibold tabular-nums text-[var(--fg-primary)]">
+                {value}
+              </span>
+              <span className="font-mono text-xs tabular-nums text-[var(--silver-dark)]">
+                / {cappedTotal}
+              </span>
+              <span className="rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-[0.16em] text-[var(--bordo)]">
+                Free
+              </span>
+            </>
+          ) : (
+            <span className="font-mono text-base font-semibold tabular-nums text-[var(--fg-primary)]">
+              {value}
+            </span>
+          )}
+          <ChevronRight
+            className={`h-3.5 w-3.5 text-[var(--silver-dark)] transition-transform ${
+              active ? "rotate-90 text-[var(--bordo)]" : ""
+            }`}
+          />
+        </div>
+      </button>
+      {active && (
+        <div className="mt-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function ConnectionList({
-  items,
-  resolveName,
-  onJump,
+/** Educational notice rendered inside an expanded metric panel when the
+ *  number is capped by the FREE plan. Honest about the gap and points the
+ *  user toward upgrading. */
+function FreeCapNotice({
+  shown,
+  total,
+  what,
 }: {
-  items: ConnectionItem[];
-  resolveName: (id: string) => string;
-  onJump: (id: string) => void;
+  shown: number;
+  total: number;
+  what: string;
 }) {
-  const rf = useReactFlow();
-  const center = (id: string) => {
-    const node = rf.getNode(id);
-    if (node) {
-      rf.setCenter(node.position.x + 140, node.position.y + 110, {
-        zoom: 1.2,
-        duration: 400,
-      });
-    }
-  };
+  return (
+    <div className="mb-2 rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-2 py-1.5 text-[10px] leading-snug text-[var(--bordo)]">
+      Estás viendo <span className="font-semibold">{shown} de {total}</span>{" "}
+      {what}. El plan FREE recorta a 10 conexiones; con PRO ves todas.
+    </div>
+  );
+}
 
-  if (items.length === 0) {
+/** Plain-text list of fields: `tipo` `nombre` (+ annotations). Read-only. */
+function FieldsList({ fields }: { fields: ParsedField[] }) {
+  if (fields.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[var(--fg-muted)]">
-        Sin conexiones
-      </div>
+      <span className="text-xs text-[var(--fg-muted)]">Sin campos.</span>
     );
   }
   return (
-    <ScrollArea className="h-full">
-      <div className="flex flex-col gap-2 pr-3">
-        {items.map((it, idx) => (
-          <button
-            key={`${it.id}-${idx}`}
-            onClick={() => {
-              onJump(it.id);
-              center(it.id);
-            }}
-            className="group flex items-center justify-between gap-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-3 text-left transition-all hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/5 hover:shadow-[0_0_14px_rgba(185,28,66,0.18)]"
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium text-[var(--fg-primary)]">
-                {resolveName(it.id)}
-              </span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--silver-dark)]">
-                <GitBranch className="mr-1 inline h-3 w-3" />
-                {it.type}
-              </span>
-            </div>
-            <ChevronRight className="h-4 w-4 text-[var(--silver-dark)] transition-all group-hover:translate-x-0.5 group-hover:text-[var(--bordo)]" />
-          </button>
-        ))}
-      </div>
-    </ScrollArea>
+    <ul className="flex flex-col gap-1.5">
+      {fields.map((f) => (
+        <li
+          key={f.name}
+          className="flex flex-wrap items-baseline gap-2 font-mono text-[11px] leading-tight"
+        >
+          <span className="text-[var(--silver-dark)]">{f.type}</span>
+          <span className="text-[var(--fg-primary)]">{f.name}</span>
+          {f.annotations.length > 0 && (
+            <span className="text-[var(--bordo)]">
+              {f.annotations.map((a) => (a.startsWith("@") ? a : `@${a}`)).join(" ")}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
+
+/** Plain-text list of methods: `nombre(params)` `: returnType` (+ annotations). */
+function MethodsList({ methods }: { methods: ParsedMethod[] }) {
+  if (methods.length === 0) {
+    return (
+      <span className="text-xs text-[var(--fg-muted)]">Sin métodos.</span>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {methods.map((m) => (
+        <li
+          key={`${m.name}-${m.startLine ?? 0}`}
+          className="flex flex-wrap items-baseline gap-1 font-mono text-[11px] leading-tight"
+        >
+          <span className="text-[var(--fg-primary)]">{m.name}</span>
+          <span className="text-[var(--fg-muted)]">
+            (
+            {m.parameters
+              .map((p) => `${p.type} ${p.name}`)
+              .join(", ")}
+            )
+          </span>
+          {m.returnType && m.returnType !== "<constructor>" && (
+            <span className="text-[var(--silver-dark)]">: {m.returnType}</span>
+          )}
+          {m.annotations.length > 0 && (
+            <span className="text-[var(--bordo)]">
+              {m.annotations.map((a) => (a.startsWith("@") ? a : `@${a}`)).join(" ")}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Connection details for the focus class — for each peripheral, surfaces:
+ *  the class name, the connection type ("Llama a", "Llamado por", etc.),
+ *  the method that mediates the relationship, and that method's parameters. */
+function ConnectionsList({
+  isFocusClass,
+  focusConnections,
+  focusMethods,
+}: {
+  isFocusClass: boolean;
+  focusConnections: FocusConnectionPayload[];
+  focusMethods: ParsedMethod[];
+}) {
+  if (!isFocusClass) {
+    return (
+      <span className="text-xs text-[var(--fg-muted)]">
+        Las conexiones se listan solo cuando esta clase es el foco actual.
+      </span>
+    );
+  }
+  if (focusConnections.length === 0) {
+    return (
+      <span className="text-xs text-[var(--fg-muted)]">Sin conexiones.</span>
+    );
+  }
+  const typeLabel = (ct: string) => {
+    switch (ct) {
+      case "CALLS":
+        return "Llama a";
+      case "CALLED_BY":
+        return "Llamado por";
+      case "EXTENDS":
+        return "Extiende";
+      case "IMPLEMENTS":
+        return "Implementa";
+      case "USES_PROPERTIES":
+        return "Usa props";
+      case "INVOKES_METHOD":
+        return "Invocado";
+      case "INVOKES_OUTGOING":
+        return "Invoca";
+      default:
+        return ct;
+    }
+  };
+  return (
+    <ul className="flex flex-col gap-2.5">
+      {focusConnections.map((c) => {
+        // Resolve the method that owns the relationship and its parameters:
+        // for CALLS/INVOKES_OUTGOING the method lives on the focus, for
+        // CALLED_BY/INVOKES_METHOD it lives on the peripheral.
+        const livesOnFocus =
+          c.connectionType === "CALLS" || c.connectionType === "INVOKES_OUTGOING";
+        const methodName =
+          c.connectionType === "INVOKES_OUTGOING" && c.viaMethodInTarget
+            ? c.viaMethodInTarget
+            : c.viaMethodInSource ?? null;
+        const methodObj = methodName
+          ? livesOnFocus
+            ? focusMethods.find((m) => m.name === methodName)
+            : c.methods.find((m) => m.name === methodName)
+          : null;
+        return (
+          <li
+            key={c.id}
+            className="flex flex-col gap-0.5 font-mono text-[11px] leading-tight"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-[var(--fg-primary)]">{c.name}</span>
+              <span className="rounded-sm border border-[var(--bordo)]/30 bg-[var(--bordo)]/10 px-1 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[var(--bordo)]">
+                {typeLabel(c.connectionType)}
+              </span>
+            </div>
+            {methodName && (
+              <div className="pl-2 text-[var(--silver)]">
+                <span className="text-[var(--fg-muted)]">↳ </span>
+                {methodName}
+                <span className="text-[var(--fg-muted)]">
+                  (
+                  {methodObj
+                    ? methodObj.parameters
+                        .map((p) => `${p.type} ${p.name}`)
+                        .join(", ")
+                    : ""}
+                  )
+                </span>
+                {methodObj?.returnType &&
+                  methodObj.returnType !== "<constructor>" && (
+                    <span className="text-[var(--silver-dark)]">
+                      : {methodObj.returnType}
+                    </span>
+                  )}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Read-only breakdown of the complexity score so the user knows how it
+ *  was computed. Mirrors `complexity = fields + methods + connections`.
+ *  When `realConnections`/`realTotal` are provided, the row also surfaces
+ *  the un-capped values next to the FREE-trimmed ones so the dev sees both
+ *  numbers side by side. */
+function ComplexityBreakdown({
+  fields,
+  methods,
+  connections,
+  total,
+  realConnections,
+  realTotal,
+}: {
+  fields: number;
+  methods: number;
+  connections: number;
+  total: number;
+  realConnections?: number;
+  realTotal?: number;
+}) {
+  const hasRealNumbers =
+    typeof realConnections === "number" && typeof realTotal === "number";
+  return (
+    <div className="flex flex-col gap-1.5 font-mono text-[11px] leading-tight">
+      <p className="text-[10px] text-[var(--fg-muted)]">
+        Suma simple de las dimensiones contables. Sirve como índice rápido,
+        no es métrica formal.
+      </p>
+      <ul className="flex flex-col gap-1">
+        <li className="flex justify-between">
+          <span className="text-[var(--silver-dark)]">campos</span>
+          <span className="tabular-nums text-[var(--fg-primary)]">{fields}</span>
+        </li>
+        <li className="flex justify-between">
+          <span className="text-[var(--silver-dark)]">métodos</span>
+          <span className="tabular-nums text-[var(--fg-primary)]">{methods}</span>
+        </li>
+        <li className="flex justify-between">
+          <span className="text-[var(--silver-dark)]">conexiones</span>
+          <span className="flex items-baseline gap-1.5 tabular-nums">
+            <span className="text-[var(--fg-primary)]">{connections}</span>
+            {hasRealNumbers && realConnections! > connections && (
+              <span className="text-[10px] text-[var(--bordo)]">
+                (real: {realConnections})
+              </span>
+            )}
+          </span>
+        </li>
+        <li className="flex justify-between border-t border-[var(--border-silver)] pt-1">
+          <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--bordo)]">
+            total
+          </span>
+          <span className="flex items-baseline gap-1.5">
+            <span className="tabular-nums font-semibold text-[var(--bordo)]">
+              {total}
+            </span>
+            {hasRealNumbers && realTotal! > total && (
+              <span className="text-[10px] text-[var(--bordo)]">
+                (real: {realTotal})
+              </span>
+            )}
+          </span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+

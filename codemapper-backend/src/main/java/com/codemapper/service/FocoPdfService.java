@@ -291,6 +291,7 @@ public class FocoPdfService {
             case IMPLEMENTS -> "IMPLEMENTA";
             case USES_PROPERTIES -> "USA PROPS";
             case INVOKES_METHOD -> "INVOCA MÉTODO";
+            case INVOKES_OUTGOING -> "INVOCA A";
         };
     }
 

@@ -16,6 +16,14 @@ public class ParsedMethod {
     private List<Parameter> parameters = new ArrayList<>();
     private List<String> modifiers = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
+    /** Simple class names of exceptions declared in the `throws` clause. Empty
+     *  for methods that don't declare any. F1 contract: surfaced as the
+     *  exception cluster under the FocusCenterNode. */
+    private List<String> thrownExceptions = new ArrayList<>();
+    /** Subset of {@link #annotations} that match Spring/JSR security gates
+     *  (@PreAuthorize, @Secured, @RolesAllowed, @RequiredRole). Drives the
+     *  shield badge in the contract surface. Empty for unprotected methods. */
+    private List<String> securityAnnotations = new ArrayList<>();
     @JsonProperty("isStatic")
     private boolean isStatic;
     @JsonProperty("isAbstract")

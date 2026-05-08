@@ -18,9 +18,18 @@ import com.codemapper.parser.SymbolSolverConfigurer;
 import com.github.javaparser.Range;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.stmt.CatchClause;
+import com.github.javaparser.ast.stmt.DoStmt;
+import com.github.javaparser.ast.stmt.ForEachStmt;
+import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.TryStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,10 +51,23 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
- * Traces every class in the project that invokes a specific method on the
- * focus class. Emits the same SSE event shape as the regular FOCUS mode so
- * the frontend can reuse most of its rendering — only the central node is
- * a method (not a class) and the connection type is {@code INVOKES_METHOD}.
+ * Method-level FOCUS tracer. Around the focus method on the focus class,
+ * emits two sides of the call relationship:
+ *
+ * <ul>
+ *   <li><b>Incoming</b> ({@link FocusConnectionType#INVOKES_METHOD}) — every
+ *   class in the project that invokes the method. The {@code viaMethodInSource}
+ *   field carries the method on the caller class that produces the call.</li>
+ *   <li><b>Outgoing</b> ({@link FocusConnectionType#INVOKES_OUTGOING}) — every
+ *   class invoked from inside the focus method body, deduped by target FQN.
+ *   {@code viaMethodInTarget} is the called method's simple name; {@code
+ *   controlContext} is set when the call sits inside an if/loop/try/switch
+ *   so the frontend can decorate the edge accordingly.</li>
+ * </ul>
+ *
+ * The combined cap (incoming + outgoing) is bounded by
+ * {@code codemapper.limits.focus-method-max-connections} for FREE sessions;
+ * PRO is unlimited.
  */
 @Slf4j
 @Service
@@ -56,6 +78,7 @@ public class FocusMethodTracerService {
     private final FieldExtractor fieldExtractor;
     private final MethodExtractor methodExtractor;
     private final SymbolSolverConfigurer symbolSolverConfigurer;
+    private final JavaVersionDetector javaVersionDetector;
 
     @Value("${codemapper.limits.focus-method-max-connections:10}")
     private int focusMethodMaxConnections;
@@ -77,8 +100,10 @@ public class FocusMethodTracerService {
         }
 
         session.setStatus(SessionData.Status.PARSING);
-        symbolSolverConfigurer.configure(projectRoot);
-        sink.accept(new SessionStartEvent(session.getTotalFiles(), session.getProjectName(), start));
+        String detectedJavaVersion = javaVersionDetector.detect(projectRoot);
+        session.setDetectedJavaVersion(detectedJavaVersion);
+        symbolSolverConfigurer.configure(projectRoot, detectedJavaVersion);
+        sink.accept(new SessionStartEvent(session.getTotalFiles(), session.getProjectName(), start, detectedJavaVersion));
 
         // ─── Parse focus class + locate the method ─────────────────────
         CompilationUnit focusCu;
@@ -120,8 +145,6 @@ public class FocusMethodTracerService {
             return;
         }
 
-        // Snapshot the focus class itself in parsedClasses so the sheet can
-        // request /source for it using the same id pattern as full-mode.
         ParsedClass focusParsed = classExtractor.extract(focusType, containingClassPackage, focusPath.toString());
         focusParsed.setFields(fieldExtractor.extract(focusType));
         focusParsed.setMethods(methodExtractor.extract(focusType));
@@ -152,9 +175,12 @@ public class FocusMethodTracerService {
                 endLine
         ));
 
-        // ─── Walk project, find every class that invokes this method ───
+        // ─── Walk project once: build FQN registry + collect callers ────
+        // Single pass keeps the outgoing side's target lookup cheap (in-memory
+        // map) instead of re-walking the project for every distinct call.
         List<Path> projectFiles = collectJavaFiles(projectRoot);
-        Map<String, ParsedClass> callers = new LinkedHashMap<>();
+        Map<String, ParsedClass> classByFqn = new LinkedHashMap<>();
+        Map<String, IncomingCaller> callers = new LinkedHashMap<>();
         log.info("FocusMethod session {}: scanning {} java files for callers of {}#{}",
                 session.getSessionId(), projectFiles.size(), focusFqn, methodName);
 
@@ -166,68 +192,124 @@ public class FocusMethodTracerService {
                 log.debug("Skipping unparseable file {}: {}", file, e.getMessage());
                 continue;
             }
+            String pkg = cu.getPackageDeclaration()
+                    .map(p -> p.getNameAsString())
+                    .orElse("");
 
-            // Walk every method invocation in this file
+            for (TypeDeclaration<?> td : cu.getTypes()) {
+                try {
+                    ParsedClass pc = classExtractor.extract(td, pkg, file.toString());
+                    pc.setFields(fieldExtractor.extract(td));
+                    pc.setMethods(methodExtractor.extract(td));
+                    classByFqn.putIfAbsent(pc.getFullyQualifiedName(), pc);
+                } catch (Exception e) {
+                    log.debug("Skipping type in {}: {}", file, e.getMessage());
+                }
+            }
+
             cu.findAll(MethodCallExpr.class).forEach(call -> {
                 if (!call.getNameAsString().equals(methodName)) return;
                 String resolvedDeclaringFqn;
                 try {
                     resolvedDeclaringFqn = call.resolve().declaringType().getQualifiedName();
                 } catch (Exception e) {
-                    return; // can't be sure → skip rather than create a false positive
+                    return;
                 }
                 if (!focusFqn.equals(resolvedDeclaringFqn)) return;
 
-                // Walk up to the TypeDeclaration containing the call site.
                 TypeDeclaration<?> containingType = call.findAncestor(TypeDeclaration.class).orElse(null);
                 if (containingType == null) return;
+                String tdFqn = containingType.getFullyQualifiedName().orElse(null);
+                if (tdFqn == null || focusFqn.equals(tdFqn)) return;
 
-                String pkg = cu.getPackageDeclaration()
-                        .map(p -> p.getNameAsString())
-                        .orElse("");
-                ParsedClass pc;
-                try {
-                    pc = classExtractor.extract(containingType, pkg, file.toString());
-                } catch (Exception e) {
-                    log.debug("Could not extract caller {}: {}", containingType.getNameAsString(), e.getMessage());
-                    return;
-                }
+                ParsedClass pc = classByFqn.get(tdFqn);
+                if (pc == null) return;
+                if (callers.containsKey(pc.getId())) return;
 
-                if (focusFqn.equals(pc.getFullyQualifiedName())) return; // skip self-calls
-                if (callers.containsKey(pc.getId())) return;             // already counted
-
-                pc.setFields(fieldExtractor.extract(containingType));
-                pc.setMethods(methodExtractor.extract(containingType));
-                callers.put(pc.getId(), pc);
+                String via = call.findAncestor(MethodDeclaration.class)
+                        .map(MethodDeclaration::getNameAsString)
+                        .orElse(null);
+                callers.put(pc.getId(), new IncomingCaller(pc, via));
             });
         }
 
-        List<ParsedClass> ordered = new ArrayList<>(callers.values());
+        // ─── Outgoing side: scan focus method body ──────────────────────
+        // Deduped by target FQN — first call site wins for via-method +
+        // control context. (Multi-site rendering is a v2 concern.)
+        Map<String, OutgoingCall> outgoing = new LinkedHashMap<>();
+        for (MethodCallExpr call : md.findAll(MethodCallExpr.class)) {
+            String targetFqn;
+            try {
+                targetFqn = call.resolve().declaringType().getQualifiedName();
+            } catch (Exception e) {
+                continue;
+            }
+            if (targetFqn == null || targetFqn.isBlank()) continue;
+            if (focusFqn.equals(targetFqn)) continue; // skip self-calls within focus class
+            // Skip JDK + jakarta/javax — won't be in classByFqn anyway, but
+            // resolving them is wasted effort on the outgoing side.
+            if (targetFqn.startsWith("java.") || targetFqn.startsWith("javax.")
+                    || targetFqn.startsWith("jakarta.")) continue;
+            if (outgoing.containsKey(targetFqn)) continue;
+
+            ParsedClass target = classByFqn.get(targetFqn);
+            if (target == null) continue; // out of project scope (likely a dependency lib)
+
+            String calledMethodName = call.getNameAsString();
+            String controlContext = resolveControlContext(call, md);
+            outgoing.put(targetFqn, new OutgoingCall(target, calledMethodName, controlContext));
+        }
+
+        // ─── Combine + cap (free 10 / pro unlimited) ────────────────────
+        List<EmittableConnection> ordered = new ArrayList<>();
+        for (IncomingCaller caller : callers.values()) {
+            ordered.add(new EmittableConnection(
+                    caller.classData(),
+                    FocusConnectionType.INVOKES_METHOD,
+                    caller.viaMethodInCaller(),
+                    methodName,
+                    null));
+        }
+        for (OutgoingCall out : outgoing.values()) {
+            ordered.add(new EmittableConnection(
+                    out.target(),
+                    FocusConnectionType.INVOKES_OUTGOING,
+                    methodName, // viaInSource = focus method (origin of the call)
+                    out.calledMethodName(),
+                    out.controlContext()));
+        }
+
         int totalAvailable = ordered.size();
         boolean limitApplied = !session.isPro() && totalAvailable > focusMethodMaxConnections;
-        List<ParsedClass> toEmit = limitApplied
+        List<EmittableConnection> toEmit = limitApplied
                 ? ordered.subList(0, focusMethodMaxConnections)
                 : ordered;
 
-        log.info("FocusMethod session {}: {} callers found, pro={}, limitApplied={}",
-                session.getSessionId(), totalAvailable, session.isPro(), limitApplied);
+        log.info("FocusMethod session {}: {} total ({} incoming, {} outgoing), pro={}, limitApplied={}",
+                session.getSessionId(), totalAvailable, callers.size(), outgoing.size(),
+                session.isPro(), limitApplied);
 
         int position = 0;
-        for (ParsedClass pc : toEmit) {
+        for (EmittableConnection ec : toEmit) {
             position++;
-            session.getParsedClasses().add(pc); // makes /source available for caller
+            session.getParsedClasses().add(ec.parsed());
             sink.accept(new FocusConnectionEvent(
-                    pc.getId(),
-                    pc.getFullyQualifiedName(),
-                    pc.getName(),
-                    pc.getPackageName(),
-                    pc.getType(),
-                    pc.getAnnotations(),
-                    FocusConnectionType.INVOKES_METHOD,
-                    pc.getFields(),
-                    pc.getMethods(),
+                    ec.parsed().getId(),
+                    ec.parsed().getFullyQualifiedName(),
+                    ec.parsed().getName(),
+                    ec.parsed().getPackageName(),
+                    ec.parsed().getType(),
+                    ec.parsed().getAnnotations(),
+                    ec.connectionType(),
+                    ec.parsed().getFields(),
+                    ec.parsed().getMethods(),
                     position,
-                    pc.getFilePath()
+                    ec.parsed().getFilePath(),
+                    ec.viaMethodInSource(),
+                    ec.viaMethodInTarget(),
+                    ec.controlContext(),
+                    false,
+                    false
             ));
             try {
                 Thread.sleep(60);
@@ -253,8 +335,45 @@ public class FocusMethodTracerService {
                 durationMs));
         session.setStatus(SessionData.Status.COMPLETED);
 
-        log.info("FocusMethod session {} done: focus + {} callers in {} ms",
+        log.info("FocusMethod session {} done: focus + {} connections in {} ms",
                 session.getSessionId(), toEmit.size(), durationMs);
+    }
+
+    /**
+     * Walks parents of {@code call} up to (but not including) {@code owner},
+     * stopping at the first control-flow ancestor. Returns:
+     * <ul>
+     *   <li>{@code IF_THEN} — call sits in the then branch (or condition) of an if</li>
+     *   <li>{@code IF_ELSE} — call sits in the else branch of an if</li>
+     *   <li>{@code LOOP} — call inside for, for-each, while or do-while</li>
+     *   <li>{@code TRY} / {@code CATCH} — call inside a try body or catch clause</li>
+     *   <li>{@code SWITCH_CASE} — call inside a switch entry</li>
+     *   <li>{@code null} — call is in the linear top-level body</li>
+     * </ul>
+     * The innermost wrapper wins (a call inside {@code if(...) { for(...) { x(); } }}
+     * comes back as {@code LOOP}).
+     */
+    private String resolveControlContext(MethodCallExpr call, MethodDeclaration owner) {
+        Node prev = call;
+        Node cur = call.getParentNode().orElse(null);
+        while (cur != null && cur != owner) {
+            if (cur instanceof IfStmt ifStmt) {
+                if (ifStmt.getElseStmt().isPresent() && ifStmt.getElseStmt().get() == prev) {
+                    return "IF_ELSE";
+                }
+                return "IF_THEN";
+            }
+            if (cur instanceof ForStmt || cur instanceof ForEachStmt
+                    || cur instanceof WhileStmt || cur instanceof DoStmt) {
+                return "LOOP";
+            }
+            if (cur instanceof CatchClause) return "CATCH";
+            if (cur instanceof TryStmt) return "TRY";
+            if (cur instanceof SwitchEntry) return "SWITCH_CASE";
+            prev = cur;
+            cur = cur.getParentNode().orElse(null);
+        }
+        return null;
     }
 
     private static String sliceLines(String source, int startLine, int endLine) {
@@ -296,4 +415,15 @@ public class FocusMethodTracerService {
         });
         return files;
     }
+
+    private record IncomingCaller(ParsedClass classData, String viaMethodInCaller) {}
+
+    private record OutgoingCall(ParsedClass target, String calledMethodName, String controlContext) {}
+
+    private record EmittableConnection(
+            ParsedClass parsed,
+            FocusConnectionType connectionType,
+            String viaMethodInSource,
+            String viaMethodInTarget,
+            String controlContext) {}
 }

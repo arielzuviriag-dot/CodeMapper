@@ -30,6 +30,10 @@ import java.util.List;
 public class SymbolSolverConfigurer {
 
     public List<Path> configure(Path projectRoot) throws IOException {
+        return configure(projectRoot, null);
+    }
+
+    public List<Path> configure(Path projectRoot, String detectedJavaVersion) throws IOException {
         CombinedTypeSolver combined = new CombinedTypeSolver();
         combined.add(new ReflectionTypeSolver());
 
@@ -50,13 +54,37 @@ public class SymbolSolverConfigurer {
             }
         }
 
+        ParserConfiguration.LanguageLevel level = mapLanguageLevel(detectedJavaVersion);
         ParserConfiguration config = new ParserConfiguration()
                 .setSymbolResolver(new JavaSymbolSolver(combined))
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
+                .setLanguageLevel(level);
         StaticJavaParser.setConfiguration(config);
 
-        log.info("Symbol solver configured with {} source root(s)", sourceRoots.size());
+        log.info("Symbol solver configured with {} source root(s), language level {}",
+                sourceRoots.size(), level);
         return sourceRoots;
+    }
+
+    /** Maps a detected major Java version to the corresponding parser
+     *  LanguageLevel. Falls back to BLEEDING_EDGE when the version is unknown
+     *  or newer than what JavaParser 3.26.x recognizes by name. */
+    private ParserConfiguration.LanguageLevel mapLanguageLevel(String javaVersion) {
+        if (javaVersion == null || javaVersion.isBlank()) {
+            return ParserConfiguration.LanguageLevel.BLEEDING_EDGE;
+        }
+        return switch (javaVersion.trim()) {
+            case "8" -> ParserConfiguration.LanguageLevel.JAVA_8;
+            case "9" -> ParserConfiguration.LanguageLevel.JAVA_9;
+            case "10" -> ParserConfiguration.LanguageLevel.JAVA_10;
+            case "11" -> ParserConfiguration.LanguageLevel.JAVA_11;
+            case "12" -> ParserConfiguration.LanguageLevel.JAVA_12;
+            case "13" -> ParserConfiguration.LanguageLevel.JAVA_13;
+            case "14" -> ParserConfiguration.LanguageLevel.JAVA_14;
+            case "15" -> ParserConfiguration.LanguageLevel.JAVA_15;
+            case "16" -> ParserConfiguration.LanguageLevel.JAVA_16;
+            case "17" -> ParserConfiguration.LanguageLevel.JAVA_17;
+            default -> ParserConfiguration.LanguageLevel.BLEEDING_EDGE;
+        };
     }
 
     private List<Path> findSourceRoots(Path root) throws IOException {

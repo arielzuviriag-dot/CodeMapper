@@ -287,3 +287,63 @@
 .cm-focus-edge-group:hover .cm-focus-edge-path {
   filter: drop-shadow(0 0 8px currentColor);
 }
+
+/* F4 — "Simular cambio". Atenúa todo el grafo cuando el modo está activo,
+   excepto los nodos con la clase .cm-impact-direct / .cm-impact-transitive /
+   .cm-impact-test que reciben highlight. La idea: el ojo se va directo a
+   "esto rompe si toco la clase". */
+.cm-impact-active .react-flow__edge,
+.cm-impact-active .react-flow__node {
+  opacity: 0.28;
+  transition: opacity 220ms ease;
+}
+.cm-impact-active .react-flow__node.cm-impact-focus,
+.cm-impact-active .react-flow__node.cm-impact-direct,
+.cm-impact-active .react-flow__node.cm-impact-transitive,
+.cm-impact-active .react-flow__node.cm-impact-test {
+  opacity: 1;
+}
+.cm-impact-active .react-flow__node.cm-impact-direct {
+  filter: drop-shadow(0 0 14px rgba(251, 146, 60, 0.85));
+}
+.cm-impact-active .react-flow__node.cm-impact-transitive {
+  filter: drop-shadow(0 0 8px rgba(251, 146, 60, 0.45));
+}
+.cm-impact-active .react-flow__node.cm-impact-test {
+  filter: drop-shadow(0 0 10px rgba(248, 113, 113, 0.7));
+  animation: cm-impact-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cm-impact-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.5)); }
+  50%      { filter: drop-shadow(0 0 16px rgba(248, 113, 113, 0.95)); }
+}
+/* Cycle ring around the focus when the impact report flagged hasCycles. */
+.cm-impact-cycle-ring {
+  position: absolute;
+  inset: -22px;
+  border: 2px solid rgba(248, 113, 113, 0.6);
+  border-radius: 18px;
+  pointer-events: none;
+  animation: cm-impact-cycle-pulse 2s ease-in-out infinite;
+}
+@keyframes cm-impact-cycle-pulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(248, 113, 113, 0.4);
+    border-color: rgba(248, 113, 113, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(248, 113, 113, 0.85);
+    border-color: rgba(248, 113, 113, 0.9);
+  }
+}
+
+/* Method sheet — line highlight when the sheet is opened from a connection
+   chip. Marks the call site (or class reference) inside the caller's body. */
+.cm-call-site-line {
+  background: rgba(185, 28, 66, 0.22) !important;
+}
+.cm-call-site-glyph {
+  background: var(--bordo, #b91c42);
+  width: 3px !important;
+  margin-left: 3px;
+}
