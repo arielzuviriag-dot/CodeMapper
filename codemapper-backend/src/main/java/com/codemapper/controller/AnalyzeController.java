@@ -96,7 +96,29 @@ public class AnalyzeController {
     @GetMapping(value = "/stream/{sessionId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable String sessionId) {
         log.info("SSE stream requested for session {}", sessionId);
-        return analysisService.openStream(sessionId);
+        try {
+            return analysisService.openStream(sessionId);
+        } catch (com.codemapper.exception.SessionNotFoundException ex) {
+            // SSE endpoint — we can't fall through to GlobalExceptionHandler
+            // because that one tries to serialize JSON and the client asked
+            // for text/event-stream (HttpMediaTypeNotAcceptableException).
+            // Instead, return a short-lived emitter that ships one error
+            // event and completes — the frontend already listens to the
+            // "error" event and renders a clean message.
+            log.warn("Session {} not found — returning SSE error event", sessionId);
+            SseEmitter emitter = new SseEmitter(5_000L);
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("error")
+                        .data(java.util.Map.of(
+                                "message", "Session not found: " + sessionId,
+                                "code", "SESSION_NOT_FOUND")));
+            } catch (IOException ignored) {
+                // Client may have hung up already.
+            }
+            emitter.complete();
+            return emitter;
+        }
     }
 
     @GetMapping("/source/{sessionId}/{classId}")

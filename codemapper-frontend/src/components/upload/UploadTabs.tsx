@@ -1,6 +1,6 @@
 "use client";
 
-import { Crosshair, Folder, Github, Upload } from "lucide-react";
+import { Crosshair, Folder, Github, Sparkles, Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UploadZone } from "./UploadZone";
 import { GitHubInput } from "./GitHubInput";
@@ -23,7 +23,7 @@ const TRIGGER_CLASS = [
 export function UploadTabs() {
   return (
     <Tabs defaultValue="upload" className="w-full">
-      <TabsList className="grid w-full grid-cols-4 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
+      <TabsList className="grid w-full grid-cols-5 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
         <TabsTrigger value="upload" className={TRIGGER_CLASS}>
           <Upload className="h-3.5 w-3.5" /> Aplicación
         </TabsTrigger>
@@ -35,6 +35,12 @@ export function UploadTabs() {
         </TabsTrigger>
         <TabsTrigger value="focus" className={`${TRIGGER_CLASS} normal-case`}>
           <Crosshair className="h-3.5 w-3.5" /> Foco
+        </TabsTrigger>
+        {/* TEMPORAL — tab para testear modo PRO sin tocar la URL.
+            Borrar este TabsTrigger + el TabsContent="focus-pro" cuando
+            exista billing real. Acción equivalente a `?demo=pro`. */}
+        <TabsTrigger value="focus-pro" className={`${TRIGGER_CLASS} normal-case`}>
+          <Sparkles className="h-3.5 w-3.5" /> Foco PRO
         </TabsTrigger>
       </TabsList>
 
@@ -49,6 +55,9 @@ export function UploadTabs() {
       </TabsContent>
       <TabsContent value="focus" className="mt-6">
         <FocusInput />
+      </TabsContent>
+      <TabsContent value="focus-pro" className="mt-6">
+        <FocusInput forcePro />
       </TabsContent>
     </Tabs>
   );

@@ -1,16 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Crosshair, FileCode2, Folder, Loader2 } from "lucide-react";
+import { Crosshair, FileCode2, Folder, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { analyzeFocus, resolveDemoMode } from "@/lib/api";
+import { analyzeFocus, persistDemoMode, resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export function FocusInput() {
+interface FocusInputProps {
+  /** TEMPORAL — para testing del modo PRO sin tener que tocar la URL.
+   *  Cuando es true, el botón "Analizar FOCO" persiste demoMode="pro"
+   *  antes de iniciar el análisis y navega al map con &demo=pro.
+   *  TODO: sacar cuando exista billing real. */
+  forcePro?: boolean;
+}
+
+export function FocusInput({ forcePro = false }: FocusInputProps = {}) {
   const router = useRouter();
   const [projectPath, setProjectPath] = useState("");
   const [focusFile, setFocusFile] = useState("");
@@ -38,7 +46,10 @@ export function FocusInput() {
     if (isAnalyzing) return;
 
     setIsAnalyzing(true);
-    const demoMode = resolveDemoMode();
+    // TEMPORAL — forcePro override pinches sessionStorage so the rest of the
+    // flow (analyze → map → SSE) sees pro mode without URL params.
+    if (forcePro) persistDemoMode("pro");
+    const demoMode = forcePro ? "pro" : resolveDemoMode();
     let sessionId: string;
     try {
       const res = await analyzeFocus({
@@ -100,8 +111,9 @@ export function FocusInput() {
       </div>
 
       <p className="text-xs text-[var(--fg-muted)]">
-        Modo FOCO: rastreamos las dependencias directas (nivel 1) del archivo
-        elegido.
+        Modo FOCO{forcePro ? " PRO" : ""}: rastreamos las dependencias directas
+        (nivel 1) del archivo elegido
+        {forcePro ? " — sin tope de conexiones" : ""}.
       </p>
 
       <Button
@@ -119,6 +131,11 @@ export function FocusInput() {
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Analizando...
+          </>
+        ) : forcePro ? (
+          <>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Analizar FOCO PRO
           </>
         ) : (
           <>
