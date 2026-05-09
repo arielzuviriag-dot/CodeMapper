@@ -17,6 +17,27 @@ import type {
   SheetMode,
   UnresolvedReferencePayload,
 } from "@/lib/types";
+import type { AnalyzeFocusResponse } from "@/lib/api";
+
+/** Live POST that's flying to the backend while the user has already been
+ *  navigated to the map screen. The map page consumes this when the URL
+ *  sessionId is "pending" — it awaits the promise, then router.replace's
+ *  to the real session URL. The point is to remove the "blank screen
+ *  while we wait for the analyze POST" delay between clicking and seeing
+ *  the streaming UI. */
+export interface PendingAnalysis {
+  promise: Promise<AnalyzeFocusResponse>;
+  /** Short text shown in the loading screen ("Analizando User.java..."). */
+  description: string;
+  /** Mode the map should be in once we know the sessionId. */
+  mode: "focus" | "focus-method" | "project";
+  /** Demo flag carried through so the redirect URL keeps it. */
+  demo?: "pro";
+  /** For FOCUS modes — the absolute project path the FOCO SCANER button
+   *  needs once the user is already in the map. Persisted into the store
+   *  by the analyzers; the map carries it over after the redirect. */
+  projectPath?: string;
+}
 
 /** F-deep — single diagnostic surface from the backend (body of the SSE
  *  payload, with the wrapper unwrapped). Drives DiagnosticsPanel. */
@@ -120,6 +141,10 @@ interface GraphState {
    *  release. Centralized here so any component (graph, modal, badge) can
    *  read the same source of truth instead of duplicating useState. */
   isPro: boolean;
+  /** Live analyze POST that the home flow already navigated past. The map
+   *  page reads this when the URL sessionId is the literal "pending"
+   *  placeholder. Null at rest. */
+  pendingAnalysis: PendingAnalysis | null;
   /** Major Java version detected from the project manifest, set when SSE
    *  emits `session_start`. Null when no manifest was parseable. Drives
    *  per-feature compatibility decisions and the JavaVersionBadge UI. */
@@ -198,6 +223,7 @@ interface GraphState {
   markUserInteracted: () => void;
   resetUserInteraction: () => void;
   setIsPro: (pro: boolean) => void;
+  setPendingAnalysis: (p: PendingAnalysis | null) => void;
   setDetectedJavaVersion: (version: string | null) => void;
   setShowTests: (show: boolean) => void;
   setImpactReport: (report: ImpactReport | null) => void;
@@ -344,6 +370,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   layoutResetTick: 0,
   version: 0,
   isPro: false,
+  pendingAnalysis: null,
   detectedJavaVersion: null,
   showTests: false,
   impactReport: null,
@@ -601,11 +628,16 @@ export const useGraphStore = create<GraphState>((set) => ({
   addFocusConnection: (conn) =>
     set((state) => {
       if (state.focusConnections.some((c) => c.id === conn.id)) return state;
+      // Stamp wall-clock arrival time so FocusEdge can drive its draw
+      // animation off elapsed-since-arrival rather than mount time. This
+      // is what makes the edge animation idempotent under ReactFlow's
+      // spurious edge-layer remounts.
+      const stamped = { ...conn, firstSeenAt: Date.now() };
       const nextNodes = new Map(state.nodes);
       // Always overwrite — peripheral data is the latest version of that node.
-      nextNodes.set(conn.id, focusConnToClassNode(conn));
+      nextNodes.set(stamped.id, focusConnToClassNode(stamped));
       return {
-        focusConnections: [...state.focusConnections, conn],
+        focusConnections: [...state.focusConnections, stamped],
         nodes: nextNodes,
         version: state.version + 1,
       };
@@ -658,6 +690,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   resetUserInteraction: () => set({ userInteracted: false }),
 
   setIsPro: (pro) => set({ isPro: pro }),
+  setPendingAnalysis: (p) => set({ pendingAnalysis: p }),
   setDetectedJavaVersion: (version) => set({ detectedJavaVersion: version }),
   setShowTests: (show) => set({ showTests: show }),
   setImpactReport: (report) => set({ impactReport: report }),

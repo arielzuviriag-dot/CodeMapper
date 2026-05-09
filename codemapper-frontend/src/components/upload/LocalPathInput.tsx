@@ -15,29 +15,27 @@ export function LocalPathInput() {
   const [path, setPath] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const onAnalyze = async () => {
-    if (!path.trim()) {
+  const onAnalyze = () => {
+    const trimmed = path.trim();
+    if (!trimmed) {
       toast.error("Ingresá una ruta local");
       return;
     }
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     const demoMode = resolveDemoMode();
-    const trimmed = path.trim();
-    let sessionId: string;
-    try {
-      const res = await analyzeLocalPath(trimmed, demoMode);
-      sessionId = res.sessionId;
-    } catch {
-      // toast handled by interceptor — allow retry
-      setIsAnalyzing(false);
-      return;
-    }
-    // Persist for the FOCO SCANER button on the map page (it needs the
-    // absolute project path to compute relative focus file paths).
-    useGraphStore.getState().setProjectPath(trimmed);
+    // Fire-and-forget POST. The map page consumes the promise via
+    // pendingAnalysis under sessionId="pending" and redirects when ready.
+    const promise = analyzeLocalPath(trimmed, demoMode);
+    useGraphStore.getState().setPendingAnalysis({
+      promise,
+      description: `Analizando ${trimmed.split(/[\\/]/).pop() ?? trimmed}...`,
+      mode: "project",
+      demo: demoMode === "pro" ? "pro" : undefined,
+      projectPath: trimmed,
+    });
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
-    router.push(`/map/${sessionId}${suffix}`);
+    router.push(`/map/pending${suffix}`);
   };
 
   return (

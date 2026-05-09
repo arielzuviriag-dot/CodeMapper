@@ -145,7 +145,8 @@ function FocusGraphInner() {
       });
       // Floating edge — no sourceHandle/targetHandle. FocusEdge computes its
       // own endpoints from node centers so the line follows when the radial
-      // layout rebalances, without ReactFlow remounting the component.
+      // layout rebalances. firstSeenAt is forwarded so the draw animation is
+      // wall-clock driven and idempotent under ReactFlow's edge-layer remounts.
       peripheralEdges.push({
         id: `focus-edge-${conn.id}`,
         source: focusClass.id,
@@ -158,6 +159,7 @@ function FocusGraphInner() {
           viaMethodInTarget: conn.viaMethodInTarget ?? null,
           isTest: conn.isTest ?? false,
           isMock: conn.isMock ?? false,
+          firstSeenAt: conn.firstSeenAt ?? Date.now(),
         },
       });
     });

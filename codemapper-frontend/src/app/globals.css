@@ -259,22 +259,16 @@
 }
 
 /* ============================================================
- * FOCUS mode — radial edge "draw" animation.
- * Uses CSS variable --cm-focus-delay (set inline per edge in
- * FocusEdge) so each edge starts drawing at its own time.
+ * FOCUS mode — edge draw animation is JS-driven (FocusEdge sets
+ * strokeDashoffset/opacity inline based on wall-clock elapsed
+ * since the connection arrived in the store). The previous
+ * @keyframes/.cm-focus-edge-path block lived here but couldn't
+ * survive ReactFlow's edge-layer remounts on layout rebalance —
+ * each remount restarted the CSS animation from zero, producing
+ * the "three waves" flicker (BUG_PENDIENTE_OLAS_STREAMING.md).
+ * The class name `.cm-focus-edge-path` is still used by the
+ * hover rule below to scope the drop-shadow.
  * ============================================================ */
-@keyframes cm-focus-edge-draw {
-  from { stroke-dashoffset: 1500; opacity: 0; }
-  20%   { opacity: 1; }
-  to    { stroke-dashoffset: 0; opacity: 1; }
-}
-.cm-focus-edge-path {
-  stroke-dasharray: 1500;
-  stroke-dashoffset: 1500;
-  opacity: 0;
-  animation: cm-focus-edge-draw 700ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: var(--cm-focus-delay, 0s);
-}
 @keyframes cm-focus-edge-label-fade {
   from { opacity: 0; }
   to { opacity: 0.5; }

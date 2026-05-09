@@ -50,25 +50,26 @@ export function FocusInput({ forcePro = false }: FocusInputProps = {}) {
     // flow (analyze → map → SSE) sees pro mode without URL params.
     if (forcePro) persistDemoMode("pro");
     const demoMode = forcePro ? "pro" : resolveDemoMode();
-    let sessionId: string;
-    try {
-      const res = await analyzeFocus({
-        projectPath: trimmedProject,
-        focusFile: trimmedFocus,
-        demoMode,
-      });
-      sessionId = res.sessionId;
-    } catch {
-      // toast already shown by axios interceptor
-      setIsAnalyzing(false);
-      return;
-    }
-    // Persist for the FOCO SCANER button on the map page (it needs the
-    // absolute project path to compute relative focus file paths).
-    useGraphStore.getState().setProjectPath(trimmedProject);
+    // Fire the POST without awaiting it. The promise lives on the store via
+    // setPendingAnalysis; the map page picks it up under sessionId="pending"
+    // and redirects to the real session URL once it resolves. Net effect:
+    // the user sees the map screen immediately, with the analyzer status
+    // already streaming once the POST returns the sessionId.
+    const promise = analyzeFocus({
+      projectPath: trimmedProject,
+      focusFile: trimmedFocus,
+      demoMode,
+    });
+    useGraphStore.getState().setPendingAnalysis({
+      promise,
+      description: `Analizando ${trimmedFocus.split(/[\\/]/).pop() ?? trimmedFocus}...`,
+      mode: "focus",
+      demo: demoMode === "pro" ? "pro" : undefined,
+      projectPath: trimmedProject,
+    });
     const params = new URLSearchParams({ mode: "focus" });
     if (demoMode === "pro") params.set("demo", "pro");
-    router.push(`/map/${sessionId}?${params.toString()}`);
+    router.push(`/map/pending?${params.toString()}`);
   };
 
   return (

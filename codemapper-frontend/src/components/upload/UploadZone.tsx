@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { resolveDemoMode, uploadProject } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -46,21 +47,23 @@ export function UploadZone() {
   const [dbDocs, setDbDocs] = useState<PreparedUpload | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const onAnalyze = async () => {
+  const onAnalyze = () => {
     if (!backend || isAnalyzing) return;
     setIsAnalyzing(true);
     const demoMode = resolveDemoMode();
-    let sessionId: string;
-    try {
-      const res = await uploadProject(backend.file, demoMode);
-      sessionId = res.sessionId;
-    } catch {
-      // toast already shown by interceptor — allow retry
-      setIsAnalyzing(false);
-      return;
-    }
+    // Fire-and-forget POST (with the multipart upload still pending). The
+    // map page consumes the promise via pendingAnalysis under
+    // sessionId="pending" and redirects to the real session URL when the
+    // upload finishes and the backend returns the sessionId.
+    const promise = uploadProject(backend.file, demoMode);
+    useGraphStore.getState().setPendingAnalysis({
+      promise,
+      description: `Subiendo ${backend.description}...`,
+      mode: "project",
+      demo: demoMode === "pro" ? "pro" : undefined,
+    });
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
-    router.push(`/map/${sessionId}${suffix}`);
+    router.push(`/map/pending${suffix}`);
   };
 
   return (

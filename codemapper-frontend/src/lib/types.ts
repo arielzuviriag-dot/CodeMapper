@@ -266,6 +266,14 @@ export interface FocusConnectionPayload {
    *  field annotated @Mock/@MockBean/@SpyBean/@InjectMocks whose type
    *  matches the focus). Drives the mask icon on the edge. */
   isMock?: boolean;
+  /** Wall-clock timestamp (ms) of when this connection first arrived in the
+   *  store. Set by addFocusConnection on insert. Drives the edge's draw
+   *  animation independently of the React component lifecycle: even if the
+   *  edge component is remounted by ReactFlow's edge-layer rebuild, the new
+   *  instance reads firstSeenAt and computes "I should be at progress N"
+   *  rather than restarting from zero. Without this, the animation visibly
+   *  flickers each time the radial layout rebalances. */
+  firstSeenAt?: number;
 }
 
 /** F-deep — diagnostic finding from deep body analysis. Three kinds:

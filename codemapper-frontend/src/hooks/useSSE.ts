@@ -60,6 +60,10 @@ export function useSSE(sessionId: string | null) {
 
   useEffect(() => {
     if (!sessionId) return;
+    // "pending" is the placeholder URL the map page sits on while the
+    // analyze POST is still in flight. There's no backend session yet — the
+    // map page itself awaits the pendingAnalysis promise and redirects.
+    if (sessionId === "pending") return;
 
     setStatus("streaming");
     setStats({ parseStartTime: Date.now() });

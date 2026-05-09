@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { analyzeGithub, resolveDemoMode } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -14,25 +15,26 @@ export function GitHubInput() {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const onAnalyze = async () => {
-    if (!url.trim()) {
+  const onAnalyze = () => {
+    const trimmed = url.trim();
+    if (!trimmed) {
       toast.error("Ingresá una URL de GitHub");
       return;
     }
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     const demoMode = resolveDemoMode();
-    let sessionId: string;
-    try {
-      const res = await analyzeGithub(url.trim(), demoMode);
-      sessionId = res.sessionId;
-    } catch {
-      // toast handled by interceptor — allow retry
-      setIsAnalyzing(false);
-      return;
-    }
+    // Fire-and-forget POST. The map page consumes the promise via
+    // pendingAnalysis under sessionId="pending" and redirects when ready.
+    const promise = analyzeGithub(trimmed, demoMode);
+    useGraphStore.getState().setPendingAnalysis({
+      promise,
+      description: `Clonando ${trimmed.split("/").slice(-2).join("/")}...`,
+      mode: "project",
+      demo: demoMode === "pro" ? "pro" : undefined,
+    });
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
-    router.push(`/map/${sessionId}${suffix}`);
+    router.push(`/map/pending${suffix}`);
   };
 
   return (

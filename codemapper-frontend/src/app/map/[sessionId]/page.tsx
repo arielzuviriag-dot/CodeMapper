@@ -96,6 +96,45 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  // Pending-analysis handoff: when the URL is /map/pending the analyzer
+  // already navigated us here and parked the in-flight POST in the store.
+  // Wait for it, set the FOCUS-mode projectPath if applicable, then
+  // router.replace to the real session URL. If there's no pending (user
+  // landed on /map/pending directly via URL bar), bounce home.
+  useEffect(() => {
+    if (sessionId !== "pending") return;
+    const pending = useGraphStore.getState().pendingAnalysis;
+    if (!pending) {
+      router.replace("/");
+      return;
+    }
+    let cancelled = false;
+    pending.promise
+      .then((res) => {
+        if (cancelled) return;
+        if (pending.projectPath) {
+          useGraphStore.getState().setProjectPath(pending.projectPath);
+        }
+        useGraphStore.getState().setPendingAnalysis(null);
+        const next = new URLSearchParams();
+        if (pending.mode === "focus") next.set("mode", "focus");
+        if (pending.mode === "focus-method") next.set("mode", "focus-method");
+        if (pending.demo) next.set("demo", pending.demo);
+        const qs = next.toString();
+        router.replace(`/map/${res.sessionId}${qs ? `?${qs}` : ""}`);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Toast already shown by axios interceptor.
+        useGraphStore.getState().setPendingAnalysis(null);
+        router.replace("/");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
   // Once we have any data, the FOCO SCANER chain flag has done its job.
   // (The flag is no longer used to render anything; cleared for hygiene.)
   useEffect(() => {

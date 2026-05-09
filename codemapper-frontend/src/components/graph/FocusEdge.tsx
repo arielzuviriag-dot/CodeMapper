@@ -1,6 +1,12 @@
 "use client";
 
-import { memo, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   EdgeLabelRenderer,
   getStraightPath,
@@ -15,6 +21,11 @@ import { useGraphStore } from "@/store/graphStore";
 interface FocusEdgeData extends Record<string, unknown> {
   connectionType: FocusConnectionType;
   index: number;
+  /** Wall-clock ms (Date.now()) of when the connection arrived in the
+   *  store. The draw animation is computed off elapsed-since-this-time
+   *  rather than mount time — that's what survives the spurious remounts
+   *  ReactFlow does on its edge layer when node positions shift. */
+  firstSeenAt: number;
   /** Method on the source side that produces the relationship. Rendered as
    *  the secondary label so the user sees which method does the call. */
   viaMethodInSource?: string | null;
@@ -43,15 +54,14 @@ const TYPE_STYLE: Record<
   INVOKES_OUTGOING: { stroke: "#B91C42", width: 2, label: "Invoca" },
 };
 
-// STAGGER stays at 0: the moment we make it cumulative again (e.g. 0.5s ×
-// index) we re-introduce the "three waves" bug — by the 30th edge the
-// total ramp is 15s+ and remounts catch animations mid-flight, restarting
-// them visibly. Root cause of the remount is in BUG_PENDIENTE_OLAS_STREAMING.md.
-// BASE_DELAY gives every edge a small fixed head start so the peripheral
-// node card paints before its line starts drawing — without it the line
-// races the node into existence and shows up first, which reads weird.
-const STAGGER_S = 0;
-const BASE_DELAY_S = 0.35;
+// Wall-clock animation timings, in ms. The draw doesn't use the cumulative
+// stagger pattern that bit us before — sequencing comes naturally from each
+// edge's own firstSeenAt (which the backend paces ~60ms apart via SSE).
+// ANIM_DELAY_MS gives the peripheral card ~350ms to finish its CSS entrance
+// before the line starts drawing, so the storytelling is "class arrives, then
+// it connects".
+const ANIM_DURATION_MS = 700;
+const ANIM_DELAY_MS = 350;
 
 /** Connection types where the *peripheral* is the caller and the focus is the
  *  callee — the arrow head should sit on the focus side (markerStart) so the
@@ -161,7 +171,44 @@ function FocusEdgeComponent({
     targetX: tx,
     targetY: ty,
   });
-  const delaySec = BASE_DELAY_S + (edgeData.index ?? 0) * STAGGER_S;
+
+  // Wall-clock animation. progress ∈ [0,1] is "how far through the draw
+  // animation we should be at this exact moment, given when the connection
+  // first arrived". On a fresh mount we initialise to the right progress;
+  // we only run a rAF loop while we still have animating to do. Crucially,
+  // if ReactFlow remounts the edge mid-stream, the new instance reads
+  // firstSeenAt from data, recomputes progress (which by then is probably
+  // already 1), and renders the final state — no flicker.
+  const firstSeenAt = edgeData.firstSeenAt ?? Date.now();
+  const computeProgress = () => {
+    const elapsed = Date.now() - firstSeenAt - ANIM_DELAY_MS;
+    return Math.max(0, Math.min(1, elapsed / ANIM_DURATION_MS));
+  };
+  const [progress, setProgress] = useState(computeProgress);
+  const rafRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (progress >= 1) return;
+    const tick = () => {
+      const p = computeProgress();
+      setProgress(p);
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        rafRef.current = null;
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstSeenAt]);
+
+  // Path inline style. opacity ramps to 1 at 20% of progress so the line
+  // fades in fast then takes the rest of the duration to actually draw,
+  // matching the keyframes the CSS version had.
+  const dashOffset = 1500 * (1 - progress);
+  const opacity = Math.min(1, progress * 5);
 
   // Pick the most informative method-level annotation per direction.
   // The chip surfaces the method that owns the relationship — clicking it
@@ -263,10 +310,7 @@ function FocusEdgeComponent({
     <>
       <g
         className="cm-focus-edge-group"
-        style={{
-          color: style.stroke,
-          ["--cm-focus-delay" as string]: `${delaySec}s`,
-        }}
+        style={{ color: style.stroke }}
       >
         <defs>
           {/* Filled triangle, apex at refX=10 so the tip lands on the line.
@@ -304,6 +348,8 @@ function FocusEdgeComponent({
             stroke: style.stroke,
             strokeWidth: style.width,
             strokeDasharray: style.dash ?? "1500",
+            strokeDashoffset: dashOffset,
+            opacity,
           }}
         />
       </g>
