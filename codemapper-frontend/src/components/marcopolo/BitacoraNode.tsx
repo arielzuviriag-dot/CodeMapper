@@ -1,0 +1,100 @@
+"use client";
+
+import { memo, useMemo, useState } from "react";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Anchor } from "lucide-react";
+import { useBitacoraStore } from "@/store/bitacoraStore";
+
+interface BitacoraNodeData extends Record<string, unknown> {
+  className: string;
+  isOrigen: boolean;
+  isActive: boolean;
+}
+
+/**
+ * Node for the bitácora tree. Three visual states:
+ *  • ORIGEN — 65px circle, bordó fill, anchor icon under the name. Always
+ *    at the center of the panel and never moves.
+ *  • VISITADO — 38px circle, neutral silver. The bulk of the tree.
+ *  • ACTIVO  — 38px circle, slightly more saturated, plus a pulsing bordó
+ *    ring (CSS animation) so the user can spot "where am I" at a glance.
+ *
+ * Tooltip on hover: full class name + visit count (= number of edges where
+ * this node is the target). Visit count is computed off the store directly
+ * so it stays live as new jumps land.
+ */
+function BitacoraNodeComponent({ data }: NodeProps) {
+  const { className, isOrigen, isActive } = data as BitacoraNodeData;
+  const [hovered, setHovered] = useState(false);
+
+  // Visit count = how many edges land on this node. The origen has 0 by
+  // definition (you never "land" on it via a jump — it's where you started).
+  const visitCount = useBitacoraStore((s) =>
+    s.edges.reduce((acc, e) => (e.target === className ? acc + 1 : acc), 0),
+  );
+
+  const size = isOrigen ? 65 : 38;
+  const ringClass = isActive ? "cm-bitacora-active-ring" : "";
+
+  // Background: bordó for origen, silver tones for the rest. Active gets
+  // a small saturation bump so it pops vs the plain visited nodes.
+  const bgClass = useMemo(() => {
+    if (isOrigen) return "bg-[var(--bordo)] text-white";
+    if (isActive) return "bg-[var(--silver)] text-[var(--bg-base)]";
+    return "bg-[var(--silver-mid)] text-[var(--bg-base)]";
+  }, [isOrigen, isActive]);
+
+  return (
+    <div
+      className="relative flex flex-col items-center"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Hidden source/target handles — React Flow needs them to anchor edges,
+          but we don't render any visible UI. Edges use the floating-edge math
+          inside BitacoraEdge so the handle position is irrelevant. */}
+      <Handle type="source" position={Position.Top} className="!opacity-0" />
+      <Handle type="target" position={Position.Top} className="!opacity-0" />
+
+      <div
+        className={`flex items-center justify-center rounded-full border border-[var(--border-silver)] font-mono font-semibold uppercase shadow-[var(--shadow-md)] transition-transform ${bgClass} ${ringClass}`}
+        style={{
+          width: size,
+          height: size,
+          fontSize: isOrigen ? "10px" : "8px",
+          letterSpacing: "0.06em",
+        }}
+        aria-label={`${className}${isOrigen ? " (origen)" : ""}${isActive ? " (activo)" : ""}`}
+      >
+        <span className="px-1 text-center leading-tight break-all">
+          {/* Truncate display name — full name lives in the tooltip. */}
+          {className.length > (isOrigen ? 11 : 7)
+            ? className.slice(0, isOrigen ? 11 : 7) + "…"
+            : className}
+        </span>
+      </div>
+
+      {isOrigen && (
+        <div className="mt-1 flex items-center gap-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-[var(--bordo)]">
+          <Anchor className="h-2.5 w-2.5" strokeWidth={2.4} />
+          <span>Origen</span>
+        </div>
+      )}
+
+      {hovered && (
+        <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-sm border border-[var(--border-silver)] bg-[var(--bg-panel)] px-2 py-1 font-mono text-[10px] text-[var(--fg-primary)] shadow-[var(--shadow-lg)]">
+          <div className="font-semibold">{className}</div>
+          <div className="text-[9px] text-[var(--silver-mid)]">
+            {visitCount === 0
+              ? isOrigen
+                ? "Punto de partida"
+                : "Sin visitas registradas"
+              : `${visitCount} visita${visitCount === 1 ? "" : "s"}`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const BitacoraNode = memo(BitacoraNodeComponent);

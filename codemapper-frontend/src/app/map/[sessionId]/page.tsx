@@ -6,7 +6,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertCircle,
   ArrowLeft,
+  ChevronRight,
   Crosshair,
   Download,
   FileText,
@@ -26,7 +28,19 @@ import { FilterPanel } from "@/components/graph/FilterPanel";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
-import { exportFocoPdf, resolveDemoMode } from "@/lib/api";
+import { DiagnosticsContent } from "@/components/graph/DiagnosticsPanel";
+import { Bitacora } from "@/components/marcopolo/Bitacora";
+import { BitacoraIndicator } from "@/components/marcopolo/BitacoraIndicator";
+import { ArbolHistorialBlock } from "@/components/marcopolo/ArbolHistorialBlock";
+import { useBitacoraStore } from "@/store/bitacoraStore";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { exportFocoMethodPdf, exportFocoPdf, resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useSSE } from "@/hooks/useSSE";
 
@@ -108,6 +122,12 @@ export default function MapPage() {
       router.replace("/");
       return;
     }
+    // A "pending" landing means the user just clicked Analizar on the home
+    // — that's a brand-new Marco Polo session, so wipe the bitácora before
+    // the SSE starts emitting focus_class_loaded (which would seed the new
+    // origen). Jumps from a sheet skip this code path entirely (they go
+    // straight from /map/X to /map/Y via router.replace).
+    useBitacoraStore.getState().reset();
     let cancelled = false;
     pending.promise
       .then((res) => {
@@ -210,7 +230,42 @@ export default function MapPage() {
     }
   };
 
+  const onDownloadMethodPdf = async () => {
+    if (!focusMethod || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const blob = await exportFocoMethodPdf({
+        focusMethod,
+        connections: focusConnections,
+        pro: isPro,
+        limitApplied: limitReached.reached,
+        totalAvailable:
+          limitReached.totalAvailable > 0
+            ? limitReached.totalAvailable
+            : focusConnections.length,
+      });
+      const url = URL.createObjectURL(blob);
+      const today = new Date().toISOString().slice(0, 10);
+      const safeName = `${focusMethod.containingClass}-${focusMethod.methodName}`
+        .replace(/[^A-Za-z0-9._-]/g, "_");
+      const tier = isPro ? "PRO" : "FREE";
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `codemapper-foco-metodo-${safeName}-${tier}-${today}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[CodeMapper] method PDF export failed", err);
+      toast.error("No se pudo generar el PDF del método");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const canDownloadPdf = focusMode && !focusMethodMode && focusClass !== null;
+  const canDownloadMethodPdf = focusMethodMode && focusMethod !== null;
 
   const headerProjectLabel = focusMethodMode
     ? focusMethod
@@ -270,11 +325,11 @@ export default function MapPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {canDownloadPdf && (
+            {(canDownloadPdf || canDownloadMethodPdf) && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onDownloadPdf}
+                onClick={canDownloadMethodPdf ? onDownloadMethodPdf : onDownloadPdf}
                 disabled={isExportingPdf}
                 className="border-[var(--border-silver)] bg-transparent text-xs uppercase tracking-[0.14em] hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)] disabled:opacity-60"
               >
@@ -317,10 +372,16 @@ export default function MapPage() {
           <aside className="hidden w-[280px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[var(--border-silver)] bg-[var(--bg-base)] p-3 lg:flex">
             <ParseProgress />
             {focusMethodMode ? (
-              <FocusMethodSidebarInfo />
+              <>
+                <FocusMethodSidebarInfo />
+                <FocusDiagnosticsBlock />
+                <ArbolHistorialBlock />
+              </>
             ) : focusMode ? (
               <>
                 <FocusSidebarInfo />
+                <FocusDiagnosticsBlock />
+                <ArbolHistorialBlock />
                 <FocusFieldsBlock />
                 <FocusConstructorsBlock />
                 <FocusMethodsBlock />
@@ -351,8 +412,14 @@ export default function MapPage() {
                     focusClass !== null ||
                     focusMethod !== null
                   : nodeCount > 0) && (
-                  <div className="absolute bottom-4 left-4 z-20 w-[260px]">
-                    <StreamingIndicator />
+                  <div className="absolute bottom-4 left-4 z-20 flex items-end gap-2">
+                    <div className="w-[260px]">
+                      <StreamingIndicator />
+                    </div>
+                    {/* Bitácora indicator — only renders when the bitácora
+                        has at least the origen, so it sits next to the
+                        StreamingIndicator without taking space when empty. */}
+                    {inAnyFocusMode && <BitacoraIndicator />}
                   </div>
                 )}
             </AnimatePresence>
@@ -360,6 +427,11 @@ export default function MapPage() {
         </div>
 
         <ClassDetailSheet />
+        {/* Bitácora panel — fixed-positioned floating modal, lives at the
+            page root so it can render above the graph regardless of which
+            focus mode is active. Hidden until the user opens it via the
+            indicator. */}
+        <Bitacora />
       </main>
     </ErrorBoundary>
   );
@@ -677,6 +749,65 @@ function FocusSidebarInfo() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Sidebar trigger card for the diagnostics view. Shows a count badge and
+ *  opens a Sheet on the right with the full DiagnosticsContent. Hidden when
+ *  there are no findings — matches the previous floating-panel behavior. */
+function FocusDiagnosticsBlock() {
+  const diagnosticsCount = useGraphStore((s) => s.diagnostics.length);
+  const [open, setOpen] = useState(false);
+
+  if (diagnosticsCount === 0) return null;
+
+  return (
+    <>
+      <motion.button
+        type="button"
+        onClick={() => setOpen(true)}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="cm-hairline-top group flex items-center justify-between gap-2 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] px-3 py-2.5 text-left transition-colors hover:border-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
+      >
+        <span className="flex items-center gap-2">
+          <AlertCircle className="h-3.5 w-3.5 text-[var(--bordo)]" />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--silver-dark)] group-hover:text-[var(--bordo)]">
+            Diagnóstico
+          </span>
+          <span className="rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-1.5 py-0.5 font-mono text-[9px] tabular-nums text-[var(--bordo)]">
+            {diagnosticsCount}
+          </span>
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 text-[var(--silver-dark)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--bordo)]" />
+      </motion.button>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col border-l border-[var(--border-silver)] bg-[var(--bg-card)] p-0 sm:max-w-2xl"
+        >
+          <SheetHeader className="cm-hairline-top border-b border-[var(--border-silver)] py-4 pl-6 pr-12">
+            <SheetTitle className="flex items-center gap-2 text-[var(--fg-primary)]">
+              <AlertCircle className="h-5 w-5 text-[var(--bordo)]" />
+              <span className="font-mono text-base">
+                Diagnóstico
+                <span className="ml-2 rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-[var(--bordo)]">
+                  {diagnosticsCount}
+                </span>
+              </span>
+            </SheetTitle>
+            <SheetDescription className="font-mono text-xs text-[var(--silver-dark)]">
+              Hallazgos del análisis profundo que el parser no pudo confirmar.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <DiagnosticsContent />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 

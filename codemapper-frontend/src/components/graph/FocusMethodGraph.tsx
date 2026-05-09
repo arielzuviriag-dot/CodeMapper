@@ -30,17 +30,22 @@ const EDGE_TYPES = {
 };
 
 /* ============================================================
- * Two-column layout: incoming callers on the LEFT of the focus
- * method, outgoing calls on the RIGHT. Each column stacks its
- * peripherals vertically, centered around the focus node, so the
- * graph reads like a sentence: "X, Y, Z call ME, and I call A, B".
+ * Radial layout — focus method at the origin, peripherals on a
+ * ring around it. Same shape as FocusGraph (class-focus mode) so
+ * the user reads both modes the same way. Edges are floating
+ * (no sourceHandle/targetHandle) — FocusEdge computes its own
+ * endpoints from node centers via rect intersection.
  * ============================================================ */
 const CENTER_W = 320;
 const CENTER_H = 110;
 const PERIPHERAL_W = 220;
 const PERIPHERAL_H = 150;
-const COLUMN_X = 460;
-const ROW_GAP = 200;
+
+function radiusFor(count: number): number {
+  if (count <= 6) return 540;
+  if (count <= 10) return 620;
+  return 620 + (count - 10) * 32;
+}
 
 function FocusMethodGraphInner() {
   const focusMethod = useGraphStore((s) => s.focusMethod);
@@ -69,105 +74,53 @@ function FocusMethodGraphInner() {
     };
 
     // Honour both legends — drop peripherals whose class kind OR connection
-    // type is unchecked before splitting into columns, so the layout stays
-    // tight.
+    // type is unchecked before computing the radius, so the spacing reflects
+    // what's actually drawn.
     const visibleConnections = focusConnections.filter(
       (c) =>
         classTypeFilters[c.type] !== false &&
         focusConnectionTypeFilters[c.connectionType] !== false,
     );
-    // Split connections into the two columns. INVOKES_METHOD is the legacy
-    // "incoming caller" type; INVOKES_OUTGOING is the new "this method calls
-    // X" side. Anything else falls back to outgoing for safety.
-    const incoming = visibleConnections.filter(
-      (c) => c.connectionType === "INVOKES_METHOD",
-    );
-    const outgoing = visibleConnections.filter(
-      (c) => c.connectionType === "INVOKES_OUTGOING",
-    );
-    const other = visibleConnections.filter(
-      (c) =>
-        c.connectionType !== "INVOKES_METHOD" &&
-        c.connectionType !== "INVOKES_OUTGOING",
-    );
+    const N = visibleConnections.length;
+    const radius = radiusFor(N);
 
-    const stackY = (i: number, total: number) =>
-      (i - (total - 1) / 2) * ROW_GAP;
-
-    const incomingNodes: Node[] = incoming.map((conn, i) => ({
-      id: conn.id,
-      type: "focusPeripheral",
-      position: {
-        x: -COLUMN_X - PERIPHERAL_W / 2,
-        y: stackY(i, incoming.length) - PERIPHERAL_H / 2,
-      },
-      width: PERIPHERAL_W,
-      height: PERIPHERAL_H,
-      data: { payload: conn, index: i },
-      draggable: false,
-    }));
-
-    const outgoingNodes: Node[] = outgoing.map((conn, i) => ({
-      id: conn.id,
-      type: "focusPeripheral",
-      position: {
-        x: COLUMN_X - PERIPHERAL_W / 2,
-        y: stackY(i, outgoing.length) - PERIPHERAL_H / 2,
-      },
-      width: PERIPHERAL_W,
-      height: PERIPHERAL_H,
-      data: { payload: conn, index: incoming.length + i },
-      draggable: false,
-    }));
-
-    // Defensive: if a connection doesn't fall into either bucket (shouldn't
-    // happen for method-focus mode), drop it to the right column so it stays
-    // visible rather than silently disappearing.
-    const otherNodes: Node[] = other.map((conn, i) => ({
-      id: conn.id,
-      type: "focusPeripheral",
-      position: {
-        x: COLUMN_X - PERIPHERAL_W / 2,
-        y:
-          stackY(outgoing.length + i, outgoing.length + other.length) -
-          PERIPHERAL_H / 2,
-      },
-      width: PERIPHERAL_W,
-      height: PERIPHERAL_H,
-      data: { payload: conn, index: incoming.length + outgoing.length + i },
-      draggable: false,
-    }));
-
-    // Peripherals only expose target handles; keep the line as focus →
-    // peripheral and let FocusEdge swap the arrow marker (start vs end) to
-    // show whether this is an incoming caller or an outgoing call. Choose
-    // the handle pair based on which column the peripheral lives in so the
-    // line meets each card on its inner edge instead of the top handle.
-    const buildEdge = (
-      conn: (typeof focusConnections)[number],
-      i: number,
-    ): Edge => {
-      const isLeft = conn.connectionType === "INVOKES_METHOD";
-      return {
+    const peripheralNodes: Node[] = [];
+    const peripheralEdges: Edge[] = [];
+    visibleConnections.forEach((conn, i) => {
+      const angle = -Math.PI / 2 + (i / Math.max(N, 1)) * 2 * Math.PI;
+      const cx = radius * Math.cos(angle);
+      const cy = radius * Math.sin(angle);
+      peripheralNodes.push({
+        id: conn.id,
+        type: "focusPeripheral",
+        position: { x: cx - PERIPHERAL_W / 2, y: cy - PERIPHERAL_H / 2 },
+        width: PERIPHERAL_W,
+        height: PERIPHERAL_H,
+        data: { payload: conn, index: i },
+        draggable: false,
+      });
+      // Floating edge — no sourceHandle/targetHandle. FocusEdge computes
+      // endpoints from node centers via rect intersection. Same approach as
+      // FocusGraph, sidesteps the ReactFlow remount-on-handle-change bug.
+      peripheralEdges.push({
         id: `focus-method-edge-${conn.id}`,
         source: focusMethod.id,
-        sourceHandle: isLeft ? "src-left" : "src-right",
         target: conn.id,
-        targetHandle: isLeft ? "tgt-right" : "tgt-left",
         type: "focusEdge",
         data: {
           connectionType: conn.connectionType,
           index: i,
           viaMethodInSource: conn.viaMethodInSource ?? null,
           viaMethodInTarget: conn.viaMethodInTarget ?? null,
+          // Wall-clock anchor for the draw animation — without this, FocusEdge
+          // falls back to Date.now() each render and progress stays at 0.
+          firstSeenAt: conn.firstSeenAt ?? Date.now(),
         },
-      };
-    };
-
-    const peripheralEdges: Edge[] = visibleConnections.map(buildEdge);
+      });
+    });
 
     return {
-      nodes: [centerNode, ...incomingNodes, ...outgoingNodes, ...otherNodes],
+      nodes: [centerNode, ...peripheralNodes],
       edges: peripheralEdges,
     };
   }, [focusMethod, focusConnections, classTypeFilters, focusConnectionTypeFilters]);

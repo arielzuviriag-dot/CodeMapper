@@ -1,9 +1,9 @@
 package com.codemapper.service;
 
 import com.codemapper.model.domain.FocusConnectionType;
-import com.codemapper.model.dto.FocoExportRequest;
-import com.codemapper.model.event.FocusClassLoadedEvent;
+import com.codemapper.model.dto.FocoMethodExportRequest;
 import com.codemapper.model.event.FocusConnectionEvent;
+import com.codemapper.model.event.FocusMethodLoadedEvent;
 import com.lowagie.text.Chunk;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
@@ -18,7 +18,6 @@ import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfPageEventHelper;
 import com.lowagie.text.pdf.PdfTemplate;
 import com.lowagie.text.pdf.PdfWriter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -27,22 +26,22 @@ import java.io.ByteArrayOutputStream;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
- * Renders a FOCO analysis result as a printable PDF. Stateless — receives
- * the data the user is currently looking at (already truncated by FREE if
- * applicable) and produces bytes. No re-analysis, no I/O beyond writing.
+ * Renders a FOCO METHOD analysis result as a printable PDF. Mirror of
+ * {@link FocoPdfService} but anchored on a method instead of a class:
+ * the title carries the method signature, the body is split into
+ * "QUIÉN LO INVOCA" (callers, INVOKES_METHOD) and "A QUIÉN INVOCA"
+ * (callees, INVOKES_OUTGOING) so the dev reads the report in
+ * narrative order. Stateless; no I/O beyond writing.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
-public class FocoPdfService {
+public class FocoMethodPdfService {
 
-    /** Bordó — same hex as the design tokens. Prints as a dark, readable tone in B/W. */
     private static final Color BORDO = new Color(185, 28, 66);
     private static final Color BODY = new Color(20, 20, 20);
     private static final Color MUTED = new Color(110, 110, 115);
@@ -51,12 +50,20 @@ public class FocoPdfService {
     private static final DateTimeFormatter HUMAN_TS = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss z");
 
-    private final FocoCommentEngine commentEngine;
-
-    public byte[] generatePdf(FocoExportRequest req) {
-        FocusClassLoadedEvent focus = req.getFocusClass();
+    public byte[] generatePdf(FocoMethodExportRequest req) {
+        FocusMethodLoadedEvent focus = req.getFocusMethod();
         List<FocusConnectionEvent> conns = req.getConnections() == null
                 ? List.of() : req.getConnections();
+
+        List<FocusConnectionEvent> incoming = new ArrayList<>();
+        List<FocusConnectionEvent> outgoing = new ArrayList<>();
+        for (FocusConnectionEvent c : conns) {
+            if (c.getConnectionType() == FocusConnectionType.INVOKES_METHOD) {
+                incoming.add(c);
+            } else if (c.getConnectionType() == FocusConnectionType.INVOKES_OUTGOING) {
+                outgoing.add(c);
+            }
+        }
 
         Document doc = new Document(PageSize.A4, 42, 42, 70, 50);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -68,37 +75,44 @@ public class FocoPdfService {
             doc.open();
 
             // ── Title block ───────────────────────────────────────────
-            doc.add(titleParagraph("Reporte Marco Polo"));
+            doc.add(titleParagraph("Reporte Marco Polo Método"));
             doc.add(subtitleParagraph(focus));
             doc.add(spacer(10));
 
             // ── Summary ──────────────────────────────────────────────
             doc.add(sectionHeader("Resumen"));
-            doc.add(summaryParagraph(req, conns));
+            doc.add(summaryParagraph(req, incoming.size(), outgoing.size()));
             if (req.isLimitApplied()) {
                 doc.add(noticeParagraph(
                         "Mostrando " + conns.size() + " de " + req.getTotalAvailable()
                                 + " conexiones detectadas. Activá PRO para ver toda la cadena."));
             }
-            for (String c : commentEngine.summaryComments(conns, focus)) {
-                doc.add(bulletParagraph(c));
-            }
-            doc.add(typeBreakdownParagraph(conns));
             doc.add(spacer(14));
 
-            // ── Connection list ───────────────────────────────────────
-            doc.add(sectionHeader("Conexiones de Nivel 1"));
-            if (conns.isEmpty()) {
-                doc.add(bodyParagraph(
-                        "Sin conexiones detectadas en este nivel."));
+            // ── Section: who calls this method ───────────────────────
+            doc.add(sectionHeader("Quién lo invoca (" + incoming.size() + ")"));
+            if (incoming.isEmpty()) {
+                doc.add(bodyParagraph("Sin invocaciones detectadas en el proyecto."));
             } else {
-                for (int i = 0; i < conns.size(); i++) {
-                    addConnectionBlock(doc, conns.get(i), focus, i + 1);
+                for (int i = 0; i < incoming.size(); i++) {
+                    addConnectionBlock(doc, incoming.get(i), focus, i + 1);
+                }
+            }
+            doc.add(spacer(14));
+
+            // ── Section: what this method calls ──────────────────────
+            doc.add(sectionHeader("A quién invoca (" + outgoing.size() + ")"));
+            if (outgoing.isEmpty()) {
+                doc.add(bodyParagraph(
+                        "Este método no invoca otras clases del proyecto."));
+            } else {
+                for (int i = 0; i < outgoing.size(); i++) {
+                    addConnectionBlock(doc, outgoing.get(i), focus, i + 1);
                 }
             }
 
         } catch (Exception e) {
-            log.error("Failed to generate FOCO PDF", e);
+            log.error("Failed to generate FOCO METHOD PDF", e);
             throw new RuntimeException("PDF generation failed: " + e.getMessage(), e);
         } finally {
             try { doc.close(); } catch (Exception ignored) {}
@@ -110,36 +124,37 @@ public class FocoPdfService {
 
     private void addConnectionBlock(Document doc,
                                     FocusConnectionEvent conn,
-                                    FocusClassLoadedEvent focus,
+                                    FocusMethodLoadedEvent focus,
                                     int index) throws Exception {
-        // separator + index
+        boolean inbound = conn.getConnectionType() == FocusConnectionType.INVOKES_METHOD;
+        String typeLabel = inbound ? "INVOCADO POR" : "INVOCA A";
+
         Paragraph titleLine = new Paragraph();
         titleLine.add(new Chunk("[" + index + "] ", font(11, true, MUTED)));
         titleLine.add(new Chunk(safeStr(conn.getName()), font(12, true, BORDO)));
-        titleLine.add(new Chunk("   " + connectionTypeLabel(conn.getConnectionType()),
-                font(9, true, MUTED)));
+        titleLine.add(new Chunk("   " + typeLabel, font(9, true, MUTED)));
         titleLine.setSpacingBefore(8);
         titleLine.setSpacingAfter(2);
         doc.add(titleLine);
 
-        // FQN (monospace)
         Paragraph fqn = new Paragraph(safeStr(conn.getFullyQualifiedName()),
                 monoFont(9, BODY));
         fqn.setSpacingAfter(2);
         doc.add(fqn);
 
-        // direction
+        // Direction reads naturally: callers → focus, focus → callees.
         String origin;
         String destination;
-        switch (conn.getConnectionType()) {
-            case CALLED_BY, INVOKES_METHOD -> {
-                origin = safeStr(conn.getName());
-                destination = safeStr(focus.getName());
-            }
-            default -> {
-                origin = safeStr(focus.getName());
-                destination = safeStr(conn.getName());
-            }
+        String focusLabel = focus.getContainingClass() + "." + focus.getMethodName() + "()";
+        if (inbound) {
+            origin = safeStr(conn.getName());
+            destination = focusLabel;
+        } else {
+            origin = focusLabel;
+            destination = safeStr(conn.getName())
+                    + (conn.getViaMethodInTarget() != null
+                            ? "." + conn.getViaMethodInTarget() + "()"
+                            : "");
         }
         Paragraph direction = new Paragraph();
         direction.add(new Chunk("Origen → Destino: ", font(9, false, MUTED)));
@@ -147,7 +162,31 @@ public class FocoPdfService {
         direction.setSpacingAfter(2);
         doc.add(direction);
 
-        // source file
+        // Via-method context: which method on the source side triggers the
+        // relationship. For inbound, that's the caller's method; for
+        // outbound, it's irrelevant (focus method IS the source) but we
+        // surface the called-method via the destination already.
+        if (inbound && conn.getViaMethodInSource() != null
+                && !conn.getViaMethodInSource().isBlank()) {
+            Paragraph via = new Paragraph();
+            via.add(new Chunk("Via método: ", font(9, false, MUTED)));
+            via.add(new Chunk(conn.getViaMethodInSource() + "()", monoFont(9, BODY)));
+            via.setSpacingAfter(2);
+            doc.add(via);
+        }
+
+        // Control-flow context for outbound calls (if/loop/try/...).
+        if (!inbound && conn.getControlContext() != null
+                && !conn.getControlContext().isBlank()) {
+            Paragraph ctx = new Paragraph();
+            ctx.add(new Chunk("Contexto: ", font(9, false, MUTED)));
+            ctx.add(new Chunk(conn.getControlContext().toLowerCase().replace('_', ' '),
+                    monoFont(9, BODY)));
+            ctx.setSpacingAfter(2);
+            doc.add(ctx);
+        }
+
+        // Source file
         if (conn.getSourceFile() != null && !conn.getSourceFile().isBlank()) {
             Paragraph srcLine = new Paragraph();
             srcLine.add(new Chunk("Archivo: ", font(9, false, MUTED)));
@@ -156,7 +195,7 @@ public class FocoPdfService {
             doc.add(srcLine);
         }
 
-        // counts
+        // Counts
         int fields = conn.getFields() == null ? 0 : conn.getFields().size();
         int methods = conn.getMethods() == null ? 0 : conn.getMethods().size();
         Paragraph counts = new Paragraph(
@@ -164,12 +203,6 @@ public class FocoPdfService {
                 font(9, false, MUTED));
         counts.setSpacingAfter(2);
         doc.add(counts);
-
-        // comments
-        List<String> comments = commentEngine.commentsFor(conn, focus);
-        for (String c : comments) {
-            doc.add(bulletParagraph(c));
-        }
     }
 
     private Paragraph titleParagraph(String text) {
@@ -178,11 +211,13 @@ public class FocoPdfService {
         return p;
     }
 
-    private Paragraph subtitleParagraph(FocusClassLoadedEvent focus) {
+    private Paragraph subtitleParagraph(FocusMethodLoadedEvent focus) {
         Paragraph p = new Paragraph();
-        p.add(new Chunk(safeStr(focus.getName()), font(13, true, BODY)));
-        p.add(new Chunk("\n" + safeStr(focus.getFullyQualifiedName()),
-                monoFont(9, MUTED)));
+        p.add(new Chunk(focus.getContainingClass() + "." + focus.getMethodName() + "()",
+                font(13, true, BODY)));
+        p.add(new Chunk("\n" + safeStr(focus.getSignature()), monoFont(9, MUTED)));
+        p.add(new Chunk("\n" + safeStr(focus.getContainingClassFullyQualifiedName()),
+                monoFont(8, MUTED)));
         p.setSpacingAfter(6);
         return p;
     }
@@ -195,43 +230,22 @@ public class FocoPdfService {
         return p;
     }
 
-    private Paragraph summaryParagraph(FocoExportRequest req,
-                                       List<FocusConnectionEvent> conns) {
+    private Paragraph summaryParagraph(FocoMethodExportRequest req,
+                                       int incomingCount,
+                                       int outgoingCount) {
         Paragraph p = new Paragraph();
         p.add(new Chunk("Plan: ", font(10, false, MUTED)));
         p.add(new Chunk(req.isPro() ? "PRO" : "FREE",
                 font(10, true, req.isPro() ? BODY : BORDO)));
-        p.add(new Chunk("    Profundidad: 1", font(10, false, BODY)));
-        p.add(new Chunk("    Conexiones: ", font(10, false, MUTED)));
-        p.add(new Chunk(String.valueOf(conns.size()), font(10, true, BODY)));
+        p.add(new Chunk("    Invocadores: ", font(10, false, MUTED)));
+        p.add(new Chunk(String.valueOf(incomingCount), font(10, true, BODY)));
+        p.add(new Chunk("    Invocados: ", font(10, false, MUTED)));
+        p.add(new Chunk(String.valueOf(outgoingCount), font(10, true, BODY)));
         if (req.isLimitApplied()) {
             p.add(new Chunk(" / " + req.getTotalAvailable() + " detectadas",
                     font(10, false, MUTED)));
         }
         p.setSpacingAfter(4);
-        return p;
-    }
-
-    private Paragraph typeBreakdownParagraph(List<FocusConnectionEvent> conns) {
-        Map<FocusConnectionType, Integer> counts = new HashMap<>();
-        for (FocusConnectionEvent c : conns) {
-            if (c.getConnectionType() == null) continue;
-            counts.merge(c.getConnectionType(), 1, Integer::sum);
-        }
-        if (counts.isEmpty()) {
-            return spacer(0);
-        }
-        StringBuilder sb = new StringBuilder("Por tipo:  ");
-        boolean first = true;
-        for (FocusConnectionType t : FocusConnectionType.values()) {
-            Integer n = counts.get(t);
-            if (n == null) continue;
-            if (!first) sb.append("  ·  ");
-            sb.append(connectionTypeLabel(t)).append(": ").append(n);
-            first = false;
-        }
-        Paragraph p = new Paragraph(sb.toString(), font(9, false, MUTED));
-        p.setSpacingAfter(2);
         return p;
     }
 
@@ -241,15 +255,6 @@ public class FocoPdfService {
         p.add(new Chunk(text, font(10, false, BODY)));
         p.setSpacingBefore(2);
         p.setSpacingAfter(4);
-        return p;
-    }
-
-    private Paragraph bulletParagraph(String text) {
-        Paragraph p = new Paragraph();
-        p.add(new Chunk("•  ", font(9, true, BORDO)));
-        p.add(new Chunk(text, font(9, false, BODY)));
-        p.setIndentationLeft(8);
-        p.setSpacingAfter(1);
         return p;
     }
 
@@ -265,8 +270,6 @@ public class FocoPdfService {
         return p;
     }
 
-    // ───────────────────────────── fonts ─────────────────────────────
-
     private Font font(float size, boolean bold, Color color) {
         int style = bold ? Font.BOLD : Font.NORMAL;
         return FontFactory.getFont(FontFactory.HELVETICA, size, style, color);
@@ -276,39 +279,18 @@ public class FocoPdfService {
         return FontFactory.getFont(FontFactory.COURIER, size, Font.NORMAL, color);
     }
 
-    // ───────────────────────────── helpers ───────────────────────────
-
     private static String safeStr(String s) {
         return s == null ? "" : s;
     }
 
-    private static String connectionTypeLabel(FocusConnectionType t) {
-        if (t == null) return "";
-        return switch (t) {
-            case CALLS -> "LLAMA A";
-            case CALLED_BY -> "LLAMADO POR";
-            case EXTENDS -> "EXTIENDE";
-            case IMPLEMENTS -> "IMPLEMENTA";
-            case USES_PROPERTIES -> "USA PROPS";
-            case INVOKES_METHOD -> "INVOCA MÉTODO";
-            case INVOKES_OUTGOING -> "INVOCA A";
-        };
-    }
-
-    // ───────────────────────────── header / footer ───────────────────
-
-    /**
-     * Header (project + date + plan) and footer (page X / Y) on every page.
-     * Uses the standard "reserve template, fill on close" trick to know the
-     * total page count without rendering twice.
-     */
+    /** Header (project + date + plan) and footer (page X / Y) on every page. */
     private static class HeaderFooter extends PdfPageEventHelper {
-        private final FocusClassLoadedEvent focus;
+        private final FocusMethodLoadedEvent focus;
         private final boolean pro;
         private PdfTemplate totalPageTemplate;
         private final String dateString;
 
-        HeaderFooter(FocusClassLoadedEvent focus, boolean pro) {
+        HeaderFooter(FocusMethodLoadedEvent focus, boolean pro) {
             this.focus = focus;
             this.pro = pro;
             this.dateString = ZonedDateTime.now(ZoneId.systemDefault()).format(HUMAN_TS);
@@ -327,25 +309,25 @@ public class FocoPdfService {
             float top = ps.getHeight() - 28;
             float bottom = 30;
 
-            // Header — left: app name, right: date · plan · class
-            Phrase appName = new Phrase("CodeMapper — Reporte Marco Polo",
+            Phrase appName = new Phrase("CodeMapper — Reporte Marco Polo Método",
                     FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, BORDO));
             ColumnText.showTextAligned(cb, Element.ALIGN_LEFT, appName, 42, top, 0);
 
             String planTag = pro ? "PRO" : "FREE";
-            String focusName = focus == null ? "" : Objects.toString(focus.getName(), "");
-            Phrase ctx = new Phrase(dateString + "  ·  " + planTag + "  ·  " + focusName,
+            String focusLabel = focus == null
+                    ? ""
+                    : Objects.toString(focus.getContainingClass(), "")
+                            + "." + Objects.toString(focus.getMethodName(), "") + "()";
+            Phrase ctx = new Phrase(dateString + "  ·  " + planTag + "  ·  " + focusLabel,
                     FontFactory.getFont(FontFactory.HELVETICA, 8, MUTED));
             ColumnText.showTextAligned(cb, Element.ALIGN_RIGHT, ctx, right, top, 0);
 
-            // Hairline under header
             cb.setColorStroke(HAIRLINE);
             cb.setLineWidth(0.4f);
             cb.moveTo(42, top - 6);
             cb.lineTo(right, top - 6);
             cb.stroke();
 
-            // Footer — left: app, center: page X / Y
             Phrase footerLeft = new Phrase("Generado con CodeMapper",
                     FontFactory.getFont(FontFactory.HELVETICA, 8, MUTED));
             ColumnText.showTextAligned(cb, Element.ALIGN_LEFT, footerLeft, 42, bottom, 0);
@@ -353,15 +335,12 @@ public class FocoPdfService {
             Phrase pageX = new Phrase("Página " + writer.getPageNumber() + " / ",
                     FontFactory.getFont(FontFactory.HELVETICA, 8, MUTED));
             float centerX = ps.getWidth() / 2f;
-            float pageXWidth = pageX.getContent().length() * 4f; // rough offset
             ColumnText.showTextAligned(cb, Element.ALIGN_RIGHT, pageX, centerX + 8, bottom, 0);
-            // The total goes into the reserved template
             cb.addTemplate(totalPageTemplate, centerX + 10, bottom - 1);
         }
 
         @Override
         public void onCloseDocument(PdfWriter writer, Document document) {
-            // Fill the reserved template with the total page count
             ColumnText.showTextAligned(totalPageTemplate, Element.ALIGN_LEFT,
                     new Phrase(String.valueOf(writer.getPageNumber() - 1),
                             FontFactory.getFont(FontFactory.HELVETICA, 8, MUTED)),

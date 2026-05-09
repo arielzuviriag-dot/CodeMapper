@@ -184,11 +184,39 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
         )}
       </div>
 
-      <div className="truncate border-t border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-        {payload.packageName || "(sin paquete)"}
+      {/* Package name shown in full. Each segment is followed by a <wbr>
+          so the browser breaks AFTER the dot, never in the middle of a
+          word — `com.reserva.reservabackend.controller` wraps as
+          `COM.RESERVA.RESERVABACKEND.` / `CONTROLLER` instead of
+          `COM.RESERVA.RESERVABACKEND.CO` / `NTROLLER`. break-words is the
+          last-resort fallback for a single segment too long to fit a line. */}
+      <div className="break-words border-t border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-1 font-mono text-[9px] leading-snug uppercase tracking-[0.12em] text-[var(--fg-muted)]">
+        <PackageWithBreaks pkg={payload.packageName} />
       </div>
     </div>
   );
 }
 
 export const FocusPeripheralNode = memo(FocusPeripheralNodeComponent);
+
+/** Renders a Java package name with explicit break opportunities after each
+ *  dot so the browser prefers to wrap whole segments instead of breaking in
+ *  the middle of one. Falls back to the placeholder when empty. */
+function PackageWithBreaks({ pkg }: { pkg: string | null | undefined }) {
+  if (!pkg) return <>(sin paquete)</>;
+  const segments = pkg.split(".");
+  return (
+    <>
+      {segments.map((seg, i) => (
+        <span key={i}>
+          {seg}
+          {i < segments.length - 1 && (
+            <>
+              .<wbr />
+            </>
+          )}
+        </span>
+      ))}
+    </>
+  );
+}

@@ -250,6 +250,20 @@
  * Sequencing comes from the backend's 60ms SSE pacing — no
  * cumulative stagger here. See BUG_PENDIENTE_OLAS_STREAMING.md.
  * ============================================================ */
+/* ============================================================
+ * BITÁCORA — pulsing ring on the currently-active node so the user
+ * spots "where am I" in the navigation tree. Same easing as the
+ * focus impact pulse so the bitácora reads like a sibling.
+ * ============================================================ */
+@keyframes cm-bitacora-active-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(185, 28, 66, 0.7); }
+  70%  { box-shadow: 0 0 0 8px rgba(185, 28, 66, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(185, 28, 66, 0); }
+}
+.cm-bitacora-active-ring {
+  animation: cm-bitacora-active-ring 1.5s ease-in-out infinite;
+}
+
 @keyframes cm-focus-node-enter {
   from { transform: scale(0.6); opacity: 0; }
   to   { transform: scale(1);   opacity: 1; }

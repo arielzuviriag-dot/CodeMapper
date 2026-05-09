@@ -20,7 +20,6 @@ import { FocusConnectionLegend } from "./FocusConnectionLegend";
 import { GraphSearchInput } from "./GraphSearchInput";
 import { JavaVersionBadge } from "./JavaVersionBadge";
 import { ImpactSimulationButton } from "./ImpactSimulationButton";
-import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { useGraphStore } from "@/store/graphStore";
 
 const FOCUS_NODE_TYPES = {
@@ -262,9 +261,6 @@ function FocusGraphInner() {
           zoomable
         />
       </ReactFlow>
-      {/* F-deep — diagnostics panel sits bottom-right above the MiniMap.
-          Hidden until the backend reports its first finding. */}
-      <DiagnosticsPanel />
     </div>
   );
 }

@@ -33,6 +33,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { FocusScanConfirmModal } from "@/components/loading/FocusScanConfirmModal";
 import { useGraphStore } from "@/store/graphStore";
+import { useBitacoraStore } from "@/store/bitacoraStore";
 import {
   analyzeFocus,
   analyzeFocusMethod,
@@ -340,6 +341,18 @@ export function ClassDetailSheet() {
           setIsFocusing(false);
           return;
         }
+        // Bitácora — record the jump BEFORE navigating. Source = current
+        // focus class, target = the class the user is jumping to. fromMethod
+        // is the method of the current sheet if any (the user might have
+        // been looking at a method when they hit Foco Scaner on the class).
+        if (focusClass) {
+          useBitacoraStore.getState().addJump({
+            fromClass: focusClass.name,
+            fromMethod: selectedMethod?.name ?? null,
+            toClass: node.name,
+            toMethod: null,
+          });
+        }
         // Flip the flag BEFORE navigating so the next map render swaps the
         // full-screen loader for the inline one.
         setPendingReanalysis(true);
@@ -354,23 +367,8 @@ export function ClassDetailSheet() {
   /** FOCO SCANER over a method — fires from the method-mode sheet. Uses the
    *  current focus class as the source file for the method. */
   const requestFocusScanMethod = () => {
-    // [SCAN-DBG] strip after diagnosing the PRO "click does nothing" issue.
-    console.warn("[SCAN-DBG] requestFocusScanMethod called", {
-      hasSelectedMethod: !!selectedMethod,
-      hasFocusClass: !!focusClass,
-      focusClassSourceFile: focusClass?.sourceFile,
-      projectPath,
-      isFocusing,
-      isPro: resolveDemoMode() === "pro",
-    });
-    if (!selectedMethod || !focusClass || !projectPath || isFocusing) {
-      console.warn(
-        "[SCAN-DBG] EARLY RETURN — one of the guards failed (see flags above)",
-      );
-      return;
-    }
+    if (!selectedMethod || !focusClass || !projectPath || isFocusing) return;
     const rel = computeRelativeFocusFile(projectPath, focusClass.sourceFile);
-    console.warn("[SCAN-DBG] computed relative path", { rel });
     if (!rel) {
       toast.error("No se puede deducir el path relativo del archivo");
       return;
@@ -393,6 +391,16 @@ export function ClassDetailSheet() {
           setIsFocusing(false);
           return;
         }
+        // Bitácora — method jump within the same class. Source/target are
+        // the same className but the methods differ; the bitácora node
+        // doesn't duplicate, but a new edge with the method context lands
+        // (will render as a self-loop / parallel curve on the same node).
+        useBitacoraStore.getState().addJump({
+          fromClass: focusClass.name,
+          fromMethod: focusMethod?.methodName ?? null,
+          toClass: focusClass.name,
+          toMethod: selectedMethod.name,
+        });
         setPendingReanalysis(true);
         clearSelection();
         const params = new URLSearchParams({ mode: "focus-method" });
@@ -441,7 +449,11 @@ export function ClassDetailSheet() {
               onFocusScanClass={requestFocusScanClass}
               onFocusScanMethod={requestFocusScanMethod}
               nodeName={node?.name ?? focusMethod?.containingClass ?? ""}
-              nodeFqn={node?.fullyQualifiedName ?? ""}
+              nodeFqn={
+                node?.fullyQualifiedName
+                ?? focusMethod?.containingClassFullyQualifiedName
+                ?? ""
+              }
               classType={node?.type ?? null}
               lineCount={node?.lineCount ?? 0}
               variable={selectedVariable}
@@ -611,6 +623,9 @@ function SheetHeaderForMode({
                 <FileCode className="h-5 w-5 text-[var(--bordo)]" />
               )}
               <span className="truncate font-mono text-base font-semibold">
+                {nodeName && (
+                  <span className="text-[var(--silver-dark)]">{nodeName}.</span>
+                )}
                 {name}()
                 {!isConstructor && ret && (
                   <span className="text-[var(--silver-dark)]">: {ret}</span>
@@ -619,6 +634,7 @@ function SheetHeaderForMode({
             </SheetTitle>
             <SheetDescription className="truncate font-mono text-xs text-[var(--silver-dark)]">
               {nodeFqn}
+              {nodeFqn && name ? `#${name}` : null}
             </SheetDescription>
           </div>
 

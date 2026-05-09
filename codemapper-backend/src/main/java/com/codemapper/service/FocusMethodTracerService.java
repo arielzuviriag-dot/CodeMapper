@@ -4,6 +4,7 @@ import com.codemapper.model.domain.FocusConnectionType;
 import com.codemapper.model.domain.ParsedClass;
 import com.codemapper.model.domain.ParsedMethod;
 import com.codemapper.model.domain.SessionData;
+import com.codemapper.model.dto.UnresolvedReference;
 import com.codemapper.model.event.BaseEvent;
 import com.codemapper.model.event.ErrorEvent;
 import com.codemapper.model.event.FocusConnectionEvent;
@@ -11,6 +12,7 @@ import com.codemapper.model.event.FocusMethodLoadedEvent;
 import com.codemapper.model.event.LimitReachedEvent;
 import com.codemapper.model.event.SessionCompleteEvent;
 import com.codemapper.model.event.SessionStartEvent;
+import com.codemapper.model.event.UnresolvedReferenceEvent;
 import com.codemapper.parser.ClassExtractor;
 import com.codemapper.parser.FieldExtractor;
 import com.codemapper.parser.MethodExtractor;
@@ -190,6 +192,15 @@ public class FocusMethodTracerService {
                 cu = StaticJavaParser.parse(file.toFile());
             } catch (Exception e) {
                 log.debug("Skipping unparseable file {}: {}", file, e.getMessage());
+                // Surface unparseable files in the diagnostics panel — same UX
+                // as the class-focus deep pass. The dev sees there's a hole.
+                UnresolvedReference unparseable = new UnresolvedReference(
+                        UnresolvedReference.Kind.UNPARSEABLE,
+                        file.toString(),
+                        0,
+                        "",
+                        truncate(e.getMessage(), 200));
+                sink.accept(new UnresolvedReferenceEvent(unparseable));
                 continue;
             }
             String pkg = cu.getPackageDeclaration()
@@ -213,6 +224,20 @@ public class FocusMethodTracerService {
                 try {
                     resolvedDeclaringFqn = call.resolve().declaringType().getQualifiedName();
                 } catch (Exception e) {
+                    // Same name as the focus method but the symbol couldn't be
+                    // resolved. Could be: (a) a real call to the focus we're
+                    // missing, (b) a same-named method on another class. Either
+                    // way we surface it so the dev sees there's something the
+                    // analyzer couldn't link. Captures the "something not
+                    // detected" depth the user wanted in the diagnostics panel.
+                    int line = call.getRange().map(r -> r.begin.line).orElse(0);
+                    UnresolvedReference unresolved = new UnresolvedReference(
+                            UnresolvedReference.Kind.UNRESOLVED,
+                            file.toString(),
+                            line,
+                            truncate(call.toString(), 160),
+                            "Symbol could not be resolved");
+                    sink.accept(new UnresolvedReferenceEvent(unresolved));
                     return;
                 }
                 if (!focusFqn.equals(resolvedDeclaringFqn)) return;
@@ -378,6 +403,12 @@ public class FocusMethodTracerService {
             cur = cur.getParentNode().orElse(null);
         }
         return null;
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        if (s.length() <= max) return s;
+        return s.substring(0, max - 1) + "…";
     }
 
     private static String sliceLines(String source, int startLine, int endLine) {

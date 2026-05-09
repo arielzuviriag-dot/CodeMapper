@@ -1,9 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertCircle,
   ChevronDown,
   ChevronUp,
   Download,
@@ -17,28 +15,42 @@ import { exportDiagnosticsPdf } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import type { Diagnostic } from "@/store/graphStore";
 
-const POPOVER_ID = "diagnostics-panel";
-
 /**
- * F-deep — collapsible panel surfacing what deep-body analysis couldn't
- * confirm. Three buckets:
- *  • UNRESOLVED   — parser failed on an expression that may be a project ref
- *  • FALSE_NEG    — focus simple-name appears but symbol didn't link
- *  • UNPARSEABLE  — file couldn't be parsed at all
+ * F-deep — content for the Diagnostics view: lists what deep-body analysis
+ * couldn't confirm, in three buckets (UNRESOLVED / FALSE_NEG / UNPARSEABLE),
+ * plus the PDF download button. Renders nothing when diagnostics is empty
+ * so callers can render it unconditionally inside a Sheet body.
  *
- * Sits at the bottom of the canvas, off-center to keep the MiniMap (right)
- * and StreamingIndicator (left) clear. Streams in real time as the backend
- * reports findings during pass 2.
+ * This used to be a floating panel on the canvas; now it lives inside the
+ * sidebar's "Diagnóstico" block (FocusDiagnosticsBlock in page.tsx) and
+ * unfolds in a Sheet on the right when the user clicks.
  */
-export function DiagnosticsPanel() {
+export function DiagnosticsContent() {
   const diagnostics = useGraphStore((s) => s.diagnostics);
   const focusClass = useGraphStore((s) => s.focusClass);
+  const focusMethod = useGraphStore((s) => s.focusMethod);
   const detectedJavaVersion = useGraphStore((s) => s.detectedJavaVersion);
   const projectName = useGraphStore((s) => s.stats.projectName);
   const isPro = useGraphStore((s) => s.isPro);
-  const openHelpPopover = useGraphStore((s) => s.openHelpPopover);
-  const setOpenHelpPopover = useGraphStore((s) => s.setOpenHelpPopover);
-  const open = openHelpPopover === POPOVER_ID;
+
+  // In method-focus mode focusClass is null but focusMethod has the
+  // containing class info. Either gives us a name + FQN to anchor the
+  // diagnostics PDF to. focusContext === null only happens during the
+  // pending/loading window; the panel is also hidden when diagnostics
+  // is empty, so the gap doesn't matter in practice.
+  const focusContext = focusClass
+    ? {
+        name: focusClass.name,
+        fqn: focusClass.fullyQualifiedName ?? null,
+        filenameSuffix: focusClass.name,
+      }
+    : focusMethod
+      ? {
+          name: `${focusMethod.containingClass}.${focusMethod.methodName}()`,
+          fqn: `${focusMethod.containingClassFullyQualifiedName}#${focusMethod.methodName}`,
+          filenameSuffix: `${focusMethod.containingClass}-${focusMethod.methodName}`,
+        }
+      : null;
   const [downloading, setDownloading] = useState(false);
 
   const grouped = useMemo(() => {
@@ -53,19 +65,17 @@ export function DiagnosticsPanel() {
     return { unresolved, falseNeg, unparseable };
   }, [diagnostics]);
 
-  // Hide the panel entirely while there are zero findings — silence over
-  // noise. As soon as the backend emits the first one, it appears.
+  // Render nothing when empty so callers can mount this unconditionally
+  // inside a Sheet body without empty UI artifacts.
   if (diagnostics.length === 0) return null;
 
-  const total = diagnostics.length;
-
   const onDownloadPdf = async () => {
-    if (!focusClass || downloading) return;
+    if (!focusContext || downloading) return;
     setDownloading(true);
     try {
       const blob = await exportDiagnosticsPdf({
-        focusName: focusClass.name,
-        focusFqn: focusClass.fullyQualifiedName ?? null,
+        focusName: focusContext.name,
+        focusFqn: focusContext.fqn,
         projectName: projectName ?? null,
         javaVersion: detectedJavaVersion ?? null,
         pro: isPro,
@@ -73,7 +83,7 @@ export function DiagnosticsPanel() {
       });
       const url = URL.createObjectURL(blob);
       const today = new Date().toISOString().slice(0, 10);
-      const safeName = focusClass.name.replace(/[^A-Za-z0-9._-]/g, "_");
+      const safeName = focusContext.filenameSuffix.replace(/[^A-Za-z0-9._-]/g, "_");
       const tier = isPro ? "PRO" : "FREE";
       const link = document.createElement("a");
       link.href = url;
@@ -91,90 +101,55 @@ export function DiagnosticsPanel() {
   };
 
   return (
-    // Bottom-center-right of the canvas. Wide enough to read snippets without
-    // scrolling, tall enough to show several findings. Stays clear of the
-    // MiniMap (bottom-right) and the StreamingIndicator (bottom-left).
-    <div className="pointer-events-auto absolute bottom-4 right-[260px] z-20 flex w-[520px] max-w-[calc(100vw-32px)] flex-col">
-      <button
-        type="button"
-        onClick={() => setOpenHelpPopover(open ? null : POPOVER_ID)}
-        aria-expanded={open}
-        className="flex items-center justify-between gap-2 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver)] shadow-[var(--shadow-md)] transition-colors hover:border-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60"
-      >
-        <span className="flex items-center gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5 text-[var(--bordo)]" />
-          <span className="font-semibold">Diagnóstico</span>
-          <span className="rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-1 py-0.5 font-mono text-[9px] tabular-nums text-[var(--bordo)]">
-            {total}
-          </span>
-        </span>
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronUp className="h-3.5 w-3.5" />
-        )}
-      </button>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] leading-snug text-[var(--fg-muted)]">
+          Lo que el análisis profundo no pudo confirmar. Más info, menos
+          ciegas: si una clase rompe acá pero no aparece arriba, capaz
+          tenés un falso negativo.
+        </p>
+        <button
+          type="button"
+          onClick={onDownloadPdf}
+          disabled={downloading || !focusContext}
+          title="Descargar reporte detallado en PDF"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--bordo)]/60 bg-[var(--bordo)]/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--bordo)] transition-colors hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {downloading ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Generando...
+            </>
+          ) : (
+            <>
+              <Download className="h-3 w-3" />
+              Descargar PDF
+            </>
+          )}
+        </button>
+      </div>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 4, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: 4, height: 0, transition: { duration: 0.12 } }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-2 max-h-[60vh] overflow-y-auto rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-4 shadow-[var(--shadow-lg)]"
-          >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <p className="text-[11px] leading-snug text-[var(--fg-muted)]">
-                Lo que el análisis profundo no pudo confirmar. Más info, menos
-                ciegas: si una clase rompe acá pero no aparece arriba, capaz
-                tenés un falso negativo.
-              </p>
-              <button
-                type="button"
-                onClick={onDownloadPdf}
-                disabled={downloading || !focusClass}
-                title="Descargar reporte detallado en PDF"
-                className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--bordo)]/60 bg-[var(--bordo)]/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--bordo)] transition-colors hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {downloading ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Generando...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-3 w-3" />
-                    Descargar PDF
-                  </>
-                )}
-              </button>
-            </div>
-
-            <DiagnosticGroup
-              title="No resueltos"
-              icon={<HelpCircle className="h-3 w-3" />}
-              items={grouped.unresolved}
-              tone="warn"
-              hint="El parser falló al resolver el símbolo (puede ser una referencia al foco)."
-            />
-            <DiagnosticGroup
-              title="Posibles falsos negativos"
-              icon={<Eye className="h-3 w-3" />}
-              items={grouped.falseNeg}
-              tone="info"
-              hint="El nombre del foco aparece pero el símbolo no se confirmó. Revisá manualmente."
-            />
-            <DiagnosticGroup
-              title="Archivos no parseables"
-              icon={<FileX className="h-3 w-3" />}
-              items={grouped.unparseable}
-              tone="error"
-              hint="JavaParser no pudo abrir el archivo. Sintaxis rota o lombok delombok pendiente."
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <DiagnosticGroup
+        title="No resueltos"
+        icon={<HelpCircle className="h-3 w-3" />}
+        items={grouped.unresolved}
+        tone="warn"
+        hint="El parser falló al resolver el símbolo (puede ser una referencia al foco)."
+      />
+      <DiagnosticGroup
+        title="Posibles falsos negativos"
+        icon={<Eye className="h-3 w-3" />}
+        items={grouped.falseNeg}
+        tone="info"
+        hint="El nombre del foco aparece pero el símbolo no se confirmó. Revisá manualmente."
+      />
+      <DiagnosticGroup
+        title="Archivos no parseables"
+        icon={<FileX className="h-3 w-3" />}
+        items={grouped.unparseable}
+        tone="error"
+        hint="JavaParser no pudo abrir el archivo. Sintaxis rota o lombok delombok pendiente."
+      />
     </div>
   );
 }

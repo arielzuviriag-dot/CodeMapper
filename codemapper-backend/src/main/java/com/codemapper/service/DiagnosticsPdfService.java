@@ -234,7 +234,7 @@ public class DiagnosticsPdfService {
         PdfPCell titleCell = new PdfPCell();
         titleCell.setBorder(Rectangle.NO_BORDER);
         titleCell.setPaddingBottom(2);
-        titleCell.addElement(new Paragraph("Diagnóstico FOCO",
+        titleCell.addElement(new Paragraph("Diagnóstico Marco Polo",
                 FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, BORDO)));
         header.addCell(titleCell);
 

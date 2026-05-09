@@ -34,13 +34,13 @@ export function UploadTabs() {
           <Github className="h-3.5 w-3.5" /> GitHub
         </TabsTrigger>
         <TabsTrigger value="focus" className={`${TRIGGER_CLASS} normal-case`}>
-          <Crosshair className="h-3.5 w-3.5" /> Foco
+          <Crosshair className="h-3.5 w-3.5" /> Marco Polo
         </TabsTrigger>
         {/* TEMPORAL — tab para testear modo PRO sin tocar la URL.
             Borrar este TabsTrigger + el TabsContent="focus-pro" cuando
             exista billing real. Acción equivalente a `?demo=pro`. */}
         <TabsTrigger value="focus-pro" className={`${TRIGGER_CLASS} normal-case`}>
-          <Sparkles className="h-3.5 w-3.5" /> Foco PRO
+          <Sparkles className="h-3.5 w-3.5" /> Marco Polo PRO
         </TabsTrigger>
       </TabsList>
 

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { openStream } from "@/lib/sse";
 import { streamUrl } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
+import { useBitacoraStore } from "@/store/bitacoraStore";
 import type {
   ClassFoundPayload,
   ConnectionFoundPayload,
@@ -153,6 +154,10 @@ export function useSSE(sessionId: string | null) {
             const p = data as FocusClassLoadedPayload;
             setFocusClass(p);
             setStats({ projectName: p.name });
+            // Bitácora — first focus_class_loaded of a Marco Polo session
+            // becomes the origen. setOrigen no-ops if already set, so this
+            // is safe across SSE replays / strict-mode double mounts.
+            useBitacoraStore.getState().setOrigen(p.name);
             break;
           }
           case "focus_method_loaded": {
@@ -161,6 +166,10 @@ export function useSSE(sessionId: string | null) {
             setStats({
               projectName: `${p.containingClass}.${p.methodName}()`,
             });
+            // Bitácora — if the user landed on a method-focus session
+            // directly from the home (no prior class-focus), seed the
+            // origen with the containing class so the panel has a center.
+            useBitacoraStore.getState().setOrigen(p.containingClass);
             break;
           }
           case "session_complete": {

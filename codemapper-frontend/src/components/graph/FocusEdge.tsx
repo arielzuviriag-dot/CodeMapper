@@ -191,7 +191,13 @@ function FocusEdgeComponent({
   // if ReactFlow remounts the edge mid-stream, the new instance reads
   // firstSeenAt from data, recomputes progress (which by then is probably
   // already 1), and renders the final state — no flicker.
-  const firstSeenAt = edgeData.firstSeenAt ?? Date.now();
+  // Fallback to 0 (epoch) when no firstSeenAt is supplied: that pushes
+  // elapsed massively positive so progress jumps straight to 1 and the
+  // line renders fully drawn. Falling back to Date.now() (which we used
+  // before) made every render reset the anchor and pinned progress at 0
+  // — the bug that hid all FocusMethodGraph edges, since that graph
+  // wasn't passing firstSeenAt through edge data.
+  const firstSeenAt = edgeData.firstSeenAt ?? 0;
   const arrivalIndex = edgeData.index ?? 0;
   const totalDelayMs =
     ANIM_DELAY_MS + Math.min(arrivalIndex, STAGGER_CAP_INDEX) * STAGGER_MS;

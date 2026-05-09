@@ -2,7 +2,9 @@ package com.codemapper.controller;
 
 import com.codemapper.model.dto.DiagnosticsExportRequest;
 import com.codemapper.model.dto.FocoExportRequest;
+import com.codemapper.model.dto.FocoMethodExportRequest;
 import com.codemapper.service.DiagnosticsPdfService;
+import com.codemapper.service.FocoMethodPdfService;
 import com.codemapper.service.FocoPdfService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ExportController {
 
     private final FocoPdfService focoPdfService;
+    private final FocoMethodPdfService focoMethodPdfService;
     private final DiagnosticsPdfService diagnosticsPdfService;
 
     /**
@@ -48,6 +51,39 @@ public class ExportController {
         headers.setContentLength(pdf.length);
         log.info("Generated FOCO PDF for {} ({} bytes, {} connections, pro={})",
                 name, pdf.length,
+                request.getConnections() == null ? 0 : request.getConnections().size(),
+                request.isPro());
+        return new ResponseEntity<>(pdf, headers, 200);
+    }
+
+    /**
+     * Renders a FOCO METHOD analysis result as a PDF report. Mirrors the
+     * /pdf endpoint above but for the method-focus mode: the body shows
+     * "QUIÉN LO INVOCA" and "A QUIÉN INVOCA" sections instead of a flat
+     * connections list.
+     */
+    @PostMapping(value = "/method-pdf",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> exportMethodPdf(@RequestBody FocoMethodExportRequest request) {
+        if (request == null || request.getFocusMethod() == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        byte[] pdf = focoMethodPdfService.generatePdf(request);
+        String containing = request.getFocusMethod().getContainingClass();
+        String method = request.getFocusMethod().getMethodName();
+        if (containing == null || containing.isBlank()) containing = "foco";
+        if (method == null || method.isBlank()) method = "metodo";
+        String tier = request.isPro() ? "PRO" : "FREE";
+        String filename = "codemapper-foco-metodo-" + containing + "-" + method
+                + "-" + tier + ".pdf";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", filename);
+        headers.setContentLength(pdf.length);
+        log.info("Generated FOCO METHOD PDF for {}.{} ({} bytes, {} connections, pro={})",
+                containing, method, pdf.length,
                 request.getConnections() == null ? 0 : request.getConnections().size(),
                 request.isPro());
         return new ResponseEntity<>(pdf, headers, 200);

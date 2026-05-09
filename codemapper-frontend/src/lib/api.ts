@@ -5,6 +5,7 @@ import type {
   ClassSourceResponse,
   FocusClassLoadedPayload,
   FocusConnectionPayload,
+  FocusMethodLoadedPayload,
   ImpactReport,
 } from "./types";
 
@@ -166,6 +167,28 @@ export async function exportFocoPdf(
   request: FocoExportRequest,
 ): Promise<Blob> {
   const { data } = await api.post<Blob>("/api/foco/export/pdf", request, {
+    responseType: "blob",
+    headers: { "Content-Type": "application/json" },
+    timeout: 60_000,
+  });
+  return data;
+}
+
+export interface FocoMethodExportRequest {
+  focusMethod: FocusMethodLoadedPayload;
+  connections: FocusConnectionPayload[];
+  pro: boolean;
+  limitApplied: boolean;
+  totalAvailable: number;
+}
+
+/** Mirror of {@link exportFocoPdf} but for method-focus mode. The PDF body
+ *  splits the connections into "QUIÉN LO INVOCA" (callers) and "A QUIÉN
+ *  INVOCA" (callees). Same FREE/PRO suffix on the filename. */
+export async function exportFocoMethodPdf(
+  request: FocoMethodExportRequest,
+): Promise<Blob> {
+  const { data } = await api.post<Blob>("/api/foco/export/method-pdf", request, {
     responseType: "blob",
     headers: { "Content-Type": "application/json" },
     timeout: 60_000,
