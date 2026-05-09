@@ -321,11 +321,15 @@ public class FocusMethodTracerService {
         }
 
         if (limitApplied) {
+            // Method-focus mode has no deep body pass — totalConnectionsDetected
+            // mirrors totalAvailable, truncated always false.
             sink.accept(new LimitReachedEvent(
                     focusMethodMaxConnections,
                     totalAvailable,
                     toEmit.size(),
-                    "Llegaste al límite de la versión FREE"));
+                    "Llegaste al límite de la versión FREE",
+                    totalAvailable,
+                    false));
         }
 
         long durationMs = Duration.between(start, Instant.now()).toMillis();

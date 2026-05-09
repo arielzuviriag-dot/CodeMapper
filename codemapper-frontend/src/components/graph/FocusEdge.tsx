@@ -1,7 +1,13 @@
 "use client";
 
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
-import { EdgeLabelRenderer, getStraightPath, type EdgeProps } from "@xyflow/react";
+import {
+  EdgeLabelRenderer,
+  getStraightPath,
+  useInternalNode,
+  type EdgeProps,
+  type InternalNode,
+} from "@xyflow/react";
 import { ChevronRight } from "lucide-react";
 import type { FocusConnectionType, ParsedMethod } from "@/lib/types";
 import { useGraphStore } from "@/store/graphStore";
@@ -55,13 +61,46 @@ function isInbound(ct: FocusConnectionType): boolean {
  *  by ~10–14 px, so the value here is the *visual* gap minus that fudge. */
 const ARROW_CLEARANCE = 48;
 
+/** Center point of an InternalNode in flow coordinates. Falls back to the
+ *  declared width/height when the ResizeObserver hasn't reported yet. */
+function nodeCenter(node: InternalNode): { x: number; y: number } {
+  const w = node.measured?.width ?? node.width ?? 0;
+  const h = node.measured?.height ?? node.height ?? 0;
+  return { x: node.position.x + w / 2, y: node.position.y + h / 2 };
+}
+
+/** Floating endpoint — find where the line from {@code node}'s center to
+ *  {@code other} exits the node's bounding rectangle. Replaces ReactFlow's
+ *  handle-based source/target resolution: the edge no longer snaps to one of
+ *  four cardinal handles, so the layout can rebalance without the handle id
+ *  changing (which used to make ReactFlow tear down and remount the edge,
+ *  restarting the CSS draw animation from zero on every new arrival). */
+function rectIntersection(
+  node: InternalNode,
+  other: { x: number; y: number },
+): { x: number; y: number } {
+  const w = node.measured?.width ?? node.width ?? 0;
+  const h = node.measured?.height ?? node.height ?? 0;
+  const cx = node.position.x + w / 2;
+  const cy = node.position.y + h / 2;
+  const dx = other.x - cx;
+  const dy = other.y - cy;
+  if ((dx === 0 && dy === 0) || w === 0 || h === 0) {
+    return { x: cx, y: cy };
+  }
+  // Smallest scale s.t. either |dx*scale|=w/2 or |dy*scale|=h/2 — i.e. hit
+  // whichever rect side the line reaches first.
+  const scale = Math.min(
+    dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity,
+    dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity,
+  );
+  return { x: cx + dx * scale, y: cy + dy * scale };
+}
+
 function FocusEdgeComponent({
   id,
+  source,
   target,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
   data,
 }: EdgeProps) {
   const edgeData = (data ?? {}) as FocusEdgeData;
@@ -82,18 +121,32 @@ function FocusEdgeComponent({
     (s) => s.openClassSheetWithImportHighlight,
   );
 
+  // Floating endpoints — read both nodes from the ReactFlow store and project
+  // the line center-to-center onto each card's rectangle. Beats the old
+  // sourceX/sourceY/targetX/targetY props (which came from a handle that kept
+  // changing as the radial layout rebalanced). When either node hasn't been
+  // measured yet we render nothing — the next tick will bring it back.
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  if (!sourceNode || !targetNode) return null;
+
+  const srcCenter = nodeCenter(sourceNode);
+  const tgtCenter = nodeCenter(targetNode);
+  const sourceEdge = rectIntersection(sourceNode, tgtCenter);
+  const targetEdge = rectIntersection(targetNode, srcCenter);
+
   // Trim the path on the marker side so the triangle isn't drawn underneath
-  // the peripheral / focus card. We keep the original endpoints for label
-  // positioning so the chip stays centered on the visible run of the edge.
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
+  // the peripheral / focus card. The trimmed endpoints feed getStraightPath;
+  // the centered label sits on the resulting visible midpoint.
+  const dx = targetEdge.x - sourceEdge.x;
+  const dy = targetEdge.y - sourceEdge.y;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  const sx = inbound ? sourceX + ux * ARROW_CLEARANCE : sourceX;
-  const sy = inbound ? sourceY + uy * ARROW_CLEARANCE : sourceY;
-  const tx = inbound ? targetX : targetX - ux * ARROW_CLEARANCE;
-  const ty = inbound ? targetY : targetY - uy * ARROW_CLEARANCE;
+  const sx = inbound ? sourceEdge.x + ux * ARROW_CLEARANCE : sourceEdge.x;
+  const sy = inbound ? sourceEdge.y + uy * ARROW_CLEARANCE : sourceEdge.y;
+  const tx = inbound ? targetEdge.x : targetEdge.x - ux * ARROW_CLEARANCE;
+  const ty = inbound ? targetEdge.y : targetEdge.y - uy * ARROW_CLEARANCE;
 
   const [path, labelX, labelY] = getStraightPath({
     sourceX: sx,

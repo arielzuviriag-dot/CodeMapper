@@ -149,11 +149,15 @@ public class JavaParserService {
         }
 
         if (limitApplied) {
+            // Project-wide mode doesn't have a P1/P2 split — totalConnectionsDetected
+            // mirrors totalAvailable here, and truncated stays false.
             sink.accept(new LimitReachedEvent(
                     freeMaxFiles,
                     totalAvailable,
                     javaFiles.size(),
-                    "Llegaste al límite de la versión FREE"));
+                    "Llegaste al límite de la versión FREE",
+                    totalAvailable,
+                    false));
             log.info("Session {}: FREE limit reached ({} of {} files parsed)",
                     session.getSessionId(), javaFiles.size(), totalAvailable);
         }

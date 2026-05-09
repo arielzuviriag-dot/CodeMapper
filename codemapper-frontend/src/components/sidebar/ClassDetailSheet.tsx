@@ -276,8 +276,6 @@ export function ClassDetailSheet() {
       setLoading(false);
       return;
     }
-    // [debug] flagging while we stabilise focus mode — remove once stable
-    console.log("[CodeMapper] sheet fetch source:", selectedNodeId);
     let cancelled = false;
     setLoading(true);
     setSource(null);
@@ -821,6 +819,9 @@ function ClassView({
   // doesn't read "10" as the absolute truth.
   const isCappedByFree =
     isFocusClass && !isPro && limitReached.reached && limitReached.totalAvailable > 0;
+  // When P2 hit the FREE hard cap (200), the backend doesn't know the true
+  // total — render "200+" instead of an absolute number.
+  const isTruncated = isCappedByFree && limitReached.truncated;
   const realConnectionsCount = isCappedByFree
     ? limitReached.totalAvailable
     : connectionsCount;
@@ -931,6 +932,7 @@ function ClassView({
             label="Conexiones"
             value={connectionsCount}
             cappedTotal={isCappedByFree ? realConnectionsCount : undefined}
+            cappedTruncated={isTruncated}
             active={expandedMetric === "connections"}
             onToggle={() => toggleMetric("connections")}
           >
@@ -938,6 +940,7 @@ function ClassView({
               <FreeCapNotice
                 shown={connectionsCount}
                 total={realConnectionsCount}
+                truncated={isTruncated}
                 what="conexiones"
               />
             )}
@@ -952,6 +955,7 @@ function ClassView({
             label="Complejidad estimada"
             value={complexity}
             cappedTotal={isCappedByFree ? realComplexity : undefined}
+            cappedTruncated={isTruncated}
             active={expandedMetric === "complexity"}
             onToggle={() => toggleMetric("complexity")}
           >
@@ -959,6 +963,7 @@ function ClassView({
               <FreeCapNotice
                 shown={complexity}
                 total={realComplexity}
+                truncated={isTruncated}
                 what="el total real"
               />
             )}
@@ -969,6 +974,7 @@ function ClassView({
               total={complexity}
               realConnections={isCappedByFree ? realConnectionsCount : undefined}
               realTotal={isCappedByFree ? realComplexity : undefined}
+              truncated={isTruncated}
             />
           </ExpandableMetric>
 
@@ -1344,11 +1350,14 @@ function Metric({ label, value }: { label: string; value: number }) {
 /** Click-to-expand metric row. The header looks like {@link Metric}; when
  *  active, children render in a panel below. When `cappedTotal` is provided,
  *  the row reads as `value / cappedTotal` with a small "FREE" pill so the
- *  user knows the displayed value is trimmed. */
+ *  user knows the displayed value is trimmed. When `cappedTruncated` is true
+ *  the total renders as `cappedTotal+` ("200+") because P2 cut its walk
+ *  before discovering the real number. */
 function ExpandableMetric({
   label,
   value,
   cappedTotal,
+  cappedTruncated,
   active,
   onToggle,
   children,
@@ -1356,11 +1365,13 @@ function ExpandableMetric({
   label: string;
   value: number;
   cappedTotal?: number;
+  cappedTruncated?: boolean;
   active: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
   const isCapped = typeof cappedTotal === "number" && cappedTotal > value;
+  const totalLabel = cappedTruncated ? `${cappedTotal}+` : `${cappedTotal}`;
   return (
     <div className="flex flex-col">
       <button
@@ -1369,7 +1380,7 @@ function ExpandableMetric({
         aria-expanded={active}
         title={
           isCapped
-            ? `Estás viendo ${value} de ${cappedTotal} (cap del plan FREE)`
+            ? `Estás viendo ${value} de ${totalLabel} (cap del plan FREE)`
             : undefined
         }
         className={`flex items-center justify-between rounded-md border bg-[var(--bg-input)] px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60 ${
@@ -1389,7 +1400,7 @@ function ExpandableMetric({
                 {value}
               </span>
               <span className="font-mono text-xs tabular-nums text-[var(--silver-dark)]">
-                / {cappedTotal}
+                / {totalLabel}
               </span>
               <span className="rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-[0.16em] text-[var(--bordo)]">
                 Free
@@ -1418,20 +1429,30 @@ function ExpandableMetric({
 
 /** Educational notice rendered inside an expanded metric panel when the
  *  number is capped by the FREE plan. Honest about the gap and points the
- *  user toward upgrading. */
+ *  user toward upgrading. When `truncated` is true, the total renders as
+ *  "200+" because P2 cut its walk before discovering the actual number. */
 function FreeCapNotice({
   shown,
   total,
+  truncated,
   what,
 }: {
   shown: number;
   total: number;
+  truncated?: boolean;
   what: string;
 }) {
+  const totalLabel = truncated ? `${total}+` : `${total}`;
   return (
     <div className="mb-2 rounded-sm border border-[var(--bordo)]/40 bg-[var(--bordo)]/10 px-2 py-1.5 text-[10px] leading-snug text-[var(--bordo)]">
-      Estás viendo <span className="font-semibold">{shown} de {total}</span>{" "}
+      Estás viendo <span className="font-semibold">{shown} de {totalLabel}</span>{" "}
       {what}. El plan FREE recorta a 10 conexiones; con PRO ves todas.
+      {truncated && (
+        <span className="block opacity-80">
+          (Mostramos &ldquo;{total}+&rdquo; porque encontramos al menos {total}{" "}
+          referencias y dejamos de contar — el número real puede ser mayor.)
+        </span>
+      )}
     </div>
   );
 }
@@ -1611,6 +1632,7 @@ function ComplexityBreakdown({
   total,
   realConnections,
   realTotal,
+  truncated,
 }: {
   fields: number;
   methods: number;
@@ -1618,9 +1640,12 @@ function ComplexityBreakdown({
   total: number;
   realConnections?: number;
   realTotal?: number;
+  truncated?: boolean;
 }) {
   const hasRealNumbers =
     typeof realConnections === "number" && typeof realTotal === "number";
+  const realConnLabel = truncated ? `${realConnections}+` : `${realConnections}`;
+  const realTotalLabel = truncated ? `${realTotal}+` : `${realTotal}`;
   return (
     <div className="flex flex-col gap-1.5 font-mono text-[11px] leading-tight">
       <p className="text-[10px] text-[var(--fg-muted)]">
@@ -1642,7 +1667,7 @@ function ComplexityBreakdown({
             <span className="text-[var(--fg-primary)]">{connections}</span>
             {hasRealNumbers && realConnections! > connections && (
               <span className="text-[10px] text-[var(--bordo)]">
-                (real: {realConnections})
+                (real: {realConnLabel})
               </span>
             )}
           </span>
@@ -1657,7 +1682,7 @@ function ComplexityBreakdown({
             </span>
             {hasRealNumbers && realTotal! > total && (
               <span className="text-[10px] text-[var(--bordo)]">
-                (real: {realTotal})
+                (real: {realTotalLabel})
               </span>
             )}
           </span>

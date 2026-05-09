@@ -76,25 +76,12 @@ export function useSSE(sessionId: string | null) {
       )
         return;
       bufferRef.current = emptyBuffer();
-      if (buf.connections.length) {
-        console.log(
-          `[CodeMapper] flush: classes=${buf.classes.length} fields=${buf.fields.length} methods=${buf.methods.length} connections=${buf.connections.length}`,
-          buf.connections[0],
-        );
-      }
       // Order matters: classes first so subsequent updates find them.
       if (buf.packages.length) addPackagesBatch(buf.packages);
       if (buf.classes.length) addClassesBatch(buf.classes);
       if (buf.fields.length) updateFieldsBatch(buf.fields);
       if (buf.methods.length) updateMethodsBatch(buf.methods);
-      if (buf.connections.length) {
-        const beforeStore = useGraphStore.getState().edges.length;
-        addConnectionsBatch(buf.connections);
-        const afterStore = useGraphStore.getState().edges.length;
-        console.log(
-          `[CodeMapper] connections store: +${afterStore - beforeStore} (total in store: ${afterStore})`,
-        );
-      }
+      if (buf.connections.length) addConnectionsBatch(buf.connections);
     };
 
     const interval = setInterval(flush, FLUSH_INTERVAL_MS);
@@ -102,7 +89,6 @@ export function useSSE(sessionId: string | null) {
     let esRef: EventSource | null = null;
     const es = openStream(streamUrl(sessionId), {
       onOpen: () => {
-        console.log("[CodeMapper] SSE open", streamUrl(sessionId));
         setStatus("streaming");
       },
       onError: (err) => {
@@ -120,8 +106,6 @@ export function useSSE(sessionId: string | null) {
         }
       },
       onEvent: (type, data) => {
-        // [debug] flagging while we stabilise focus mode — remove once stable
-        console.log("[CodeMapper] event received:", type, data);
         switch (type) {
           case "session_start": {
             const p = data as SessionStartPayload;
@@ -163,17 +147,12 @@ export function useSSE(sessionId: string | null) {
             break;
           case "focus_class_loaded": {
             const p = data as FocusClassLoadedPayload;
-            console.log("[CodeMapper] focus_class_loaded", p.fullyQualifiedName);
             setFocusClass(p);
             setStats({ projectName: p.name });
             break;
           }
           case "focus_method_loaded": {
             const p = data as FocusMethodLoadedPayload;
-            console.log(
-              "[CodeMapper] focus_method_loaded",
-              `${p.containingClass}.${p.methodName}`,
-            );
             setFocusMethod(p);
             setStats({
               projectName: `${p.containingClass}.${p.methodName}()`,
@@ -182,10 +161,6 @@ export function useSSE(sessionId: string | null) {
           }
           case "session_complete": {
             const p = data as SessionCompletePayload;
-            console.log(
-              `[CodeMapper] session_complete recv. SSE conns received=${totalConnsSeen}, backend reports totalConnections=${p?.totalConnections}, totalClasses=${p?.totalClasses}`,
-              p,
-            );
             flush();
             setStats({
               parseEndTime: Date.now(),
@@ -200,13 +175,19 @@ export function useSSE(sessionId: string | null) {
           }
           case "limit_reached": {
             const p = data as LimitReachedPayload;
-            console.log("[CodeMapper] limit_reached recv", p);
+            // Prefer totalConnectionsDetected (the honest P1+P2 number) over
+            // the legacy totalFilesAvailable. Fallback handles older backends.
+            const honestTotal =
+              typeof p.totalConnectionsDetected === "number"
+                ? p.totalConnectionsDetected
+                : p.totalFilesAvailable;
             setLimitReached({
               reached: true,
               limit: p.limit,
-              totalAvailable: p.totalFilesAvailable,
+              totalAvailable: honestTotal,
               parsed: p.filesParsed,
               message: p.message,
+              truncated: p.truncated ?? false,
             });
             break;
           }

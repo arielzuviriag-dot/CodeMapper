@@ -34,12 +34,18 @@ export function StreamingIndicator() {
   const headline = isComplete ? "Analizado" : "Analizando...";
 
   // ── Counter copy depending on mode + status ─────────────────────────
+  // When the FREE hard cap is hit during P2 the backend can't report the
+  // real total — only that it's at least N. We render "N+" so the dev sees
+  // the lower bound without being lied to.
+  const totalLabel = limitReached.truncated
+    ? `${limitReached.totalAvailable}+`
+    : `${limitReached.totalAvailable}`;
   let counterText: string;
   if (inAnyFocusMode) {
     if (isComplete) {
       counterText = limitReached.reached
-        ? `${focusConnections} de ${limitReached.totalAvailable} conexiones`
-        : `${focusConnections} conexiones de Nivel 1`;
+        ? `${focusConnections} de ${totalLabel} conexiones`
+        : `${focusConnections} conexiones`;
     } else {
       counterText = isPro
         ? `Procesados: ${focusConnections} conexiones`
@@ -48,7 +54,7 @@ export function StreamingIndicator() {
   } else {
     if (isComplete) {
       counterText = limitReached.reached
-        ? `${nodeCount} de ${limitReached.totalAvailable} clases · ${edgeCount} conexiones`
+        ? `${nodeCount} de ${totalLabel} clases · ${edgeCount} conexiones`
         : `${nodeCount} clases · ${edgeCount} conexiones`;
     } else {
       counterText = isPro

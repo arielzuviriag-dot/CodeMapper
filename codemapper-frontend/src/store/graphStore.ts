@@ -59,9 +59,14 @@ export interface LimitReachedState {
   /** Modal visibility — independent of `reached` so the banner can persist after dismiss. */
   modalOpen: boolean;
   limit: number;
+  /** Honest total of detected connections (P1 + P2). When `truncated`, this
+   *  equals the FREE hard cap (200) and the UI renders "200+". */
   totalAvailable: number;
   parsed: number;
   message: string;
+  /** True when P2 hit the FREE hard cap and stopped counting. UI shows "200+"
+   *  because we don't know the real number — only that it's at least 200. */
+  truncated: boolean;
 }
 
 export type LimitReachedPayload = Omit<LimitReachedState, "modalOpen">;
@@ -259,6 +264,7 @@ const DEFAULT_LIMIT_REACHED: LimitReachedState = {
   totalAvailable: 0,
   parsed: 0,
   message: "",
+  truncated: false,
 };
 
 function buildClassNode(payload: ClassFoundPayload): ClassNodeData {
@@ -580,8 +586,6 @@ export const useGraphStore = create<GraphState>((set) => ({
   setFocusMode: (enabled) => set({ focusMode: enabled }),
 
   setFocusClass: (focus) => {
-    // [debug] flagging while we stabilise focus mode — remove once stable
-    console.log("[CodeMapper] setFocusClass called with:", focus);
     set((state) => {
       const nextNodes = new Map(state.nodes);
       nextNodes.set(focus.id, focusToClassNode(focus));
@@ -612,8 +616,6 @@ export const useGraphStore = create<GraphState>((set) => ({
   setFocusMethodMode: (enabled) => set({ focusMethodMode: enabled }),
 
   setFocusMethod: (focus) => {
-    // [debug] flagging while we stabilise focus mode — remove once stable
-    console.log("[CodeMapper] setFocusMethod called with:", focus);
     set((state) => ({
       focusMethodMode: true,
       focusMethod: focus,

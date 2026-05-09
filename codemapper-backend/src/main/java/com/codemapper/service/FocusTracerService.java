@@ -53,8 +53,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -312,22 +314,26 @@ public class FocusTracerService {
         ordered.addAll(usesProperties);
 
         int pass1Total = ordered.size();
-        // FREE cap: if pass 1 alone already reaches the cap, we never run
-        // pass 2 — the user can re-run with PRO to see deeper. PRO never caps.
-        boolean cappedInPass1 = !session.isPro() && pass1Total >= focusMaxConnections;
-        List<PendingConnection> pass1ToEmit = cappedInPass1
-                ? ordered.subList(0, focusMaxConnections)
-                : ordered;
+        boolean isPro = session.isPro();
+        // P1 emit gets capped visually for FREE; P2 will run regardless and
+        // (in FREE post-cap) will count silently to compute the honest total.
+        // FREE uses proportional sampling per connection type (instead of a
+        // raw subList) so minority buckets like CALLS or EXTENDS keep at least
+        // one slot — without this, focusing on a class with 30 CALLED_BY + 2
+        // CALLS would show ten CALLED_BY and hide the outgoing dependencies
+        // entirely, which are usually the most informative.
+        List<PendingConnection> pass1ToEmit = isPro
+                ? ordered
+                : proportionalSample(ordered, focusMaxConnections);
 
-        log.info("Focus session {}: pass 1 found {} relationships ({} extends/implements, {} called_by, {} calls, {} properties), pro={}, cappedInPass1={}",
+        log.info("Focus session {}: pass 1 found {} relationships ({} extends/implements, {} called_by, {} calls, {} properties), pro={}",
                 session.getSessionId(),
                 pass1Total,
                 extendsImplements.size(),
                 calledBy.size(),
                 calls.size(),
                 usesProperties.size(),
-                session.isPro(),
-                cappedInPass1);
+                isPro);
 
         // Emit pass 1 results with stagger
         int position = 0;
@@ -345,85 +351,124 @@ public class FocusTracerService {
             }
         }
 
-        // ─── PASS 2 — deep body analysis ────────────────────────────────
-        // Only run when there's room: PRO always; FREE only when pass 1
-        // didn't fill the cap. Walks files NOT classified in pass 1 and tries
-        // to resolve method calls / object creations / etc. inside bodies.
-        // Each new match is emitted live (same stagger as pass 1) so the
-        // dev sees the graph keep growing while analysis runs.
-        boolean cappedInPass2 = false;
-        int pass2Total = 0;
-        if (!cappedInPass1) {
-            int remainingCap =
-                    session.isPro() ? Integer.MAX_VALUE : (focusMaxConnections - emittedCount);
-            String focusSimpleName = focusParsed.getName();
-            for (Path file : projectFiles) {
-                if (remainingCap <= 0) {
-                    cappedInPass2 = true;
-                    break;
+        // ─── PASS 2 — deep body analysis (always runs) ─────────────────
+        // P2 walks every file not classified in P1 and tries to resolve
+        // method calls / object creations / etc. inside bodies.
+        //
+        // Two modes coexist inside the same loop:
+        //   • EMIT mode: PRO always, OR FREE before reaching the visual cap.
+        //     Each match is emitted live with stagger so the dev sees the
+        //     graph grow during analysis.
+        //   • SILENT-COUNT mode: FREE after the cap. Each match still bumps
+        //     the detected counter (so the panel can show "10 / 32" honest)
+        //     but no FocusConnectionEvent is emitted, no Thread.sleep happens
+        //     — work cost stays only in the symbol resolver itself.
+        //
+        // Hard caps protect against pathological cases:
+        //   • FREE: 200 detections → set `truncated`, break the walk. The
+        //     frontend renders "200+" instead of an absolute number.
+        //   • PRO: 5000 detections → log a warning and break silently
+        //     (defensive — covers cases like focusing on `String` or `Object`
+        //     where every file is a caller). User experience is unchanged
+        //     because these cases are rare and 5000 is already overwhelming.
+        final int FREE_HARD_CAP = 200;
+        final int PRO_HARD_CAP = 5000;
+        int pass2Detected = 0;
+        int pass2Emitted = 0;
+        boolean shouldEmit = isPro || emittedCount < focusMaxConnections;
+        boolean truncated = false;
+        String focusSimpleName = focusParsed.getName();
+
+        outer:
+        for (Path file : projectFiles) {
+            if (filesProcessedInPass1.contains(file)) continue;
+            if (file.toAbsolutePath().normalize().equals(focusPath.toAbsolutePath().normalize())) continue;
+
+            CompilationUnit cu = parsedCache.get(file);
+            if (cu == null) continue;
+
+            String pkg = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
+            for (TypeDeclaration<?> td : cu.getTypes()) {
+                // Hard cap check before extracting to avoid wasted work
+                if (!isPro && pass2Detected >= FREE_HARD_CAP) {
+                    truncated = true;
+                    break outer;
                 }
-                if (filesProcessedInPass1.contains(file)) continue;
-                if (file.toAbsolutePath().normalize().equals(focusPath.toAbsolutePath().normalize())) continue;
+                if (isPro && pass2Detected >= PRO_HARD_CAP) {
+                    log.warn("Focus session {}: PRO defensive cap reached ({} detections in pass 2). " +
+                                    "This usually means focusing on an extremely common type (String, Object, etc). " +
+                                    "Cutting walk to keep the session responsive.",
+                            session.getSessionId(), pass2Detected);
+                    break outer;
+                }
 
-                CompilationUnit cu = parsedCache.get(file);
-                if (cu == null) continue;
+                ParsedClass pc;
+                try {
+                    pc = classExtractor.extract(td, pkg, file.toString());
+                    pc.setFields(fieldExtractor.extract(td));
+                    pc.setMethods(methodExtractor.extract(td));
+                } catch (Exception e) {
+                    continue;
+                }
+                if (focusFqn.equals(pc.getFullyQualifiedName())) continue;
+                if (alreadyConnectedFqns.contains(pc.getFullyQualifiedName())) continue;
 
-                String pkg = cu.getPackageDeclaration().map(p -> p.getNameAsString()).orElse("");
-                for (TypeDeclaration<?> td : cu.getTypes()) {
-                    ParsedClass pc;
+                // Deep analysis — emits diagnostics along the way regardless
+                // of FREE/PRO mode (diagnostics are info, not capped product).
+                boolean foundFocus = analyzeBodyForFocus(
+                        td, focusFqn, focusSimpleName, file, rootPackage, diagnostics, sink);
+                if (!foundFocus) continue;
+
+                pass2Detected++;
+                alreadyConnectedFqns.add(pc.getFullyQualifiedName());
+
+                if (shouldEmit) {
+                    // Live emit path — stagger like P1 so the graph keeps
+                    // populating during deep search.
+                    PendingConnection conn = new PendingConnection(
+                            pc, FocusConnectionType.CALLED_BY, td);
+                    position++;
+                    emittedCount++;
+                    pass2Emitted++;
+                    emitConnection(sink, conn, position, focusFqn, focusType, focusSimpleName, session);
                     try {
-                        pc = classExtractor.extract(td, pkg, file.toString());
-                        pc.setFields(fieldExtractor.extract(td));
-                        pc.setMethods(methodExtractor.extract(td));
-                    } catch (Exception e) {
-                        continue;
+                        Thread.sleep(60);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
                     }
-                    if (focusFqn.equals(pc.getFullyQualifiedName())) continue;
-                    if (alreadyConnectedFqns.contains(pc.getFullyQualifiedName())) continue;
-
-                    // Deep analysis of THIS type's bodies — emits diagnostics
-                    // along the way and returns true if any reference to the
-                    // focus was confirmed.
-                    boolean foundFocus = analyzeBodyForFocus(
-                            td, focusFqn, focusSimpleName, file, rootPackage, diagnostics, sink);
-                    if (foundFocus) {
-                        PendingConnection conn = new PendingConnection(
-                                pc, FocusConnectionType.CALLED_BY, td);
-                        alreadyConnectedFqns.add(pc.getFullyQualifiedName());
-                        position++;
-                        emittedCount++;
-                        pass2Total++;
-                        emitConnection(sink, conn, position, focusFqn, focusType, focusSimpleName, session);
-                        if (!session.isPro()) {
-                            remainingCap--;
-                            if (remainingCap <= 0) {
-                                cappedInPass2 = true;
-                                break;
-                            }
-                        }
-                        try {
-                            Thread.sleep(60);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            return;
-                        }
+                    // After emitting, did we just hit the FREE visual cap?
+                    if (!isPro && emittedCount >= focusMaxConnections) {
+                        // Stop emitting — but keep counting so the panel
+                        // can report the honest total at the end.
+                        shouldEmit = false;
                     }
                 }
+                // else: silent-count mode — no emit, no sleep, almost free
             }
-            log.info("Focus session {}: pass 2 added {} deep-body connections, cappedInPass2={}",
-                    session.getSessionId(), pass2Total, cappedInPass2);
         }
 
-        // Emit cap reached if applicable. We don't have a perfect "totalAvailable"
-        // for pass 2 cuts (we stopped early), so we fall back to emittedCount + 1
-        // when pass 2 cut, and the real total when pass 1 cut.
-        if (cappedInPass1 || cappedInPass2) {
-            int totalForBanner = cappedInPass1 ? pass1Total : emittedCount + 1;
+        log.info("Focus session {}: pass 2 detected {} ({} emitted, {} silent-counted), truncated={}",
+                session.getSessionId(),
+                pass2Detected,
+                pass2Emitted,
+                pass2Detected - pass2Emitted,
+                truncated);
+
+        // ─── LimitReachedEvent — only when FREE is actually capped ─────
+        // The honest total is P1 + P2 detected (regardless of how many were
+        // emitted). When truncated, it's >= FREE_HARD_CAP and the frontend
+        // renders "200+".
+        int realTotal = pass1Total + pass2Detected;
+        boolean cappedFree = !isPro && emittedCount < realTotal;
+        if (cappedFree) {
             sink.accept(new LimitReachedEvent(
                     focusMaxConnections,
-                    totalForBanner,
+                    realTotal,
                     emittedCount,
-                    "Llegaste al límite de la versión FREE"));
+                    "Llegaste al límite de la versión FREE",
+                    realTotal,
+                    truncated));
         }
 
         long durationMs = Duration.between(start, Instant.now()).toMillis();
@@ -433,13 +478,124 @@ public class FocusTracerService {
                 durationMs));
         session.setStatus(SessionData.Status.COMPLETED);
 
-        log.info("Focus session {} done: focus + {} connections ({} from pass 1, {} from pass 2), {} diagnostics, {} ms",
+        log.info("Focus session {} done: focus + {} emitted ({} from pass 1, {} from pass 2), {} silent-counted in pass 2, realTotal={}, truncated={}, {} diagnostics, {} ms",
                 session.getSessionId(),
                 emittedCount,
                 pass1ToEmit.size(),
-                pass2Total,
+                pass2Emitted,
+                pass2Detected - pass2Emitted,
+                realTotal,
+                truncated,
                 diagnostics.size(),
                 durationMs);
+    }
+
+    /**
+     * FREE-tier sampling. When {@code cap < ordered.size()}, build a subset
+     * that guarantees one slot per connection type present and distributes
+     * the remainder proportionally to each bucket's weight (largest-remainder
+     * / Hare quota). On a fractional tie, the smaller bucket wins — the
+     * point of this whole exercise is preserving minority types.
+     *
+     * Output order follows {@link FocusConnectionType#values()} so it stays
+     * EXTENDS+IMPLEMENTS → CALLED_BY → CALLS → USES_PROPERTIES, the same
+     * shape the graph and PDF have always presented.
+     */
+    private List<PendingConnection> proportionalSample(
+            List<PendingConnection> ordered, int cap) {
+        if (cap >= ordered.size()) return ordered;
+
+        Map<FocusConnectionType, List<PendingConnection>> buckets = new LinkedHashMap<>();
+        for (PendingConnection pc : ordered) {
+            buckets.computeIfAbsent(pc.connectionType, k -> new ArrayList<>()).add(pc);
+        }
+
+        if (buckets.size() == 1) {
+            return new ArrayList<>(ordered.subList(0, cap));
+        }
+
+        // Defensive: more buckets than slots (shouldn't happen with cap=10
+        // and ≤5 enum values, but if focusMaxConnections is ever lowered).
+        if (buckets.size() >= cap) {
+            List<PendingConnection> trimmed = new ArrayList<>(cap);
+            int taken = 0;
+            for (FocusConnectionType t : FocusConnectionType.values()) {
+                List<PendingConnection> bucket = buckets.get(t);
+                if (bucket == null) continue;
+                trimmed.add(bucket.get(0));
+                if (++taken >= cap) break;
+            }
+            return trimmed;
+        }
+
+        int total = ordered.size();
+        int remaining = cap - buckets.size();
+        Map<FocusConnectionType, Integer> quota = new LinkedHashMap<>();
+        Map<FocusConnectionType, Double> remainder = new LinkedHashMap<>();
+        int assigned = 0;
+        for (Map.Entry<FocusConnectionType, List<PendingConnection>> e : buckets.entrySet()) {
+            double exact = (e.getValue().size() * (double) remaining) / total;
+            int floor = (int) Math.floor(exact);
+            quota.put(e.getKey(), 1 + floor);
+            remainder.put(e.getKey(), exact - floor);
+            assigned += floor;
+        }
+
+        // Distribute the leftover by largest remainder. Tiebreak: smaller
+        // bucket wins (so a 30 CB + 2 CALLS focus, where both buckets land
+        // at remainder=0.5, gives the spare slot to CALLS).
+        int leftover = remaining - assigned;
+        if (leftover > 0) {
+            List<FocusConnectionType> ranked = new ArrayList<>(buckets.keySet());
+            ranked.sort((a, b) -> {
+                int cmp = Double.compare(remainder.get(b), remainder.get(a));
+                if (cmp != 0) return cmp;
+                return Integer.compare(buckets.get(a).size(), buckets.get(b).size());
+            });
+            for (int i = 0; i < leftover && i < ranked.size(); i++) {
+                quota.merge(ranked.get(i), 1, Integer::sum);
+            }
+        }
+
+        // A bucket may have been allocated more than it actually has.
+        // Clamp and hand the slack to the largest bucket with room — keep
+        // iterating until either the slack is gone or every bucket is full
+        // (which can't happen here because cap < total, but the loop is
+        // defensive).
+        int slack = 0;
+        for (Map.Entry<FocusConnectionType, List<PendingConnection>> e : buckets.entrySet()) {
+            int q = quota.get(e.getKey());
+            int avail = e.getValue().size();
+            if (q > avail) {
+                slack += q - avail;
+                quota.put(e.getKey(), avail);
+            }
+        }
+        if (slack > 0) {
+            List<FocusConnectionType> byDominance = new ArrayList<>(buckets.keySet());
+            byDominance.sort((a, b) -> Integer.compare(buckets.get(b).size(), buckets.get(a).size()));
+            while (slack > 0) {
+                boolean progressed = false;
+                for (FocusConnectionType t : byDominance) {
+                    if (quota.get(t) < buckets.get(t).size()) {
+                        quota.merge(t, 1, Integer::sum);
+                        slack--;
+                        progressed = true;
+                        if (slack == 0) break;
+                    }
+                }
+                if (!progressed) break;
+            }
+        }
+
+        List<PendingConnection> result = new ArrayList<>(cap);
+        for (FocusConnectionType t : FocusConnectionType.values()) {
+            List<PendingConnection> bucket = buckets.get(t);
+            if (bucket == null) continue;
+            int q = quota.get(t);
+            result.addAll(bucket.subList(0, Math.min(q, bucket.size())));
+        }
+        return result;
     }
 
     /** Emit a single FocusConnectionEvent. Centralizes the per-connection

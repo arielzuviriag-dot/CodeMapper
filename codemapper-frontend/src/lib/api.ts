@@ -207,3 +207,38 @@ export async function getImpactReport(
   );
   return data;
 }
+
+export interface DiagnosticsExportRequest {
+  focusName: string;
+  focusFqn?: string | null;
+  projectName?: string | null;
+  javaVersion?: string | null;
+  pro: boolean;
+  diagnostics: Array<{
+    kind: "UNRESOLVED" | "FALSE_NEGATIVE" | "UNPARSEABLE";
+    file: string;
+    line: number;
+    snippet: string;
+    reason: string;
+  }>;
+}
+
+/**
+ * F-deep — render the contents of the DiagnosticsPanel as a printable PDF.
+ * Same stateless pattern as exportFocoPdf: the frontend ships the data it
+ * already has in the store and the backend just formats.
+ */
+export async function exportDiagnosticsPdf(
+  request: DiagnosticsExportRequest,
+): Promise<Blob> {
+  const { data } = await api.post<Blob>(
+    "/api/foco/export/diagnostics-pdf",
+    request,
+    {
+      responseType: "blob",
+      headers: { "Content-Type": "application/json" },
+      timeout: 60_000,
+    },
+  );
+  return data;
+}

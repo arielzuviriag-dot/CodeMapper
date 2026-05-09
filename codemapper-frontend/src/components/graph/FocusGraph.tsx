@@ -40,6 +40,12 @@ const FOCUS_EDGE_TYPES = {
  *   centerAnchor (0, 0)
  *   peripheral_i.center = ( R * cos(angle_i), R * sin(angle_i) )
  *   angle_i = -π/2 + (i / N) * 2π     // start at top, clockwise
+ *
+ * Edges are floating: they don't pin to a handle id, FocusEdge computes
+ * its own endpoints from the node centers each render. That's what lets
+ * the ring rebalance with every new arrival without ReactFlow tearing
+ * down and recreating the edge components (which used to happen because
+ * the handle picked by pickHandles flipped as cx/cy crossed an axis).
  * ============================================================ */
 // Center node grew in F1 to host the contract surface (method pins + exception
 // cluster). Width bumped 280→340 to fit method names with security badges;
@@ -57,21 +63,6 @@ function radiusFor(count: number): number {
   return 620 + (count - 10) * 32;
 }
 
-/** Pick the handle pair that hugs the dominant axis between focus and
- *  peripheral, so the line enters the peripheral on its closest side instead
- *  of always landing on the top handle (ReactFlow's default when no handle
- *  id is specified). */
-function pickHandles(cx: number, cy: number): { source: string; target: string } {
-  if (Math.abs(cx) > Math.abs(cy)) {
-    return cx > 0
-      ? { source: "src-right", target: "tgt-left" }
-      : { source: "src-left", target: "tgt-right" };
-  }
-  return cy > 0
-    ? { source: "src-bottom", target: "tgt-top" }
-    : { source: "src-top", target: "tgt-bottom" };
-}
-
 function FocusGraphInner() {
   const focusClass = useGraphStore((s) => s.focusClass);
   const focusConnections = useGraphStore((s) => s.focusConnections);
@@ -84,9 +75,6 @@ function FocusGraphInner() {
   const selectNode = useGraphStore((s) => s.selectNode);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // [debug] flagging while we stabilise focus mode — remove once stable
-  console.log("[CodeMapper] FocusGraph render, focusClass:", focusClass);
 
   const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
     if (!focusClass) {
@@ -155,15 +143,13 @@ function FocusGraphInner() {
         draggable: false,
         className: impactClass,
       });
-      const handles = pickHandles(cx, cy);
-      // Edges always go focus → peripheral (peripheral exposes only target
-      // handles). FocusEdge swaps the arrow marker to communicate direction.
+      // Floating edge — no sourceHandle/targetHandle. FocusEdge computes its
+      // own endpoints from node centers so the line follows when the radial
+      // layout rebalances, without ReactFlow remounting the component.
       peripheralEdges.push({
         id: `focus-edge-${conn.id}`,
         source: focusClass.id,
-        sourceHandle: handles.source,
         target: conn.id,
-        targetHandle: handles.target,
         type: "focusEdge",
         data: {
           connectionType: conn.connectionType,
@@ -232,8 +218,6 @@ function FocusGraphInner() {
         elementsSelectable={false}
         defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
         onNodeClick={(_, node) => {
-          // [debug] flagging while we stabilise focus mode — remove once stable
-          console.log("[CodeMapper] FocusGraph onNodeClick:", node.id);
           selectNode(node.id);
         }}
       >

@@ -187,6 +187,14 @@ export interface LimitReachedPayload {
   totalFilesAvailable: number;
   filesParsed: number;
   message: string;
+  /** Total real detectado en el proyecto (P1 + P2 sumados) — el número
+   *  honesto que el panel de métricas debe mostrar como "10 / N", incluso
+   *  si solo N=10 efectivamente se emitieron por SSE. */
+  totalConnectionsDetected: number;
+  /** True cuando P2 cortó por el hard cap de exploración (FREE: 200).
+   *  Cuando es true el frontend renderiza "200+" en lugar del número
+   *  absoluto, porque el walk se cortó antes de saber el total real. */
+  truncated: boolean;
 }
 
 /** A detected behavioral annotation (Spring/JSR) on the focus class or one

@@ -155,9 +155,10 @@ export default function MapPage() {
       const url = URL.createObjectURL(blob);
       const today = new Date().toISOString().slice(0, 10);
       const safeName = focusClass.name.replace(/[^A-Za-z0-9._-]/g, "_");
+      const tier = isPro ? "PRO" : "FREE";
       const link = document.createElement("a");
       link.href = url;
-      link.download = `codemapper-foco-${safeName}-${today}.pdf`;
+      link.download = `codemapper-foco-${safeName}-${tier}-${today}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
