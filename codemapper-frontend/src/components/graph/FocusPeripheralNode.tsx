@@ -23,7 +23,19 @@ import type {
 
 interface PeripheralData extends Record<string, unknown> {
   payload: FocusConnectionPayload;
+  /** Arrival index (0-based) in the order the SSE delivered the connection.
+   *  Drives the entrance-stagger so the peripherals appear in cascade rather
+   *  than all at once. Capped (see ENTRANCE_STAGGER_CAP_INDEX) so a 32-conn
+   *  PRO session doesn't have the last card waiting 8+ seconds. */
+  index: number;
 }
+
+// Per-card entrance stagger. Wall-clock-equivalent because we trust the node
+// component to mount once per connection and not re-mount during streaming
+// (verified — only the edges suffer ReactFlow's edge-layer remount). If that
+// changes, we'd port this to a JS rAF approach like FocusEdge does.
+const ENTRANCE_STAGGER_MS = 350;
+const ENTRANCE_STAGGER_CAP_INDEX = 8;
 
 const TYPE_THEME: Record<FocusConnectionType, { bg: string; fg: string; label: string }> = {
   CALLS: { bg: "#B91C42", fg: "#FFFFFF", label: "Llama a" },
@@ -61,8 +73,10 @@ function KindIcon({ kind }: { kind: ClassKind }) {
 }
 
 function FocusPeripheralNodeComponent({ data }: NodeProps) {
-  const { payload } = data as PeripheralData;
+  const { payload, index } = data as PeripheralData;
   const theme = TYPE_THEME[payload.connectionType];
+  const entranceDelayMs =
+    Math.min(index, ENTRANCE_STAGGER_CAP_INDEX) * ENTRANCE_STAGGER_MS;
   const isProperties = payload.connectionType === "USES_PROPERTIES";
 
   const controlTheme = payload.controlContext
@@ -93,9 +107,12 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
     // Pure-CSS entrance via .cm-focus-node-enter — runs once per mount with
     // `forwards`, so re-renders triggered by layout rebalance don't restart
     // the animation (which is what made framer-motion leave nodes invisible
-    // while the matching edge already pointed at them).
+    // while the matching edge already pointed at them). animationDelay is
+    // inline so the first card lands instantly and each subsequent one
+    // staggers — overrides the (unset) delay in the class.
     <div
       className="cm-focus-node-enter relative flex w-[220px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)]"
+      style={{ animationDelay: `${entranceDelayMs}ms` }}
     >
       <Handle type="target" id="tgt-top" position={Position.Top} className="!opacity-0" />
       <Handle type="target" id="tgt-bottom" position={Position.Bottom} className="!opacity-0" />

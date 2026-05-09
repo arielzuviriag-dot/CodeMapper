@@ -71,11 +71,13 @@ const MONACO_OPTIONS = {
     alwaysConsumeMouseWheel: false,
   },
   // Find widget — never seed the search box from the cursor/selection so it
-  // opens empty (without "package", the first word, etc.).
+  // opens empty (without "package", the first word, etc.). addExtraSpaceOnTop
+  // pushes the code down when the widget opens so the search box sits in its
+  // own band at the top of the editor instead of floating over the source.
   find: {
     seedSearchStringFromSelection: "never",
     autoFindInSelection: "never",
-    addExtraSpaceOnTop: false,
+    addExtraSpaceOnTop: true,
   },
 } as const;
 
@@ -352,8 +354,23 @@ export function ClassDetailSheet() {
   /** FOCO SCANER over a method — fires from the method-mode sheet. Uses the
    *  current focus class as the source file for the method. */
   const requestFocusScanMethod = () => {
-    if (!selectedMethod || !focusClass || !projectPath || isFocusing) return;
+    // [SCAN-DBG] strip after diagnosing the PRO "click does nothing" issue.
+    console.warn("[SCAN-DBG] requestFocusScanMethod called", {
+      hasSelectedMethod: !!selectedMethod,
+      hasFocusClass: !!focusClass,
+      focusClassSourceFile: focusClass?.sourceFile,
+      projectPath,
+      isFocusing,
+      isPro: resolveDemoMode() === "pro",
+    });
+    if (!selectedMethod || !focusClass || !projectPath || isFocusing) {
+      console.warn(
+        "[SCAN-DBG] EARLY RETURN — one of the guards failed (see flags above)",
+      );
+      return;
+    }
     const rel = computeRelativeFocusFile(projectPath, focusClass.sourceFile);
+    console.warn("[SCAN-DBG] computed relative path", { rel });
     if (!rel) {
       toast.error("No se puede deducir el path relativo del archivo");
       return;
@@ -633,7 +650,7 @@ function SheetHeaderForMode({
                   ) : (
                     <>
                       <Crosshair className="mr-1.5 h-3.5 w-3.5" />
-                      Foco Scaner
+                      Foco al Método
                     </>
                   )}
                 </Button>

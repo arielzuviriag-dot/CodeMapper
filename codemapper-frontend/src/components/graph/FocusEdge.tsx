@@ -54,14 +54,26 @@ const TYPE_STYLE: Record<
   INVOKES_OUTGOING: { stroke: "#B91C42", width: 2, label: "Invoca" },
 };
 
-// Wall-clock animation timings, in ms. The draw doesn't use the cumulative
-// stagger pattern that bit us before — sequencing comes naturally from each
-// edge's own firstSeenAt (which the backend paces ~60ms apart via SSE).
-// ANIM_DELAY_MS gives the peripheral card ~350ms to finish its CSS entrance
-// before the line starts drawing, so the storytelling is "class arrives, then
-// it connects".
-const ANIM_DURATION_MS = 700;
+// Wall-clock animation timings, in ms.
+//
+// ANIM_DELAY_MS is the small base offset between a connection arriving and
+// its line starting to draw — gives the peripheral card a beat to paint.
+//
+// STAGGER_MS × arrivalIndex is the per-arrow lag that creates the "wave"
+// feel: arrow N starts drawing well after arrow N-1, so the eye reads them
+// one by one. CAPPED at STAGGER_CAP_INDEX so the last arrow in a 32-conn
+// PRO session doesn't wait 16+ seconds — past the cap, all remaining arrows
+// share the same delay and finish in a tail wave.
+//
+// This stagger is wall-clock based (anchored to firstSeenAt + computed
+// offset, NOT to component mount), so ReactFlow's edge-layer remounts on
+// layout rebalance don't restart the animation. A remounting arrow reads
+// firstSeenAt and arrivalIndex from data, computes "I should be at progress
+// X by now", renders directly. No flicker.
+const ANIM_DURATION_MS = 2000;
 const ANIM_DELAY_MS = 350;
+const STAGGER_MS = 350;
+const STAGGER_CAP_INDEX = 12;
 
 /** Connection types where the *peripheral* is the caller and the focus is the
  *  callee — the arrow head should sit on the focus side (markerStart) so the
@@ -180,8 +192,11 @@ function FocusEdgeComponent({
   // firstSeenAt from data, recomputes progress (which by then is probably
   // already 1), and renders the final state — no flicker.
   const firstSeenAt = edgeData.firstSeenAt ?? Date.now();
+  const arrivalIndex = edgeData.index ?? 0;
+  const totalDelayMs =
+    ANIM_DELAY_MS + Math.min(arrivalIndex, STAGGER_CAP_INDEX) * STAGGER_MS;
   const computeProgress = () => {
-    const elapsed = Date.now() - firstSeenAt - ANIM_DELAY_MS;
+    const elapsed = Date.now() - firstSeenAt - totalDelayMs;
     return Math.max(0, Math.min(1, elapsed / ANIM_DURATION_MS));
   };
   const [progress, setProgress] = useState(computeProgress);
