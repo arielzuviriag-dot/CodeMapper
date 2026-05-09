@@ -43,8 +43,15 @@ const TYPE_STYLE: Record<
   INVOKES_OUTGOING: { stroke: "#B91C42", width: 2, label: "Invoca" },
 };
 
-const STAGGER_S = 0.5;
-const BASE_DELAY_S = 0.6;
+// STAGGER stays at 0: the moment we make it cumulative again (e.g. 0.5s ×
+// index) we re-introduce the "three waves" bug — by the 30th edge the
+// total ramp is 15s+ and remounts catch animations mid-flight, restarting
+// them visibly. Root cause of the remount is in BUG_PENDIENTE_OLAS_STREAMING.md.
+// BASE_DELAY gives every edge a small fixed head start so the peripheral
+// node card paints before its line starts drawing — without it the line
+// races the node into existence and shows up first, which reads weird.
+const STAGGER_S = 0;
+const BASE_DELAY_S = 0.35;
 
 /** Connection types where the *peripheral* is the caller and the focus is the
  *  callee — the arrow head should sit on the focus side (markerStart) so the

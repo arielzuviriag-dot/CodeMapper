@@ -283,13 +283,6 @@ export function ClassDetailSheet() {
     getClassSource(sessionId, selectedNodeId)
       .then((res) => {
         if (cancelled) return;
-        // [debug] flagging while we stabilise focus mode — remove once stable
-        console.log(
-          "[CodeMapper] sheet source resolved:",
-          selectedNodeId,
-          res?.sourceCode?.length ?? 0,
-          "chars",
-        );
         const code = res?.sourceCode ?? "";
         if (!code) {
           setError("La respuesta del backend no incluye sourceCode.");

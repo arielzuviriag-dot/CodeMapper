@@ -239,6 +239,26 @@
 }
 
 /* ============================================================
+ * FOCUS mode — node entrance.
+ * Pure CSS animation with `forwards`: runs once at mount and
+ * stays at the final state. Crucially, it does NOT restart when
+ * the component re-renders due to props/position changes — that
+ * was the killer of the previous framer-motion implementation,
+ * because the radial layout rebalances on every new arrival and
+ * each rebalance retriggered the entrance animation, leaving the
+ * card invisible while its edge already pointed to its slot.
+ * Sequencing comes from the backend's 60ms SSE pacing — no
+ * cumulative stagger here. See BUG_PENDIENTE_OLAS_STREAMING.md.
+ * ============================================================ */
+@keyframes cm-focus-node-enter {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.cm-focus-node-enter {
+  animation: cm-focus-node-enter 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ============================================================
  * FOCUS mode — radial edge "draw" animation.
  * Uses CSS variable --cm-focus-delay (set inline per edge in
  * FocusEdge) so each edge starts drawing at its own time.

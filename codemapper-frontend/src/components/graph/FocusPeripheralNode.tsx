@@ -2,7 +2,6 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { motion } from "framer-motion";
 import {
   AlertTriangle,
   Box,
@@ -24,13 +23,7 @@ import type {
 
 interface PeripheralData extends Record<string, unknown> {
   payload: FocusConnectionPayload;
-  /** 0-based index in the arrival order. Drives stagger delay. */
-  index: number;
 }
-
-const STAGGER_S = 0.5;
-/** Wait for the center node entrance (0.6s) before starting peripherals. */
-const BASE_DELAY_S = 0.6;
 
 const TYPE_THEME: Record<FocusConnectionType, { bg: string; fg: string; label: string }> = {
   CALLS: { bg: "#B91C42", fg: "#FFFFFF", label: "Llama a" },
@@ -68,7 +61,7 @@ function KindIcon({ kind }: { kind: ClassKind }) {
 }
 
 function FocusPeripheralNodeComponent({ data }: NodeProps) {
-  const { payload, index } = data as PeripheralData;
+  const { payload } = data as PeripheralData;
   const theme = TYPE_THEME[payload.connectionType];
   const isProperties = payload.connectionType === "USES_PROPERTIES";
 
@@ -97,15 +90,12 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
   }
 
   return (
-    <motion.div
-      initial={{ scale: 0.6, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{
-        duration: 0.4,
-        ease: [0.16, 1, 0.3, 1],
-        delay: BASE_DELAY_S + index * STAGGER_S,
-      }}
-      className="relative flex w-[220px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)]"
+    // Pure-CSS entrance via .cm-focus-node-enter — runs once per mount with
+    // `forwards`, so re-renders triggered by layout rebalance don't restart
+    // the animation (which is what made framer-motion leave nodes invisible
+    // while the matching edge already pointed at them).
+    <div
+      className="cm-focus-node-enter relative flex w-[220px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)]"
     >
       <Handle type="target" id="tgt-top" position={Position.Top} className="!opacity-0" />
       <Handle type="target" id="tgt-bottom" position={Position.Bottom} className="!opacity-0" />
@@ -180,7 +170,7 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
       <div className="truncate border-t border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--fg-muted)]">
         {payload.packageName || "(sin paquete)"}
       </div>
-    </motion.div>
+    </div>
   );
 }
 

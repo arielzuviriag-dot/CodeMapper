@@ -2,7 +2,6 @@
 
 import { memo, useMemo, type MouseEvent as ReactMouseEvent } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { motion } from "framer-motion";
 import { AlertTriangle, Crosshair } from "lucide-react";
 import type { FocusClassLoadedPayload } from "@/lib/types";
 import { useGraphStore } from "@/store/graphStore";
@@ -35,11 +34,11 @@ function FocusCenterNodeComponent({ data }: NodeProps) {
   }, [focus.methods]);
 
   return (
-    <motion.div
-      initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className="relative flex w-[340px] flex-col overflow-hidden rounded-lg border-2 border-[var(--bordo)] bg-[var(--bg-card)] text-[var(--fg-primary)]"
+    // Pure-CSS entrance via .cm-focus-node-enter (300ms, runs once at mount).
+    // No framer-motion: re-renders triggered by the radial layout rebalance
+    // would otherwise restart the entrance animation each time.
+    <div
+      className="cm-focus-node-enter relative flex w-[340px] flex-col overflow-hidden rounded-lg border-2 border-[var(--bordo)] bg-[var(--bg-card)] text-[var(--fg-primary)]"
       style={{
         boxShadow:
           "0 0 28px rgba(185,28,66,0.55), 0 0 56px rgba(185,28,66,0.22), var(--shadow-md)",
@@ -125,7 +124,7 @@ function FocusCenterNodeComponent({ data }: NodeProps) {
       <div className="truncate bg-[var(--bg-input)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted)]">
         {focus.packageName || "(sin paquete)"}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
