@@ -78,12 +78,25 @@ function BitacoraEdgeComponent({
       : 0;
   const curvature = 0.25 + parallelOffset;
 
+  // Trim the bezier endpoint back from the target so the arrow marker has
+  // room to render as a clean triangle in the gap, instead of overlapping
+  // the card border. Same idea as FocusEdge.ARROW_CLEARANCE but smaller
+  // because bitácora cards live tighter together.
+  const ARROW_CLEARANCE = 14;
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const tx = targetX - ux * ARROW_CLEARANCE;
+  const ty = targetY - uy * ARROW_CLEARANCE;
+
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: tx,
+    targetY: ty,
     targetPosition,
     curvature,
   });
@@ -98,16 +111,26 @@ function BitacoraEdgeComponent({
   return (
     <>
       <defs>
+        {/* markerUnits=userSpaceOnUse keeps the marker dimensions
+            independent of the stroke width, so a 1.5px line still gets
+            a readable 10px triangle. refX=10 puts the apex at the path
+            endpoint — combined with the ARROW_CLEARANCE trim above,
+            the triangle sits in a clean gap before the card border. */}
         <marker
           id={markerId}
           viewBox="0 0 10 10"
-          markerWidth="8"
-          markerHeight="8"
-          refX="9"
+          markerUnits="userSpaceOnUse"
+          markerWidth="10"
+          markerHeight="10"
+          refX="10"
           refY="5"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill={stroke} opacity={strokeOpacity} />
+          <path
+            d="M 0 0 L 10 5 L 0 10 z"
+            fill={stroke}
+            opacity={strokeOpacity}
+          />
         </marker>
       </defs>
 

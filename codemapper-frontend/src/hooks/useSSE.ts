@@ -214,7 +214,13 @@ export function useSSE(sessionId: string | null) {
           }
           case "error": {
             const p = data as ErrorPayload;
-            console.error("[CodeMapper] SSE error event", p);
+            // Use console.warn (not console.error) so Next.js Error Overlay
+            // doesn't pop a full-screen modal — the toast already surfaces
+            // the error to the user; the console line is for the dev.
+            // Empty payloads usually mean the backend died mid-stream
+            // (e.g. OOM) and the error event flushed without details.
+            const detail = p?.message ?? "(sin mensaje del backend)";
+            console.warn("[CodeMapper] SSE error event:", detail, p);
             flush();
             setStatus("error");
             toast.error(p?.message ?? "Error en el stream de análisis");

@@ -2,7 +2,6 @@
 
 import { memo, useMemo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Anchor } from "lucide-react";
 import { useBitacoraStore } from "@/store/bitacoraStore";
 
 interface BitacoraNodeData extends Record<string, unknown> {
@@ -33,7 +32,11 @@ function BitacoraNodeComponent({ data }: NodeProps) {
     s.edges.reduce((acc, e) => (e.target === className ? acc + 1 : acc), 0),
   );
 
-  const size = isOrigen ? 65 : 38;
+  // Rectangles instead of circles so the className fits on one line — a
+  // 65px circle had no usable horizontal real estate for "User.class".
+  // Origen is wider/taller to keep the visual hierarchy.
+  const width = isOrigen ? 140 : 110;
+  const height = isOrigen ? 52 : 38;
   const ringClass = isActive ? "cm-bitacora-active-ring" : "";
 
   // Background: bordó for origen, silver tones for the rest. Active gets
@@ -43,6 +46,20 @@ function BitacoraNodeComponent({ data }: NodeProps) {
     if (isActive) return "bg-[var(--silver)] text-[var(--bg-base)]";
     return "bg-[var(--silver-mid)] text-[var(--bg-base)]";
   }, [isOrigen, isActive]);
+
+  // Display name. Origen carries a ".class" suffix to read as Java
+  // (`User.class`) and stays in PascalCase — matches the chip in the
+  // top header of the page. Visited nodes show just the class name,
+  // also PascalCase, no uppercase forced.
+  const displayName = isOrigen ? `${className}.class` : className;
+  // Truncation thresholds calibrated for the new rectangle sizes — at
+  // their fonts, origen (12px mono in 140px wide) fits ~16 chars, visited
+  // (10px in 110px wide) fits ~13. Cut with ellipsis so it never wraps.
+  const truncateAt = isOrigen ? 16 : 13;
+  const shown =
+    displayName.length > truncateAt
+      ? displayName.slice(0, truncateAt - 1) + "…"
+      : displayName;
 
   return (
     <div
@@ -57,27 +74,25 @@ function BitacoraNodeComponent({ data }: NodeProps) {
       <Handle type="target" position={Position.Top} className="!opacity-0" />
 
       <div
-        className={`flex items-center justify-center rounded-full border border-[var(--border-silver)] font-mono font-semibold uppercase shadow-[var(--shadow-md)] transition-transform ${bgClass} ${ringClass}`}
+        className={`flex items-center justify-center rounded-md border border-[var(--border-silver)] font-mono font-semibold shadow-[var(--shadow-md)] transition-transform ${bgClass} ${ringClass}`}
         style={{
-          width: size,
-          height: size,
-          fontSize: isOrigen ? "10px" : "8px",
-          letterSpacing: "0.06em",
+          width,
+          height,
+          fontSize: isOrigen ? "12px" : "10px",
+          letterSpacing: "0.02em",
         }}
         aria-label={`${className}${isOrigen ? " (origen)" : ""}${isActive ? " (activo)" : ""}`}
       >
-        <span className="px-1 text-center leading-tight break-all">
-          {/* Truncate display name — full name lives in the tooltip. */}
-          {className.length > (isOrigen ? 11 : 7)
-            ? className.slice(0, isOrigen ? 11 : 7) + "…"
-            : className}
+        {/* whitespace-nowrap forces the name + .class onto one line; truncate
+            with ellipsis if it overflows so we never wrap inside the node. */}
+        <span className="truncate whitespace-nowrap px-2 text-center leading-tight">
+          {shown}
         </span>
       </div>
 
       {isOrigen && (
-        <div className="mt-1 flex items-center gap-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-[var(--bordo)]">
-          <Anchor className="h-2.5 w-2.5" strokeWidth={2.4} />
-          <span>Origen</span>
+        <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.16em] text-[var(--bordo)]">
+          Origen
         </div>
       )}
 

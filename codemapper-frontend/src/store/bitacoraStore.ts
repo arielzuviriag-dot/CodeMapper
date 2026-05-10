@@ -76,6 +76,18 @@ interface BitacoraState {
   /** When non-null, the panel renders THIS archived tree instead of the
    *  live one. Read-only mode — clicking nodes/edges shows a toast. */
   viewingArchivedId: string | null;
+  /** Last position the user dragged the floating panel to. Survives
+   *  close/reopen so the panel re-appears where the user left it.
+   *  Null until the first drag — in which case the panel falls back to
+   *  the default top-right corner placement. */
+  panelPos: { x: number; y: number } | null;
+  /** Open Document Picture-in-Picture window, when the user has popped
+   *  the panel out. Lives in the store (not local state) so it survives
+   *  React tree remounts caused by Next.js navigations between sessions
+   *  — otherwise jumping via "Foco Scaner" would close the PiP every
+   *  time. Transient: NOT persisted to sessionStorage (Window isn't
+   *  serializable, and a stale reference across reload is meaningless). */
+  pipWindow: Window | null;
 
   /** Sets the origin of the current bitácora. Called once at the very first
    *  focus_class_loaded of a new Marco Polo session. No-op if the bitácora
@@ -106,6 +118,12 @@ interface BitacoraState {
   closeArchivedView: () => void;
   /** Permanently remove one archived tree from the list. */
   deleteArchived: (id: string) => void;
+  /** Persist the panel's last drag position so reopening lands in the
+   *  same spot. */
+  setPanelPos: (pos: { x: number; y: number }) => void;
+  /** Track the active PiP window. Pass null to clear (when the OS
+   *  closes it via pagehide, or the user clicks "Volver al explorador"). */
+  setPipWindow: (w: Window | null) => void;
 }
 
 let edgeSeq = 0;
@@ -125,6 +143,8 @@ export const useBitacoraStore = create<BitacoraState>()(
       startedAt: null,
       archived: [],
       viewingArchivedId: null,
+      panelPos: null,
+      pipWindow: null,
 
       setOrigen: (className) => {
         const state = get();
@@ -219,6 +239,8 @@ export const useBitacoraStore = create<BitacoraState>()(
           viewingArchivedId:
             state.viewingArchivedId === id ? null : state.viewingArchivedId,
         })),
+      setPanelPos: (pos) => set({ panelPos: pos }),
+      setPipWindow: (w) => set({ pipWindow: w }),
     }),
     {
       name: "cm-bitacora",
@@ -245,6 +267,7 @@ export const useBitacoraStore = create<BitacoraState>()(
         activeNodeId: state.activeNodeId,
         startedAt: state.startedAt,
         archived: state.archived,
+        panelPos: state.panelPos,
       }),
     },
   ),

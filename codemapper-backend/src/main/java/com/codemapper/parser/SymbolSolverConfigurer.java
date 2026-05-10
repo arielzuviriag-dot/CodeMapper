@@ -33,35 +33,58 @@ public class SymbolSolverConfigurer {
         return configure(projectRoot, null);
     }
 
+    /** Cap on how many CompilationUnits each JavaParserTypeSolver keeps
+     *  cached. Without this the solver grows unbounded across analyses
+     *  and OOMs the JVM after a few deep walks (default JVM heap on Spring
+     *  Boot dev = ~512 MB, easily blown by a 200-class project's worth
+     *  of fully-tokenized ASTs). */
+    private static final long SOLVER_CACHE_LIMIT = 200;
+
     public List<Path> configure(Path projectRoot, String detectedJavaVersion) throws IOException {
+        ParserConfiguration.LanguageLevel level = mapLanguageLevel(detectedJavaVersion);
+
+        // Slim parser config — we don't need original tokens or comment
+        // attribution for symbol resolution and call-graph extraction.
+        // Turning these off cuts per-AST memory ~30-50%, which matters
+        // when the type solver caches hundreds of CompilationUnits.
+        ParserConfiguration solverParserConfig = new ParserConfiguration()
+                .setLanguageLevel(level)
+                .setStoreTokens(false)
+                .setAttributeComments(false);
+
         CombinedTypeSolver combined = new CombinedTypeSolver();
         combined.add(new ReflectionTypeSolver());
 
         List<Path> sourceRoots = findSourceRoots(projectRoot);
         if (sourceRoots.isEmpty()) {
             try {
-                combined.add(new JavaParserTypeSolver(projectRoot.toFile()));
+                combined.add(new JavaParserTypeSolver(
+                        projectRoot, solverParserConfig, SOLVER_CACHE_LIMIT));
             } catch (Exception e) {
                 log.debug("Could not register fallback source root {}: {}", projectRoot, e.getMessage());
             }
         } else {
             for (Path src : sourceRoots) {
                 try {
-                    combined.add(new JavaParserTypeSolver(src.toFile()));
+                    combined.add(new JavaParserTypeSolver(
+                            src, solverParserConfig, SOLVER_CACHE_LIMIT));
                 } catch (Exception e) {
                     log.debug("Skipping source root {}: {}", src, e.getMessage());
                 }
             }
         }
 
-        ParserConfiguration.LanguageLevel level = mapLanguageLevel(detectedJavaVersion);
-        ParserConfiguration config = new ParserConfiguration()
+        // Same slim flags for direct StaticJavaParser calls (the FocusTracer
+        // parses with StaticJavaParser, not through the solver).
+        ParserConfiguration staticConfig = new ParserConfiguration()
                 .setSymbolResolver(new JavaSymbolSolver(combined))
-                .setLanguageLevel(level);
-        StaticJavaParser.setConfiguration(config);
+                .setLanguageLevel(level)
+                .setStoreTokens(false)
+                .setAttributeComments(false);
+        StaticJavaParser.setConfiguration(staticConfig);
 
-        log.info("Symbol solver configured with {} source root(s), language level {}",
-                sourceRoots.size(), level);
+        log.info("Symbol solver configured with {} source root(s), language level {}, cache limit {} per solver",
+                sourceRoots.size(), level, SOLVER_CACHE_LIMIT);
         return sourceRoots;
     }
 
