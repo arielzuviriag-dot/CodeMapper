@@ -91,6 +91,22 @@ public class FocusTracerService {
             "Mock", "MockBean", "SpyBean", "InjectMocks", "Spy"
     );
 
+    /** P3 — DI-style annotation simple names. A field of the focus type with
+     *  one of these is classified as INJECTION when no stronger evidence
+     *  (INVOCATION / INSTANTIATION) exists in the same caller. */
+    private static final java.util.Set<String> DI_ANNOTATION_NAMES = java.util.Set.of(
+            "Autowired", "Inject", "Resource", "PersistenceContext"
+    );
+
+    /** P3 — string constants for the {@code referenceKind} carried by each
+     *  CALLED_BY/CALLS event. Centralized so backend, tests, and frontend
+     *  agree on the spelling. Ranking goes INVOCATION → INSTANTIATION →
+     *  INJECTION → DECLARATION (strongest first). */
+    public static final String KIND_INVOCATION = "INVOCATION";
+    public static final String KIND_INSTANTIATION = "INSTANTIATION";
+    public static final String KIND_INJECTION = "INJECTION";
+    public static final String KIND_DECLARATION = "DECLARATION";
+
     @Value("${codemapper.limits.focus-max-connections:10}")
     private int focusMaxConnections;
 
@@ -644,6 +660,21 @@ public class FocusTracerService {
                 && pc.callerTd != null
                 && declaresMockOf(pc.callerTd, focusSimpleName);
 
+        // P3 — classify the relationship by how the caller actually uses the
+        // focus. CALLED_BY looks at the caller side; CALLS looks at the focus
+        // side (it is the "caller" of the peripheral). Other connection
+        // kinds (EXTENDS/IMPLEMENTS/USES_PROPERTIES) leave it null.
+        String referenceKind = null;
+        if (pc.connectionType == FocusConnectionType.CALLED_BY && pc.callerTd != null) {
+            referenceKind = detectReferenceKind(pc.callerTd, focusFqn, focusSimpleName);
+        } else if (pc.connectionType == FocusConnectionType.CALLS) {
+            int lastDot = pc.parsed.getFullyQualifiedName().lastIndexOf('.');
+            String targetSimple = lastDot >= 0
+                    ? pc.parsed.getFullyQualifiedName().substring(lastDot + 1)
+                    : pc.parsed.getFullyQualifiedName();
+            referenceKind = detectReferenceKind(focusType, pc.parsed.getFullyQualifiedName(), targetSimple);
+        }
+
         int pos = startPosition;
         int emitted = 0;
         for (InvocationInfo inv : invocations) {
@@ -663,13 +694,116 @@ public class FocusTracerService {
                     inv.invokedMethod,   // viaMethodInTarget — method actually invoked
                     null,
                     isTest,
-                    isMock));
+                    isMock,
+                    referenceKind));
             emitted++;
             if (sleepMs > 0L) {
                 Thread.sleep(sleepMs);
             }
         }
         return emitted;
+    }
+
+    /**
+     * P3 — classify how a caller class uses the target class. Walks the AST
+     * once per category in ranking order and returns the strongest signal:
+     * INVOCATION (body invokes target methods) → INSTANTIATION (body calls
+     * {@code new Target(...)}) → INJECTION (DI-annotated field or
+     * constructor param of the target type) → DECLARATION (target appears
+     * only as a method param/return type).
+     *
+     * <p>Symbol resolution is best-effort: each category falls back to
+     * simple-name matching when the resolver fails. That makes the
+     * classification robust on fixtures and partial sources where the type
+     * solver can't see every dependency.</p>
+     */
+    private String detectReferenceKind(TypeDeclaration<?> callerTd, String targetFqn, String targetSimpleName) {
+        // P3 — mock fields trump body INVOCATION. A test class that declares
+        // `@Mock private Target target;` then drives it via `when(target.foo())`
+        // is not really invoking the target — it's orchestrating a stub. The
+        // dev wants those edges classified as INJECTION (cosmetic dependency)
+        // so they don't dilute the "real coupling" signal.
+        for (FieldDeclaration field : callerTd.getFields()) {
+            boolean mockAnnotated = field.getAnnotations().stream()
+                    .anyMatch(a -> MOCK_ANNOTATION_NAMES.contains(a.getNameAsString()));
+            if (!mockAnnotated) continue;
+            for (VariableDeclarator var : field.getVariables()) {
+                if (typeMatchesTarget(var.getType(), targetFqn, targetSimpleName)) {
+                    return KIND_INJECTION;
+                }
+            }
+        }
+
+        // 1) INVOCATION — any method call where declaringType resolves to target.
+        for (MethodCallExpr call : callerTd.findAll(MethodCallExpr.class)) {
+            try {
+                String declaring = call.resolve().declaringType().getQualifiedName();
+                if (targetFqn.equals(declaring)) {
+                    return KIND_INVOCATION;
+                }
+            } catch (Exception ignored) {
+                // unresolvable — try next call
+            }
+        }
+
+        // 2) INSTANTIATION — any `new Target(...)` expression.
+        for (ObjectCreationExpr expr : callerTd.findAll(ObjectCreationExpr.class)) {
+            try {
+                ResolvedType rt = expr.calculateResolvedType();
+                if (rt.isReferenceType()
+                        && targetFqn.equals(rt.asReferenceType().getQualifiedName())) {
+                    return KIND_INSTANTIATION;
+                }
+            } catch (Exception ignored) {
+                if (targetSimpleName.equals(expr.getType().getNameAsString())) {
+                    return KIND_INSTANTIATION;
+                }
+            }
+        }
+
+        // 3) INJECTION — DI-annotated field of the target type, or any
+        //    constructor parameter of the target type. The latter covers
+        //    Spring's constructor injection without explicit annotations.
+        for (FieldDeclaration field : callerTd.getFields()) {
+            boolean diAnnotated = field.getAnnotations().stream()
+                    .anyMatch(a -> DI_ANNOTATION_NAMES.contains(a.getNameAsString()));
+            if (!diAnnotated) continue;
+            for (VariableDeclarator var : field.getVariables()) {
+                if (typeMatchesTarget(var.getType(), targetFqn, targetSimpleName)) {
+                    return KIND_INJECTION;
+                }
+            }
+        }
+        for (var member : callerTd.getMembers()) {
+            if (member instanceof ConstructorDeclaration cd) {
+                for (Parameter p : cd.getParameters()) {
+                    if (typeMatchesTarget(p.getType(), targetFqn, targetSimpleName)) {
+                        return KIND_INJECTION;
+                    }
+                }
+            }
+        }
+
+        // 4) DECLARATION — fallback. Method/parameter/return signatures
+        //    reference the target but no stronger evidence was found.
+        return KIND_DECLARATION;
+    }
+
+    /** True when {@code t} resolves to {@code targetFqn} (best effort), or
+     *  when its simple name matches {@code targetSimpleName} as a fallback. */
+    private boolean typeMatchesTarget(Type t, String targetFqn, String targetSimpleName) {
+        if (t == null || !t.isClassOrInterfaceType()) return false;
+        ClassOrInterfaceType coi = t.asClassOrInterfaceType();
+        try {
+            ResolvedType rt = coi.resolve();
+            if (rt.isReferenceType()
+                    && targetFqn.equals(rt.asReferenceType().getQualifiedName())) {
+                return true;
+            }
+        } catch (Exception ignored) {
+            // Fall through to simple-name match.
+        }
+        return targetSimpleName.equals(coi.getNameAsString());
     }
 
     /** Pair of (caller-side method, invoked method on the target) used when

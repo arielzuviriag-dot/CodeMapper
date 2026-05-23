@@ -334,7 +334,8 @@ public class FocusMethodTracerService {
                     ec.viaMethodInTarget(),
                     ec.controlContext(),
                     false,
-                    false
+                    false,
+                    null  // P3 — method-focus events don't carry the class-level kind taxonomy
             ));
             try {
                 Thread.sleep(60);

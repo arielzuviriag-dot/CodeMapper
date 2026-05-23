@@ -14,9 +14,45 @@ import {
   type EdgeProps,
   type InternalNode,
 } from "@xyflow/react";
-import { ChevronRight } from "lucide-react";
-import type { FocusConnectionType, ParsedMethod } from "@/lib/types";
+import { Box, ChevronRight, Plug, Plus, Zap } from "lucide-react";
+import type {
+  FocusConnectionType,
+  FocusReferenceKind,
+  ParsedMethod,
+} from "@/lib/types";
 import { useGraphStore } from "@/store/graphStore";
+
+export const REFERENCE_KIND_META: Record<
+  FocusReferenceKind,
+  { Icon: typeof Zap; tooltip: string; testId: string }
+> = {
+  INVOCATION: { Icon: Zap, tooltip: "Invoca métodos", testId: "ref-kind-invocation" },
+  INSTANTIATION: { Icon: Plus, tooltip: "Crea instancias", testId: "ref-kind-instantiation" },
+  INJECTION: { Icon: Plug, tooltip: "Inyección sin invocación", testId: "ref-kind-injection" },
+  DECLARATION: { Icon: Box, tooltip: "Solo declaración de tipo", testId: "ref-kind-declaration" },
+};
+
+/** P3 — small badge with the kind icon + native-title tooltip. Lifted out
+ *  of FocusEdge so vitest can mount it without a ReactFlow context.
+ *  Returns null when {@code kind} is null/undefined. */
+export function ReferenceKindIcon({ kind }: { kind: FocusReferenceKind | null | undefined }) {
+  if (!kind) return null;
+  const meta = REFERENCE_KIND_META[kind];
+  if (!meta) return null;
+  const Icon = meta.Icon;
+  return (
+    <span
+      data-testid={meta.testId}
+      data-reference-kind={kind}
+      title={meta.tooltip}
+      aria-label={meta.tooltip}
+      style={{ pointerEvents: "auto" }}
+      className="flex h-4 w-4 items-center justify-center rounded-sm border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--bordo)] shadow-sm"
+    >
+      <Icon className="h-3 w-3" aria-hidden />
+    </span>
+  );
+}
 
 interface FocusEdgeData extends Record<string, unknown> {
   connectionType: FocusConnectionType;
@@ -49,6 +85,9 @@ interface FocusEdgeData extends Record<string, unknown> {
    *  "+N métodos" badge with the full list as a tooltip instead of the
    *  per-method via-label. */
   aggregatedMethods?: string[] | null;
+  /** P3 — semantic category of how the connected class uses the focus.
+   *  Drives the icon shown next to the type label on the edge midpoint. */
+  referenceKind?: FocusReferenceKind | null;
 }
 
 const TYPE_STYLE: Record<
@@ -438,32 +477,39 @@ function FocusEdgeComponent({
           }}
           className="flex flex-col items-center gap-0.5"
         >
-          <span
-            className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase leading-none tracking-[0.16em] text-white shadow-sm"
-            style={{ backgroundColor: style.stroke }}
-          >
-            {/* F3 — mask icon when the peripheral mocks the focus. Inline
-                SVG so we don't pay the lucide tree-shake cost on every edge. */}
-            {edgeData.isMock && (
-              <svg
-                width="9"
-                height="9"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M2 12c5 0 5-4 10-4s5 4 10 4-5 6-10 6-5-6-10-6Z" />
-                <circle cx="8" cy="12" r="1.4" fill="currentColor" />
-                <circle cx="16" cy="12" r="1.4" fill="currentColor" />
-              </svg>
-            )}
-            {edgeData.isTest ? "Test · " : ""}
-            {style.label}
-          </span>
+          <div className="flex items-center gap-1">
+            <span
+              className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase leading-none tracking-[0.16em] text-white shadow-sm"
+              style={{ backgroundColor: style.stroke }}
+            >
+              {/* F3 — mask icon when the peripheral mocks the focus. Inline
+                  SVG so we don't pay the lucide tree-shake cost on every edge. */}
+              {edgeData.isMock && (
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M2 12c5 0 5-4 10-4s5 4 10 4-5 6-10 6-5-6-10-6Z" />
+                  <circle cx="8" cy="12" r="1.4" fill="currentColor" />
+                  <circle cx="16" cy="12" r="1.4" fill="currentColor" />
+                </svg>
+              )}
+              {edgeData.isTest ? "Test · " : ""}
+              {style.label}
+            </span>
+            {/* P3 — semantic-kind icon. Mounted in the label band so hover
+                target stays close to the connection-type chip. Native title
+                tooltip in Spanish: "Invoca métodos" / "Crea instancias" /
+                "Inyección sin invocación" / "Solo declaración de tipo". */}
+            <ReferenceKindIcon kind={edgeData.referenceKind ?? null} />
+          </div>
           {edgeData.aggregatedMethods && edgeData.aggregatedMethods.length > 1 ? (
             <span
               data-testid="aggregated-methods-badge"

@@ -274,7 +274,17 @@ export interface FocusConnectionPayload {
    *  rather than restarting from zero. Without this, the animation visibly
    *  flickers each time the radial layout rebalances. */
   firstSeenAt?: number;
+  /** P3 — semantic category of how the caller uses the focus class:
+   *  INVOCATION (body invokes focus methods), INSTANTIATION (body calls
+   *  {@code new Focus(...)}), INJECTION (DI field / constructor param of
+   *  the focus type without body usage), DECLARATION (focus appears only
+   *  as a method param or return type). Drives the icon and tooltip on
+   *  the edge label. Null when the connection isn't a body relationship
+   *  (e.g. EXTENDS, IMPLEMENTS, USES_PROPERTIES). */
+  referenceKind?: "INVOCATION" | "INSTANTIATION" | "INJECTION" | "DECLARATION" | null;
 }
+
+export type FocusReferenceKind = NonNullable<FocusConnectionPayload["referenceKind"]>;
 
 /** F-deep — diagnostic finding from deep body analysis. Three kinds:
  *  - UNRESOLVED: parser couldn't resolve an expression that may reference the focus

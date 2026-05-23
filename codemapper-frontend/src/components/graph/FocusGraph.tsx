@@ -185,6 +185,7 @@ function FocusGraphInner() {
         siblingIndex: d.siblingIndex,
         siblingCount: d.siblingCount,
         aggregatedMethods: d.aggregatedMethods,
+        referenceKind: d.connection.referenceKind ?? null,
       },
     }));
 

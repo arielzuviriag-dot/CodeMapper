@@ -57,3 +57,17 @@ PUNTO 1 LISTO — pedir prompt 3/6
   - Playwright `02-focus-direction.spec.ts` end-to-end (1.3m) contra Reserva (focus `AppointmentService`) — assert peripherals incoming/outgoing por `data-direction`. Screenshots `p2-all.png`, `p2-incoming.png`, `p2-outgoing.png`.
 
 PUNTO 2 LISTO — pedir prompt 4/6
+
+## PUNTO 3 — Tipo de relación: invocación / instanciación / inyección / declaración
+
+- Backend `FocusConnectionEvent.referenceKind: String` — uno de `INVOCATION` / `INSTANTIATION` / `INJECTION` / `DECLARATION`. Null para EXTENDS / IMPLEMENTS / USES_PROPERTIES.
+- `FocusTracerService.detectReferenceKind` aplica ranking INVOCATION > INSTANTIATION > INJECTION > DECLARATION, con override: si el caller declara un campo con `@Mock` / `@MockBean` / `@SpyBean` / `@InjectMocks` cuyo tipo es el foco, gana INJECTION (las llamadas `when()/verify()` son orquestación, no acoplamiento real).
+- Sets centralizados: `DI_ANNOTATION_NAMES = {Autowired, Inject, Resource, PersistenceContext}`, mock annotations reutilizan `MOCK_ANNOTATION_NAMES`.
+- Frontend `FocusConnectionPayload.referenceKind` + propagación a `FocusEdge` data.
+- `ReferenceKindIcon` exportado: badge con icono lucide (Zap/Plus/Plug/Box) + `title` español. Tooltips: "Invoca métodos", "Crea instancias", "Inyección sin invocación", "Solo declaración de tipo".
+- Tests verdes:
+  - JUnit `FocusTracerReferenceKindTest` (6): 4 fixtures por kind + INVOCATION supera a INJECTION + INSTANTIATION supera a INJECTION.
+  - vitest `FocusEdge.referenceKind.test.tsx` (5): icon+tooltip por kind + null + cobertura del map.
+  - Playwright `03-focus-reference-kind.spec.ts` (1m) contra Reserva: FOCO `JwtService` → AuthService (productivo) emite Zap, AuthServiceTest (`@Mock JwtService`) emite Plug. Screenshot `p3-reference-kinds.png`.
+
+PUNTO 3 LISTO — pedir prompt 5/6

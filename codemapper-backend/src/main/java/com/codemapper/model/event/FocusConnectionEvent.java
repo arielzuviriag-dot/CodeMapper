@@ -54,6 +54,19 @@ public class FocusConnectionEvent extends BaseEvent {
      *  whose simple-name type matches the focus). Drives the mask icon
      *  rendered on the edge midpoint. */
     private boolean isMock;
+    /** P3 — semantic category of the relationship, derived from how the
+     *  caller actually USES the focus class. One of:
+     *  {@code "INVOCATION"} — body has a method call on the focus instance;
+     *  {@code "INSTANTIATION"} — body has {@code new Focus(...)};
+     *  {@code "INJECTION"} — DI field/constructor param of the focus type,
+     *      no body usage;
+     *  {@code "DECLARATION"} — focus only appears as a method param/return
+     *      type, never used.
+     *  Ranking when multiple kinds coexist on the same caller:
+     *  INVOCATION > INSTANTIATION > INJECTION > DECLARATION.
+     *  Null when the connection isn't a CALLED_BY/CALLS body relationship
+     *  (e.g. EXTENDS/IMPLEMENTS/USES_PROPERTIES) — frontend renders no icon. */
+    private String referenceKind;
 
     @Override
     public String eventName() {
