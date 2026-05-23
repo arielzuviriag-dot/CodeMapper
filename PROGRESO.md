@@ -71,3 +71,18 @@ PUNTO 2 LISTO — pedir prompt 4/6
   - Playwright `03-focus-reference-kind.spec.ts` (1m) contra Reserva: FOCO `JwtService` → AuthService (productivo) emite Zap, AuthServiceTest (`@Mock JwtService`) emite Plug. Screenshot `p3-reference-kinds.png`.
 
 PUNTO 3 LISTO — pedir prompt 5/6
+
+## PUNTO 4 — Expansión depth-2 bajo demanda (PRO only)
+
+- Backend `POST /api/analyze/focus/{sessionId}/expand`: PRO only. Reusa `FocusTracerService` con la periférica como sub-foco transient. Devuelve solo FQNs NUEVOS (no los del foco original). FREE → 403 con `message: "Función disponible en PRO"` (nueva `ProRequiredException` + handler). FQN inexistente → 404. DTO `FocusExpandRequest`.
+- Frontend `api.expandPeripheral(sessionId, fqn)` + tipo `ExpandPeripheralResponse`.
+- Store: `addFocusConnectionsWithDepth(conns, depth, parentFqn)` (dedupe por (id, viaMethodInTarget, depth)) + `removeFocusConnectionsByParent(fqn)`. Propaga `depth` y `parentFqn` en cada `FocusConnectionPayload`.
+- `FocusPeripheralNode`: botón "+ Expandir" / "Colapsar" sólo en PRO (`resolveDemoMode === "pro"`) y sólo en depth-1. Click expandir → `expandPeripheral` → `addFocusConnectionsWithDepth(_, 2, fqn)`. Click colapsar → `removeFocusConnectionsByParent`. `data-testid="peripheral-expand"` / `peripheral-collapse`, `data-depth` y `data-parent-fqn` para tests E2E.
+- `FocusEdge` depth=2: strokeWidth × 0.7, opacity × 0.7.
+- `FocusGraph` layout depth-2: arco corto ±30° alrededor del padre periférico, distancia `PERIPHERAL_W × 1.3` desde el padre. NO rebalancea el ring depth-1.
+- Tests verdes:
+  - JUnit `FocusExpandControllerTest` (4): PRO 200 + exclusión, FREE 403 con "PRO" en message, FQN desconocido 404, sesión desconocida 404.
+  - vitest `FocusPeripheralExpand.test.tsx` (5): PRO presente, FREE ausente, click expand → store, flip a "Colapsar", click collapse → store.
+  - Playwright `04-focus-expand.spec.ts` (2.7m, 2 tests): PRO expand → depth-2 visible con `data-depth="2"` + opacidad < 1, collapse → 0; FREE no muestra el botón. Screenshots `p4-expanded.png`, `p4-collapsed.png`.
+
+PUNTO 4 LISTO — pedir prompt 6/6

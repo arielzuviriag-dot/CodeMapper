@@ -255,6 +255,17 @@ interface GraphState {
   /** P2 — swap the directional filter between "all", "incoming" and
    *  "outgoing". Applied as an additional mask over the per-type filters. */
   setFocusDirectionFilter: (mode: "all" | "incoming" | "outgoing") => void;
+  /** P4 — bulk-add a set of connections stamped with depth=2 and a parent
+   *  FQN. Skips entries whose (id, viaMethodInTarget) already exists in
+   *  the store so a double-click doesn't duplicate the sub-arc. */
+  addFocusConnectionsWithDepth: (
+    connections: FocusConnectionPayload[],
+    depth: 1 | 2,
+    parentFqn: string | null,
+  ) => void;
+  /** P4 — collapse a depth-2 expansion by removing every connection whose
+   *  parentFqn matches. Idempotent. */
+  removeFocusConnectionsByParent: (parentFqn: string) => void;
   reset: () => void;
 }
 
@@ -739,6 +750,62 @@ export const useGraphStore = create<GraphState>((set) => ({
   setEdgeGrouping: (mode) => set({ edgeGrouping: mode }),
 
   setFocusDirectionFilter: (mode) => set({ focusDirectionFilter: mode }),
+
+  addFocusConnectionsWithDepth: (connections, depth, parentFqn) =>
+    set((state) => {
+      if (connections.length === 0) return state;
+      const now = Date.now();
+      const existing = new Set(
+        state.focusConnections.map(
+          (c) => `${c.id}|${c.viaMethodInTarget ?? ""}|${c.depth ?? 1}`,
+        ),
+      );
+      const additions: FocusConnectionPayload[] = [];
+      for (const c of connections) {
+        const key = `${c.id}|${c.viaMethodInTarget ?? ""}|${depth}`;
+        if (existing.has(key)) continue;
+        existing.add(key);
+        additions.push({
+          ...c,
+          depth,
+          parentFqn,
+          firstSeenAt: c.firstSeenAt ?? now,
+        });
+      }
+      if (additions.length === 0) return state;
+      const nextNodes = new Map(state.nodes);
+      for (const stamped of additions) {
+        nextNodes.set(stamped.id, focusConnToClassNode(stamped));
+      }
+      return {
+        focusConnections: [...state.focusConnections, ...additions],
+        nodes: nextNodes,
+        version: state.version + 1,
+      };
+    }),
+
+  removeFocusConnectionsByParent: (parentFqn) =>
+    set((state) => {
+      const kept = state.focusConnections.filter(
+        (c) => c.parentFqn !== parentFqn,
+      );
+      if (kept.length === state.focusConnections.length) return state;
+      // Drop nodes that no longer have a connection — the focus class and
+      // depth-1 peripherals stay because they're keyed by their own ids and
+      // never have parentFqn set. depth-2 peripherals get evicted from the
+      // nodes Map too so ReactFlow stops trying to render them.
+      const keepIds = new Set<string>([state.focusClass?.id ?? ""]);
+      for (const c of kept) keepIds.add(c.id);
+      const nextNodes = new Map(state.nodes);
+      for (const id of Array.from(nextNodes.keys())) {
+        if (!keepIds.has(id)) nextNodes.delete(id);
+      }
+      return {
+        focusConnections: kept,
+        nodes: nextNodes,
+        version: state.version + 1,
+      };
+    }),
 
   // NOTE: `projectPath` and `pendingReanalysis` are intentionally NOT
   // cleared here. Both must survive the map page's reset() on session

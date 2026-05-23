@@ -282,6 +282,14 @@ export interface FocusConnectionPayload {
    *  the edge label. Null when the connection isn't a body relationship
    *  (e.g. EXTENDS, IMPLEMENTS, USES_PROPERTIES). */
   referenceKind?: "INVOCATION" | "INSTANTIATION" | "INJECTION" | "DECLARATION" | null;
+  /** P4 — radial-graph depth this connection lives on. {@code 1} = original
+   *  level-1 peripheral (default); {@code 2} = peripheral of a peripheral,
+   *  added on-demand by the PRO-only "Expandir" button. Stamped by the
+   *  client; the backend doesn't know about it. */
+  depth?: 1 | 2;
+  /** P4 — FQN of the depth-1 parent peripheral when {@code depth === 2}.
+   *  Drives layout (sub-arc around the parent) and collapse semantics. */
+  parentFqn?: string | null;
 }
 
 export type FocusReferenceKind = NonNullable<FocusConnectionPayload["referenceKind"]>;

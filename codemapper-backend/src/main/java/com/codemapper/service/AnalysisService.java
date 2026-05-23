@@ -302,6 +302,73 @@ public class AnalysisService {
     }
 
     /**
+     * P4 — expand one peripheral to depth-2. Reuses {@link FocusTracerService}
+     * with the peripheral's .java as a temporary sub-focus, then filters the
+     * returned connections to only those whose FQN is not already in the
+     * parent session (i.e. genuinely new for the dev).
+     *
+     * <p>PRO-only: a {@link ProRequiredException} is thrown on FREE sessions
+     * so the global handler can ship a 403 + Spanish paywall message.
+     * Unknown peripheral → {@link FileNotFoundException} (404).</p>
+     */
+    public java.util.List<com.codemapper.model.event.FocusConnectionEvent> expandPeripheral(
+            String sessionId, String peripheralFqn) throws IOException {
+        if (peripheralFqn == null || peripheralFqn.isBlank()) {
+            throw new IllegalArgumentException("peripheralFqn is required");
+        }
+        SessionData parent = sessionService.getSession(sessionId);
+        if (!parent.isPro()) {
+            throw new com.codemapper.exception.ProRequiredException(
+                    "Función disponible en PRO");
+        }
+
+        ParsedClass peripheral = parent.getParsedClasses().stream()
+                .filter(p -> peripheralFqn.equals(p.getFullyQualifiedName()))
+                .findFirst()
+                .orElseThrow(() -> new FileNotFoundException(
+                        "Peripheral not found in session " + sessionId + ": " + peripheralFqn));
+        if (peripheral.getFilePath() == null || peripheral.getFilePath().isBlank()) {
+            throw new FileNotFoundException("Peripheral " + peripheralFqn + " has no source file path");
+        }
+        Path peripheralFile = Path.of(peripheral.getFilePath());
+        if (!Files.exists(peripheralFile) || !Files.isRegularFile(peripheralFile)) {
+            throw new FileNotFoundException("Peripheral source file missing: " + peripheral.getFilePath());
+        }
+
+        // Build a transient sub-session pinned to the peripheral. Pro=true so
+        // the FOCO cap doesn't truncate the sub-focus result.
+        SessionData sub = new SessionData();
+        sub.setSessionId("expand-" + java.util.UUID.randomUUID());
+        sub.setProjectPath(parent.getProjectPath());
+        sub.setProjectName(parent.getProjectName());
+        sub.setTotalFiles(parent.getTotalFiles());
+        sub.setCreatedAt(java.time.Instant.now());
+        sub.setStatus(SessionData.Status.CREATED);
+        sub.setOwnsFiles(false);
+        sub.setPro(true);
+        sub.setMode(SessionData.Mode.FOCUS);
+        sub.setFocusFile(peripheralFile);
+
+        java.util.List<com.codemapper.model.event.FocusConnectionEvent> rawEvents =
+                new java.util.ArrayList<>();
+        focusTracerService.traceFocus(sub, ev -> {
+            if (ev instanceof com.codemapper.model.event.FocusConnectionEvent fce) {
+                rawEvents.add(fce);
+            }
+        });
+
+        // Drop FQNs already present in the parent session (focus + level-1
+        // peripherals). The frontend only wants brand-new nodes.
+        java.util.Set<String> knownFqns = parent.getParsedClasses().stream()
+                .map(ParsedClass::getFullyQualifiedName)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
+        return rawEvents.stream()
+                .filter(e -> !knownFqns.contains(e.getFullyQualifiedName()))
+                .toList();
+    }
+
+    /**
      * F4 — compute the transitive impact of changing the focus class. Re-walks
      * the project's java sources to build the inverse callgraph, runs BFS, and
      * returns counts (and, for PRO sessions, the full FQN lists). FREE sessions

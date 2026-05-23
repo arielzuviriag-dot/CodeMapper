@@ -210,6 +210,31 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await api.delete(`/api/analyze/session/${encodeURIComponent(sessionId)}`);
 }
 
+/** P4 — shape of the {@code /focus/{sessionId}/expand} response. The backend
+ *  returns the peripheral FQN it expanded (for confirmation) and the list
+ *  of new connections (i.e. NOT already in the parent session). */
+export interface ExpandPeripheralResponse {
+  peripheralFqn: string;
+  connections: FocusConnectionPayload[];
+}
+
+/**
+ * P4 — expand one peripheral to depth-2. PRO-only on the backend; a FREE
+ * session results in HTTP 403 (the axios interceptor surfaces the
+ * paywall message via toast).
+ */
+export async function expandPeripheral(
+  sessionId: string,
+  peripheralFqn: string,
+): Promise<ExpandPeripheralResponse> {
+  const { data } = await api.post<ExpandPeripheralResponse>(
+    `/api/analyze/focus/${encodeURIComponent(sessionId)}/expand`,
+    { peripheralFqn },
+    { timeout: 90_000 },
+  );
+  return data;
+}
+
 export function streamUrl(sessionId: string): string {
   return `${API_BASE_URL}/api/analyze/stream/${encodeURIComponent(sessionId)}`;
 }

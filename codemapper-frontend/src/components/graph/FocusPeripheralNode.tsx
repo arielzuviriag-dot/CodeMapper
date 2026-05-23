@@ -1,14 +1,17 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
   AlertTriangle,
   Box,
+  ChevronDown,
   CircleDashed,
   CircleDot,
   FileCode,
   GitBranch,
+  Loader2,
+  Plus,
   RefreshCw,
   Shapes,
   Shield,
@@ -21,6 +24,8 @@ import type {
   FocusConnectionType,
 } from "@/lib/types";
 import { directionOf } from "./focusDirection";
+import { useGraphStore } from "@/store/graphStore";
+import { expandPeripheral, resolveDemoMode } from "@/lib/api";
 
 interface PeripheralData extends Record<string, unknown> {
   payload: FocusConnectionPayload;
@@ -76,6 +81,48 @@ function KindIcon({ kind }: { kind: ClassKind }) {
 function FocusPeripheralNodeComponent({ data }: NodeProps) {
   const { payload, index } = data as PeripheralData;
   const theme = TYPE_THEME[payload.connectionType];
+  const depth = payload.depth ?? 1;
+  // P4 — sessionId lives in the store; the expand endpoint needs it on click.
+  // We also subscribe to the connection list so the button can flip between
+  // "+ Expandir" and "Colapsar" without re-mounting.
+  const sessionId = useGraphStore((s) => s.sessionId);
+  const focusConnections = useGraphStore((s) => s.focusConnections);
+  const addFocusConnectionsWithDepth = useGraphStore(
+    (s) => s.addFocusConnectionsWithDepth,
+  );
+  const removeFocusConnectionsByParent = useGraphStore(
+    (s) => s.removeFocusConnectionsByParent,
+  );
+  const isExpanded = focusConnections.some(
+    (c) => c.parentFqn === payload.fullyQualifiedName,
+  );
+  const [expandBusy, setExpandBusy] = useState(false);
+  // Re-read demoMode on every render so toggling tests doesn't ship a stale
+  // value (resolveDemoMode is cheap — sessionStorage lookup).
+  const isPro = typeof window !== "undefined" && resolveDemoMode() === "pro";
+  // Only depth-1 peripherals get the button; depth-2 stays simple.
+  const canExpand = isPro && depth === 1 && sessionId !== null;
+  const onExpandClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!sessionId || expandBusy) return;
+    if (isExpanded) {
+      removeFocusConnectionsByParent(payload.fullyQualifiedName);
+      return;
+    }
+    setExpandBusy(true);
+    try {
+      const res = await expandPeripheral(sessionId, payload.fullyQualifiedName);
+      addFocusConnectionsWithDepth(
+        res.connections,
+        2,
+        payload.fullyQualifiedName,
+      );
+    } catch {
+      // Toast surfaces the backend error — interceptor in api.ts handles it.
+    } finally {
+      setExpandBusy(false);
+    }
+  };
   const entranceDelayMs =
     Math.min(index, ENTRANCE_STAGGER_CAP_INDEX) * ENTRANCE_STAGGER_MS;
   const isProperties = payload.connectionType === "USES_PROPERTIES";
@@ -113,10 +160,12 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
     // staggers — overrides the (unset) delay in the class.
     <div
       className="cm-focus-node-enter relative flex w-[220px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)]"
-      style={{ animationDelay: `${entranceDelayMs}ms` }}
+      style={{ animationDelay: `${entranceDelayMs}ms`, opacity: depth === 2 ? 0.85 : 1 }}
       data-testid="focus-peripheral"
       data-connection-type={payload.connectionType}
       data-direction={directionOf(payload.connectionType)}
+      data-depth={depth}
+      data-parent-fqn={payload.parentFqn ?? undefined}
     >
       <Handle type="target" id="tgt-top" position={Position.Top} className="!opacity-0" />
       <Handle type="target" id="tgt-bottom" position={Position.Bottom} className="!opacity-0" />
@@ -197,6 +246,32 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
       <div className="break-words border-t border-[var(--border-silver)] bg-[var(--bg-input)] px-3 py-1 font-mono text-[9px] leading-snug uppercase tracking-[0.12em] text-[var(--fg-muted)]">
         <PackageWithBreaks pkg={payload.packageName} />
       </div>
+
+      {/* P4 — depth-2 expansion. Only PRO sessions on depth-1 peripherals.
+          Click toggles between fetching the sub-arc and collapsing it. */}
+      {canExpand && (
+        <button
+          type="button"
+          onClick={onExpandClick}
+          disabled={expandBusy}
+          data-testid={isExpanded ? "peripheral-collapse" : "peripheral-expand"}
+          aria-label={isExpanded ? "Colapsar profundidad 2" : "Expandir profundidad 2"}
+          className={`flex w-full items-center justify-center gap-1 border-t border-[var(--border-silver)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors ${
+            isExpanded
+              ? "bg-[var(--bordo)]/15 text-[var(--bordo)] hover:bg-[var(--bordo)]/25"
+              : "bg-[var(--bg-card)] text-[var(--silver)] hover:bg-[var(--bordo)]/15 hover:text-[var(--bordo)]"
+          } disabled:cursor-progress disabled:opacity-70`}
+        >
+          {expandBusy ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : isExpanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <Plus className="h-3 w-3" />
+          )}
+          <span>{isExpanded ? "Colapsar" : "Expandir"}</span>
+        </button>
+      )}
     </div>
   );
 }

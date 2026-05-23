@@ -88,6 +88,10 @@ interface FocusEdgeData extends Record<string, unknown> {
   /** P3 — semantic category of how the connected class uses the focus.
    *  Drives the icon shown next to the type label on the edge midpoint. */
   referenceKind?: FocusReferenceKind | null;
+  /** P4 — radial depth of this edge. {@code 1} = focus → depth-1 peripheral;
+   *  {@code 2} = depth-1 peripheral → depth-2 sub-peripheral. Depth-2 edges
+   *  are drawn thinner and dimmer so the primary radial stays dominant. */
+  depth?: 1 | 2;
 }
 
 const TYPE_STYLE: Record<
@@ -196,9 +200,14 @@ function FocusEdgeComponent({
   // F3 — tests get a flatter, dashed treatment so they recede behind runtime
   // edges. Override after the base lookup so the connection-type label still
   // reads correctly in the chip.
-  const style = edgeData.isTest
+  let style = edgeData.isTest
     ? { ...baseStyle, stroke: "#7B8AAD", width: 1.5, dash: "4 3" }
     : baseStyle;
+  // P4 — depth-2 edges shrink and dim so the primary radial stays dominant.
+  const isDeepEdge = (edgeData.depth ?? 1) === 2;
+  if (isDeepEdge) {
+    style = { ...style, width: style.width * 0.7 };
+  }
   const inbound = isInbound(ct);
   const focusClass = useGraphStore((s) => s.focusClass);
   const focusMethod = useGraphStore((s) => s.focusMethod);
@@ -315,7 +324,10 @@ function FocusEdgeComponent({
   // fades in fast then takes the rest of the duration to actually draw,
   // matching the keyframes the CSS version had.
   const dashOffset = 1500 * (1 - progress);
-  const opacity = Math.min(1, progress * 5);
+  // P4 — depth-2 edges clamp to 0.7 of the otherwise-computed opacity so
+  // the radial pop of the depth-1 ring stays visually dominant.
+  const opacity =
+    Math.min(1, progress * 5) * (isDeepEdge ? 0.7 : 1);
 
   // Pick the most informative method-level annotation per direction.
   // The chip surfaces the method that owns the relationship — clicking it

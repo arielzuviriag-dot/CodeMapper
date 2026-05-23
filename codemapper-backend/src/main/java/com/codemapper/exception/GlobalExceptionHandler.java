@@ -33,6 +33,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
     }
 
+    @ExceptionHandler(ProRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleProRequired(ProRequiredException ex) {
+        log.info("PRO-required endpoint hit from FREE session: {}", ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
         log.error("Internal error", ex);

@@ -75,6 +75,25 @@ public class AnalyzeController {
                 isPro));
     }
 
+    /**
+     * P4 — expand one peripheral of a FOCO session to depth 2. Returns the
+     * new connections (peripherals of the peripheral) the frontend should
+     * render as a secondary arc around the parent. PRO-only — FREE sessions
+     * get HTTP 403 with a Spanish paywall message.
+     */
+    @PostMapping(value = "/focus/{sessionId}/expand", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> expandFocusPeripheral(
+            @PathVariable String sessionId,
+            @Valid @RequestBody com.codemapper.model.dto.FocusExpandRequest request) throws IOException {
+        log.info("Focus expand request: session={} peripheral={}",
+                sessionId, request.getPeripheralFqn());
+        var connections = analysisService.expandPeripheral(sessionId, request.getPeripheralFqn());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("connections", connections);
+        body.put("peripheralFqn", request.getPeripheralFqn());
+        return ResponseEntity.ok(body);
+    }
+
     @PostMapping(value = "/focus-method", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AnalyzeResponse> analyzeFocusMethod(
             @Valid @RequestBody AnalyzeFocusMethodRequest request) throws IOException {

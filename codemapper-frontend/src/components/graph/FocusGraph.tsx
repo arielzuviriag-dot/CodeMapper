@@ -116,13 +116,19 @@ function FocusGraphInner() {
     // P2 — direction filter is intersected with the existing per-type and
     // per-class-kind filters. None of them override each other: a peripheral
     // must satisfy ALL active filters to remain visible.
-    const visibleConnections = focusConnections.filter(
+    const filtered = focusConnections.filter(
       (c) =>
         classTypeFilters[c.type] !== false &&
         focusConnectionTypeFilters[c.connectionType] !== false &&
         passesDirectionFilter(c.connectionType, focusDirectionFilter) &&
         (showTests || !c.isTest),
     );
+    // P4 — depth-1 (default) carries the radial ring; depth-2 sits on a short
+    // arc anchored to its depth-1 parent. We never let depth-2 rebalance the
+    // primary ring — the user expanded a node, the rest of the map shouldn't
+    // shift under them.
+    const visibleConnections = filtered.filter((c) => (c.depth ?? 1) === 1);
+    const depthTwoConnections = filtered.filter((c) => (c.depth ?? 1) === 2);
 
     // P1 — group visible connections by peripheral class id. Each group renders
     // as ONE peripheral node. The edge descriptors come from a pure helper so
@@ -186,12 +192,89 @@ function FocusGraphInner() {
         siblingCount: d.siblingCount,
         aggregatedMethods: d.aggregatedMethods,
         referenceKind: d.connection.referenceKind ?? null,
+        depth: 1,
       },
     }));
 
+    // ── P4 — depth-2 sub-arc layout ─────────────────────────────────────
+    //
+    // For each expanded parent we walk a 60° arc centred on the parent's
+    // outward radial direction (away from the focus class) and place the
+    // children at a fixed distance from the parent. We DO NOT touch the
+    // depth-1 ring — angles and groupIndex stay frozen so the user's mental
+    // map is preserved while they explore.
+    const ARC_SPAN = (60 * Math.PI) / 180;
+    const SUB_RADIUS = PERIPHERAL_W * 1.3;
+    const childrenByParent = new Map<string, FocusConnectionPayload[]>();
+    for (const c of depthTwoConnections) {
+      if (!c.parentFqn) continue;
+      const arr = childrenByParent.get(c.parentFqn) ?? [];
+      arr.push(c);
+      childrenByParent.set(c.parentFqn, arr);
+    }
+    const depth2Nodes: Node[] = [];
+    const depth2Edges: Edge[] = [];
+    childrenByParent.forEach((children, parentFqn) => {
+      const parentHead = Array.from(groupHead.values()).find(
+        (h) => h.fullyQualifiedName === parentFqn,
+      );
+      if (!parentHead) return;
+      const parentIndex = groupIndex.get(parentHead.id) ?? 0;
+      const baseAngle = -Math.PI / 2 + (parentIndex / Math.max(N, 1)) * 2 * Math.PI;
+      // Dedup children by id (one node per child class — multiple methods
+      // share the same card just like depth-1 peripherals do).
+      const unique = new Map<string, FocusConnectionPayload>();
+      const ordered: string[] = [];
+      for (const c of children) {
+        if (!unique.has(c.id)) {
+          unique.set(c.id, c);
+          ordered.push(c.id);
+        }
+      }
+      const count = ordered.length;
+      ordered.forEach((childId, j) => {
+        const conn = unique.get(childId)!;
+        const offset = count === 1 ? 0 : (j / (count - 1)) - 0.5; // -0.5..+0.5
+        const angle = baseAngle + offset * ARC_SPAN;
+        const px = Math.cos(baseAngle) * radius;
+        const py = Math.sin(baseAngle) * radius;
+        const cx = px + Math.cos(angle) * SUB_RADIUS;
+        const cy = py + Math.sin(angle) * SUB_RADIUS;
+        depth2Nodes.push({
+          id: childId,
+          type: "focusPeripheral",
+          position: { x: cx - PERIPHERAL_W / 2, y: cy - PERIPHERAL_H / 2 },
+          width: PERIPHERAL_W,
+          height: PERIPHERAL_H,
+          data: { payload: conn, index: j },
+          draggable: false,
+        } satisfies Node);
+        depth2Edges.push({
+          id: `focus-edge-d2-${parentHead.id}-${childId}-${conn.viaMethodInTarget ?? `idx${j}`}`,
+          source: parentHead.id,
+          target: childId,
+          type: "focusEdge",
+          data: {
+            connectionType: conn.connectionType,
+            index: 0,
+            viaMethodInSource: conn.viaMethodInSource ?? null,
+            viaMethodInTarget: conn.viaMethodInTarget ?? null,
+            isTest: conn.isTest ?? false,
+            isMock: conn.isMock ?? false,
+            firstSeenAt: conn.firstSeenAt ?? Date.now(),
+            siblingIndex: 0,
+            siblingCount: 1,
+            aggregatedMethods: null,
+            referenceKind: conn.referenceKind ?? null,
+            depth: 2,
+          },
+        });
+      });
+    });
+
     return {
-      nodes: [centerNode, ...peripheralNodes],
-      edges: peripheralEdges,
+      nodes: [centerNode, ...peripheralNodes, ...depth2Nodes],
+      edges: [...peripheralEdges, ...depth2Edges],
     };
   }, [focusClass, focusConnections, classTypeFilters, focusConnectionTypeFilters, showTests, impactReport, edgeGrouping, focusDirectionFilter]);
 
