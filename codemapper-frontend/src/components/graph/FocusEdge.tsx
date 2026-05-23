@@ -153,12 +153,20 @@ function isInbound(ct: FocusConnectionType): boolean {
  *  by ~10–14 px, so the value here is the *visual* gap minus that fudge. */
 const ARROW_CLEARANCE = 48;
 
-/** P1 — perpendicular spacing between two adjacent parallel arrows. The
- *  effective offset of arrow i in a group of N is
- *  {@code (i - (N-1)/2) * SIBLING_SPACING}, so a group of 5 spans
- *  {-2,-1,0,+1,+2} × this value. 28px keeps the labels from overlapping
- *  even when text is long. */
-const SIBLING_SPACING = 28;
+/** P1 — perpendicular spacing between two adjacent parallel arrows. El
+ *  offset efectivo de la flecha i en un grupo de N es
+ *  {@code (i - (N-1)/2) * SIBLING_SPACING}, así que un grupo de 5 cubre
+ *  {-2,-1,0,+1,+2} × este valor. */
+const SIBLING_SPACING = 56;
+
+/** P1 — rango de parámetro t (Bézier, t∈[0,1]) usado para repartir las
+ *  etiquetas a lo largo de la curva. Las hermanas se distribuyen
+ *  uniformemente en {@code [0.5 - LABEL_T_RANGE/2, 0.5 + LABEL_T_RANGE/2]},
+ *  así una pill queda cerca del origen y la otra cerca del destino. Para 2
+ *  flechas: t = 0.25 y t = 0.75; para 3: 0.25 / 0.5 / 0.75. Combinado con
+ *  {@link SIBLING_SPACING}, evita que `sendOrderEvent()` /
+ *  `sendDeliveryWindowOpen()` queden apiladas en el mismo punto. */
+const LABEL_T_RANGE = 0.5;
 
 /** P5 — perpendicular offset for the bidirectional bow. Larger than
  *  {@link SIBLING_SPACING} so the outgoing/incoming pair is visibly
@@ -283,9 +291,16 @@ function FocusEdgeComponent({
     const cpx = mx + perpX * perpScale;
     const cpy = my + perpY * perpScale;
     path = `M ${sx},${sy} Q ${cpx},${cpy} ${tx},${ty}`;
-    // Midpoint of a quadratic Bezier at t=0.5.
-    labelX = 0.25 * sx + 0.5 * cpx + 0.25 * tx;
-    labelY = 0.25 * sy + 0.5 * cpy + 0.25 * ty;
+    // P1 — repartir la etiqueta a lo largo de la curva según la posición de
+    // la flecha dentro del grupo: la hermana 0 queda cerca del origen, la
+    // última cerca del destino. Para 1 flecha (sin hermanas) cae al midpoint
+    // clásico. Punto del Bézier cuadrático: B(t) = (1−t)² S + 2(1−t)t C + t² T.
+    const normalizedIndex =
+      siblingCount > 1 ? siblingIndex / (siblingCount - 1) - 0.5 : 0;
+    const tLabel = 0.5 + normalizedIndex * LABEL_T_RANGE;
+    const omt = 1 - tLabel;
+    labelX = omt * omt * sx + 2 * omt * tLabel * cpx + tLabel * tLabel * tx;
+    labelY = omt * omt * sy + 2 * omt * tLabel * cpy + tLabel * tLabel * ty;
   } else {
     const [straightPath, sLabelX, sLabelY] = getStraightPath({
       sourceX: sx,
