@@ -20,6 +20,9 @@ codemapper-frontend/.turbo/
 codemapper-frontend/coverage/
 codemapper-frontend/*.tsbuildinfo
 codemapper-frontend/next-env.d.ts
+codemapper-frontend/test-results/
+codemapper-frontend/playwright-report/
+codemapper-frontend/.playwright/
 
 # ============================================
 # Variables de entorno (NUNCA subir a Git)
