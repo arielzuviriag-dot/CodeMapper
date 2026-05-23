@@ -41,3 +41,19 @@ FASE 0 LISTA — pedir prompt 2/6
   - Playwright `01-focus-per-method.spec.ts` — verde end-to-end con Reserva (`AppointmentService` focus → 30+ Repository invocations). Screenshots `test-results/p1-per-method.png` + `p1-per-clase.png`.
 
 PUNTO 1 LISTO — pedir prompt 3/6
+
+## PUNTO 2 — Filtro direccional entra/sale
+
+- Store: nuevo `focusDirectionFilter: "all" | "incoming" | "outgoing"` (default `"all"`) + `setFocusDirectionFilter`. Reset por sesión.
+- Taxonomía centralizada en `src/components/graph/focusDirection.ts`:
+  - incoming = `CALLED_BY` ∪ `INVOKES_METHOD` ∪ `EXTENDS` ∪ `IMPLEMENTS`
+  - outgoing = `CALLS` ∪ `INVOKES_OUTGOING` ∪ `USES_PROPERTIES`
+- Componente `FocusDirectionFilter.tsx`: segmented control `[Todo] [← Entra] [Sale →]` con `ArrowLeftToLine`/`ArrowRightFromLine`, ubicado al lado de `ImpactSimulationButton` (top-left del grafo).
+- `FocusGraph.tsx` aplica el filtro como intersección con `classTypeFilters`, `focusConnectionTypeFilters` y `showTests`.
+- `FocusPeripheralNode` expone `data-testid`, `data-connection-type` y `data-direction` para tests E2E estables.
+- Tests:
+  - vitest `graphStore.directionFilter.test.ts` (3): setter + intersección con classTypeFilters + tabla de mapeo.
+  - vitest `FocusDirectionFilter.test.tsx` (4): default Todo, filtro entrante, filtro saliente, vuelta a Todo.
+  - Playwright `02-focus-direction.spec.ts` end-to-end (1.3m) contra Reserva (focus `AppointmentService`) — assert peripherals incoming/outgoing por `data-direction`. Screenshots `p2-all.png`, `p2-incoming.png`, `p2-outgoing.png`.
+
+PUNTO 2 LISTO — pedir prompt 4/6

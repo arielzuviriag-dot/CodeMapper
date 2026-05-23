@@ -20,6 +20,7 @@ import type {
   FocusConnectionPayload,
   FocusConnectionType,
 } from "@/lib/types";
+import { directionOf } from "./focusDirection";
 
 interface PeripheralData extends Record<string, unknown> {
   payload: FocusConnectionPayload;
@@ -113,6 +114,9 @@ function FocusPeripheralNodeComponent({ data }: NodeProps) {
     <div
       className="cm-focus-node-enter relative flex w-[220px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-[var(--shadow-md)]"
       style={{ animationDelay: `${entranceDelayMs}ms` }}
+      data-testid="focus-peripheral"
+      data-connection-type={payload.connectionType}
+      data-direction={directionOf(payload.connectionType)}
     >
       <Handle type="target" id="tgt-top" position={Position.Top} className="!opacity-0" />
       <Handle type="target" id="tgt-bottom" position={Position.Bottom} className="!opacity-0" />

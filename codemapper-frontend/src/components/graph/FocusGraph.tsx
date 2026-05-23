@@ -22,6 +22,8 @@ import { JavaVersionBadge } from "./JavaVersionBadge";
 import { ImpactSimulationButton } from "./ImpactSimulationButton";
 import { useGraphStore } from "@/store/graphStore";
 import { buildFocusEdgeDescriptors } from "./focusGraphGrouping";
+import { passesDirectionFilter } from "./focusDirection";
+import { FocusDirectionFilter } from "./FocusDirectionFilter";
 import type { FocusConnectionPayload } from "@/lib/types";
 
 const FOCUS_NODE_TYPES = {
@@ -75,6 +77,7 @@ function FocusGraphInner() {
   const impactReport = useGraphStore((s) => s.impactReport);
   const selectNode = useGraphStore((s) => s.selectNode);
   const edgeGrouping = useGraphStore((s) => s.edgeGrouping);
+  const focusDirectionFilter = useGraphStore((s) => s.focusDirectionFilter);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -110,10 +113,14 @@ function FocusGraphInner() {
     // spacing tight (we don't waste angles on hidden cards).
     // F3: also drop test peripherals when the "Mostrar tests" toggle is off
     // (default). Mocks are tests too, so they're hidden together.
+    // P2 — direction filter is intersected with the existing per-type and
+    // per-class-kind filters. None of them override each other: a peripheral
+    // must satisfy ALL active filters to remain visible.
     const visibleConnections = focusConnections.filter(
       (c) =>
         classTypeFilters[c.type] !== false &&
         focusConnectionTypeFilters[c.connectionType] !== false &&
+        passesDirectionFilter(c.connectionType, focusDirectionFilter) &&
         (showTests || !c.isTest),
     );
 
@@ -185,7 +192,7 @@ function FocusGraphInner() {
       nodes: [centerNode, ...peripheralNodes],
       edges: peripheralEdges,
     };
-  }, [focusClass, focusConnections, classTypeFilters, focusConnectionTypeFilters, showTests, impactReport, edgeGrouping]);
+  }, [focusClass, focusConnections, classTypeFilters, focusConnectionTypeFilters, showTests, impactReport, edgeGrouping, focusDirectionFilter]);
 
   useEffect(() => {
     if (fitTimer.current) clearTimeout(fitTimer.current);
@@ -210,9 +217,12 @@ function FocusGraphInner() {
         <GraphSearchInput />
       </div>
       {/* F4 — simulate-change panel sits at top-left, balancing the top-right
-          legends. Becomes a banner with the impact counter once active. */}
-      <div className="absolute left-4 top-4 z-10 w-[220px]">
+          legends. Becomes a banner with the impact counter once active. P2
+          adds the direction segmented control right below it so the dev can
+          collapse the radial to incoming/outgoing without opening the legend. */}
+      <div className="absolute left-4 top-4 z-10 flex w-[220px] flex-col gap-2">
         <ImpactSimulationButton />
+        <FocusDirectionFilter />
       </div>
       <aside className="absolute right-4 top-4 z-10 flex w-[170px] flex-col items-end gap-2">
         <JavaVersionBadge />

@@ -173,6 +173,16 @@ interface GraphState {
    *  single edge per peripheral class with a "+N métodos" badge ("class").
    *  Toggled from the FocusConnectionLegend; consumed by FocusGraph. */
   edgeGrouping: "method" | "class";
+  /** P2 — directional filter on top of the existing per-type checkboxes.
+   *    "all"      → no extra mask (default).
+   *    "incoming" → only show edges where the peripheral points AT the focus
+   *                 (CALLED_BY, INVOKES_METHOD, EXTENDS, IMPLEMENTS).
+   *    "outgoing" → only show edges where the focus points OUT of itself
+   *                 (CALLS, INVOKES_OUTGOING, USES_PROPERTIES).
+   *  Applied as an INTERSECTION with classTypeFilters and
+   *  focusConnectionTypeFilters — never overrides them. Driven by the
+   *  FocusDirectionFilter segmented control above the graph. */
+  focusDirectionFilter: "all" | "incoming" | "outgoing";
 
   setSessionId: (id: string | null) => void;
   addClass: (payload: ClassFoundPayload) => void;
@@ -242,6 +252,9 @@ interface GraphState {
   /** P1 — swap edge grouping between "method" (per invoked method, default)
    *  and "class" (collapsed by peripheral with a "+N métodos" badge). */
   setEdgeGrouping: (mode: "method" | "class") => void;
+  /** P2 — swap the directional filter between "all", "incoming" and
+   *  "outgoing". Applied as an additional mask over the per-type filters. */
+  setFocusDirectionFilter: (mode: "all" | "incoming" | "outgoing") => void;
   reset: () => void;
 }
 
@@ -386,6 +399,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   openHelpPopover: null,
   diagnostics: [],
   edgeGrouping: "method",
+  focusDirectionFilter: "all",
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -724,6 +738,8 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   setEdgeGrouping: (mode) => set({ edgeGrouping: mode }),
 
+  setFocusDirectionFilter: (mode) => set({ focusDirectionFilter: mode }),
+
   // NOTE: `projectPath` and `pendingReanalysis` are intentionally NOT
   // cleared here. Both must survive the map page's reset() on session
   // change so the FOCO SCANER → reanalysis transition can chain without
@@ -765,5 +781,8 @@ export const useGraphStore = create<GraphState>((set) => ({
       openHelpPopover: null,
       // F-deep — diagnostics are per-session.
       diagnostics: [],
+      // P2 — directional filter is also per-session: a new FOCO should start
+      // with the radial view ungated so the dev sees the full picture first.
+      focusDirectionFilter: "all",
     }),
 }));
