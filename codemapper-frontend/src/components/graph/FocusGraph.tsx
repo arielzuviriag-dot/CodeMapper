@@ -193,6 +193,8 @@ function FocusGraphInner() {
         aggregatedMethods: d.aggregatedMethods,
         referenceKind: d.connection.referenceKind ?? null,
         depth: 1,
+        curvature: d.curvature,
+        bidirectional: d.bidirectional,
       },
     }));
 

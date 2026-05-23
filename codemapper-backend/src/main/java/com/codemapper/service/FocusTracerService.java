@@ -276,37 +276,39 @@ public class FocusTracerService {
                     continue;
                 }
 
-                // Priority: EXTENDS > IMPLEMENTS > CALLED_BY > CALLS
-                if (extendsList.contains(pc.getFullyQualifiedName())) {
-                    extendsImplements.add(new PendingConnection(pc, FocusConnectionType.EXTENDS));
-                    alreadyConnectedFqns.add(pc.getFullyQualifiedName());
-                    filesProcessedInPass1.add(file);
-                    continue;
-                }
-                if (implementsList.contains(pc.getFullyQualifiedName())) {
-                    extendsImplements.add(new PendingConnection(pc, FocusConnectionType.IMPLEMENTS));
-                    alreadyConnectedFqns.add(pc.getFullyQualifiedName());
-                    filesProcessedInPass1.add(file);
-                    continue;
-                }
+                // P5 — a peripheral can carry MULTIPLE relationships at once
+                // (most commonly CALLED_BY + CALLS for a mutual dependency).
+                // We no longer treat the four checks as mutually exclusive;
+                // a class gets one PendingConnection per relationship type
+                // detected, so the radial graph can render two arrows on the
+                // same pair with opposite directions.
                 Set<String> incoming = collectAllReferencedFqns(td);
-                if (incoming.contains(focusFqn)) {
+                boolean isExtends = extendsList.contains(pc.getFullyQualifiedName());
+                boolean isImplements = implementsList.contains(pc.getFullyQualifiedName());
+                boolean isCalledBy = incoming.contains(focusFqn);
+                boolean isCalls = focusOutgoingFqns.contains(pc.getFullyQualifiedName());
+                if (isExtends) {
+                    extendsImplements.add(new PendingConnection(pc, FocusConnectionType.EXTENDS));
+                }
+                if (isImplements) {
+                    extendsImplements.add(new PendingConnection(pc, FocusConnectionType.IMPLEMENTS));
+                }
+                if (isCalledBy) {
                     calledBy.add(new PendingConnection(pc, FocusConnectionType.CALLED_BY, td));
-                    alreadyConnectedFqns.add(pc.getFullyQualifiedName());
-                    filesProcessedInPass1.add(file);
-                    continue;
                 }
-                if (focusOutgoingFqns.contains(pc.getFullyQualifiedName())) {
+                if (isCalls) {
                     calls.add(new PendingConnection(pc, FocusConnectionType.CALLS));
+                }
+                if (isExtends || isImplements || isCalledBy || isCalls) {
                     alreadyConnectedFqns.add(pc.getFullyQualifiedName());
                     filesProcessedInPass1.add(file);
                     continue;
                 }
-                // F-deep: signature didn't match but the file imports the
-                // focus — promote to CALLED_BY. The body almost certainly
-                // uses it (Java/IDE strip unused imports). Pass 2 will still
-                // surface false negatives for cases where the import was
-                // missed (e.g. same-package, no import needed).
+                // F-deep: no structural match but the file imports the focus
+                // — promote to CALLED_BY. The body almost certainly uses it
+                // (Java/IDE strip unused imports). Pass 2 will still surface
+                // false negatives for cases where the import was missed
+                // (e.g. same-package, no import needed).
                 if (importsFocus) {
                     calledBy.add(new PendingConnection(pc, FocusConnectionType.CALLED_BY, td));
                     alreadyConnectedFqns.add(pc.getFullyQualifiedName());

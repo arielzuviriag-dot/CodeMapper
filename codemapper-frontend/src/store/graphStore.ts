@@ -853,3 +853,11 @@ export const useGraphStore = create<GraphState>((set) => ({
       focusDirectionFilter: "all",
     }),
 }));
+
+// Dev / test convenience — exposes the zustand store on the global window so
+// Playwright (and a DevTools console) can introspect or drive it without
+// importing the module. Guarded by a guard against SSR; no-op in node.
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__cmStore = useGraphStore;
+}

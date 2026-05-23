@@ -92,6 +92,14 @@ interface FocusEdgeData extends Record<string, unknown> {
    *  {@code 2} = depth-1 peripheral → depth-2 sub-peripheral. Depth-2 edges
    *  are drawn thinner and dimmer so the primary radial stays dominant. */
   depth?: 1 | 2;
+  /** P5 — bidirectional bow direction. {@code +1} / {@code -1} bow apart so
+   *  outgoing and incoming arrows on the same pair don't overlap. {@code 0}
+   *  (or undefined) keeps the path straight. */
+  curvature?: 1 | -1 | 0;
+  /** P5 — true when this descriptor belongs to a bidirectional pair. Mirror
+   *  of {@code curvature !== 0}; passed through so consumers can branch on
+   *  intent rather than the raw sign. */
+  bidirectional?: boolean;
 }
 
 const TYPE_STYLE: Record<
@@ -151,6 +159,13 @@ const ARROW_CLEARANCE = 48;
  *  {-2,-1,0,+1,+2} × this value. 28px keeps the labels from overlapping
  *  even when text is long. */
 const SIBLING_SPACING = 28;
+
+/** P5 — perpendicular offset for the bidirectional bow. Larger than
+ *  {@link SIBLING_SPACING} so the outgoing/incoming pair is visibly
+ *  separated even on short edges. The two opposite-sign curves end up
+ *  ~140px apart at midpoint — enough room for two label chips side by
+ *  side without overlapping the peripheral card. */
+const BIDI_SPACING = 70;
 
 /** Center point of an InternalNode in flow coordinates. Falls back to the
  *  declared width/height when the ResizeObserver hasn't reported yet. */
@@ -245,17 +260,21 @@ function FocusEdgeComponent({
   const ty = inbound ? targetEdge.y : targetEdge.y - uy * ARROW_CLEARANCE;
 
   // P1 — parallel siblings curve away from the centre line so the arrows for
-  // save(), delete(), find() etc. don't pile on top of each other. The
-  // offset is perpendicular to the (sx,sy)→(tx,ty) direction and centred so
-  // a 5-arrow group spans {-2,-1,0,+1,+2} × SIBLING_SPACING.
+  // save(), delete(), find() etc. don't pile on top of each other.
+  // P5 — additionally, bidirectional pairs (CALLS + CALLED_BY between focus
+  // and the same peripheral) carry curvature ±1; combined with the sibling
+  // offset, this guarantees the two opposing arrows end up on opposite sides
+  // of the centre line so they never overlap.
   const siblingCount = Math.max(1, edgeData.siblingCount ?? 1);
   const siblingIndex = edgeData.siblingIndex ?? 0;
   const offsetIndex = siblingIndex - (siblingCount - 1) / 2;
-  const perpScale = offsetIndex * SIBLING_SPACING;
+  const siblingPerp = offsetIndex * SIBLING_SPACING;
+  const bidiPerp = (edgeData.curvature ?? 0) * BIDI_SPACING;
+  const perpScale = siblingPerp + bidiPerp;
   let path: string;
   let labelX: number;
   let labelY: number;
-  if (siblingCount > 1 && perpScale !== 0) {
+  if (perpScale !== 0) {
     const mx = (sx + tx) / 2;
     const my = (sy + ty) / 2;
     // Rotate the path-direction unit vector 90° → perpendicular vector.
