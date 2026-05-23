@@ -37,6 +37,18 @@ interface FocusEdgeData extends Record<string, unknown> {
   /** F3 — peripheral mocks the focus class. A small mask icon is overlaid at
    *  the edge midpoint, communicating "this isn't a real call, it's a mock". */
   isMock?: boolean;
+  /** P1 — 0-based index inside the group of parallel edges between the same
+   *  (focus, peripheral) pair. Drives the perpendicular curve offset so
+   *  arrows for save() / delete() / find() don't overlap. */
+  siblingIndex?: number;
+  /** P1 — total number of parallel edges in the same group. {@code 1} means
+   *  no siblings (straight line). */
+  siblingCount?: number;
+  /** P1 — when present and non-empty, this edge is the collapsed
+   *  "Por clase" representative for the (focus, peripheral) pair. Renders a
+   *  "+N métodos" badge with the full list as a tooltip instead of the
+   *  per-method via-label. */
+  aggregatedMethods?: string[] | null;
 }
 
 const TYPE_STYLE: Record<
@@ -89,6 +101,13 @@ function isInbound(ct: FocusConnectionType): boolean {
  *  Cards have border-radius + outer glow that visually inflate the boundary
  *  by ~10–14 px, so the value here is the *visual* gap minus that fudge. */
 const ARROW_CLEARANCE = 48;
+
+/** P1 — perpendicular spacing between two adjacent parallel arrows. The
+ *  effective offset of arrow i in a group of N is
+ *  {@code (i - (N-1)/2) * SIBLING_SPACING}, so a group of 5 spans
+ *  {-2,-1,0,+1,+2} × this value. 28px keeps the labels from overlapping
+ *  even when text is long. */
+const SIBLING_SPACING = 28;
 
 /** Center point of an InternalNode in flow coordinates. Falls back to the
  *  declared width/height when the ResizeObserver hasn't reported yet. */
@@ -177,12 +196,40 @@ function FocusEdgeComponent({
   const tx = inbound ? targetEdge.x : targetEdge.x - ux * ARROW_CLEARANCE;
   const ty = inbound ? targetEdge.y : targetEdge.y - uy * ARROW_CLEARANCE;
 
-  const [path, labelX, labelY] = getStraightPath({
-    sourceX: sx,
-    sourceY: sy,
-    targetX: tx,
-    targetY: ty,
-  });
+  // P1 — parallel siblings curve away from the centre line so the arrows for
+  // save(), delete(), find() etc. don't pile on top of each other. The
+  // offset is perpendicular to the (sx,sy)→(tx,ty) direction and centred so
+  // a 5-arrow group spans {-2,-1,0,+1,+2} × SIBLING_SPACING.
+  const siblingCount = Math.max(1, edgeData.siblingCount ?? 1);
+  const siblingIndex = edgeData.siblingIndex ?? 0;
+  const offsetIndex = siblingIndex - (siblingCount - 1) / 2;
+  const perpScale = offsetIndex * SIBLING_SPACING;
+  let path: string;
+  let labelX: number;
+  let labelY: number;
+  if (siblingCount > 1 && perpScale !== 0) {
+    const mx = (sx + tx) / 2;
+    const my = (sy + ty) / 2;
+    // Rotate the path-direction unit vector 90° → perpendicular vector.
+    const perpX = -uy;
+    const perpY = ux;
+    const cpx = mx + perpX * perpScale;
+    const cpy = my + perpY * perpScale;
+    path = `M ${sx},${sy} Q ${cpx},${cpy} ${tx},${ty}`;
+    // Midpoint of a quadratic Bezier at t=0.5.
+    labelX = 0.25 * sx + 0.5 * cpx + 0.25 * tx;
+    labelY = 0.25 * sy + 0.5 * cpy + 0.25 * ty;
+  } else {
+    const [straightPath, sLabelX, sLabelY] = getStraightPath({
+      sourceX: sx,
+      sourceY: sy,
+      targetX: tx,
+      targetY: ty,
+    });
+    path = straightPath;
+    labelX = sLabelX;
+    labelY = sLabelY;
+  }
 
   // Wall-clock animation. progress ∈ [0,1] is "how far through the draw
   // animation we should be at this exact moment, given when the connection
@@ -246,14 +293,16 @@ function FocusEdgeComponent({
   let highlightClassName: string | null = null;
   let highlightMethodName: string | null = null;
   if (ct === "CALLED_BY" || ct === "INVOKES_METHOD") {
-    // Fallback "via import" — when the parser detected this caller via its
-    // import statement but couldn't identify which method actually uses the
-    // focus (typical when the import is dead, or the use is buried in a
-    // hard-to-resolve expression). Better than a mute chip — the dev knows
-    // the connection is weak and probably needs a manual look.
-    viaLabel = edgeData.viaMethodInSource
-      ? `via ${edgeData.viaMethodInSource}()`
-      : "via import";
+    // P1 — primary label is the focus method that this caller invokes
+    // ("save()" / "delete()"). Falls back to the caller-side via-label when
+    // method resolution failed (legacy "via import" / structural cases).
+    if (edgeData.viaMethodInTarget) {
+      viaLabel = `${edgeData.viaMethodInTarget}()`;
+    } else {
+      viaLabel = edgeData.viaMethodInSource
+        ? `via ${edgeData.viaMethodInSource}()`
+        : "via import";
+    }
     viaMethodName = edgeData.viaMethodInSource ?? null;
     const peripheral = focusConnections.find((c) => c.id === target);
     viaClassId = peripheral?.id ?? null;
@@ -263,19 +312,22 @@ function FocusEdgeComponent({
     highlightMethodName =
       ct === "INVOKES_METHOD" ? focusMethod?.methodName ?? null : null;
   } else if (ct === "CALLS") {
-    // Same fallback pattern as CALLED_BY: when the focus's specific calling
-    // method can't be pinned down, the chip still opens the focus sheet and
-    // highlights every line that mentions the peripheral.
-    viaLabel = edgeData.viaMethodInSource
-      ? `desde ${edgeData.viaMethodInSource}()`
-      : "desde uso interno";
+    // P1 — primary label is the peripheral method the focus invokes.
+    // Falls back to the focus-side via-label when not resolvable.
+    if (edgeData.viaMethodInTarget) {
+      viaLabel = `${edgeData.viaMethodInTarget}()`;
+    } else {
+      viaLabel = edgeData.viaMethodInSource
+        ? `desde ${edgeData.viaMethodInSource}()`
+        : "desde uso interno";
+    }
     viaMethodName = edgeData.viaMethodInSource ?? null;
     viaClassId = focusClass?.id ?? null;
     viaMethods = focusClass?.methods ?? [];
     // Body shown = focus's calling method. Mark where it touches peripheral.
     const peripheral = focusConnections.find((c) => c.id === target);
     highlightClassName = peripheral?.name ?? null;
-    highlightMethodName = null;
+    highlightMethodName = edgeData.viaMethodInTarget ?? null;
   } else if (ct === "INVOKES_OUTGOING") {
     // Method-focus mode: the focus method invokes peripheral. When the
     // specific target method isn't resolved, fall back to "invocación
@@ -412,11 +464,21 @@ function FocusEdgeComponent({
             {edgeData.isTest ? "Test · " : ""}
             {style.label}
           </span>
-          {viaLabel ? (
+          {edgeData.aggregatedMethods && edgeData.aggregatedMethods.length > 1 ? (
+            <span
+              data-testid="aggregated-methods-badge"
+              title={edgeData.aggregatedMethods.join("\n")}
+              style={{ pointerEvents: "auto" }}
+              className="rounded-sm border border-[var(--bordo)] bg-[var(--bordo)]/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold leading-none tracking-tight text-[var(--bordo)]"
+            >
+              +{edgeData.aggregatedMethods.length} métodos
+            </span>
+          ) : viaLabel ? (
             viaClickable ? (
               <button
                 type="button"
                 onClick={handleViaClick}
+                data-testid="focus-edge-via-label"
                 style={{ pointerEvents: "auto" }}
                 className="group flex items-center gap-1 rounded-sm border border-[var(--border-silver)] bg-[var(--bg-base)]/95 px-1.5 py-0.5 font-mono text-[9px] leading-none tracking-tight text-[var(--silver-mid)] transition-colors hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/15 hover:text-[var(--bordo)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--bordo)]/60 cursor-pointer"
                 title="Ver código en la sheet"
@@ -425,7 +487,10 @@ function FocusEdgeComponent({
                 <ChevronRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
               </button>
             ) : (
-              <span className="rounded-sm border border-[var(--border-silver)] bg-[var(--bg-base)]/95 px-1.5 py-0.5 font-mono text-[9px] leading-none tracking-tight text-[var(--silver-mid)]">
+              <span
+                data-testid="focus-edge-via-label"
+                className="rounded-sm border border-[var(--border-silver)] bg-[var(--bg-base)]/95 px-1.5 py-0.5 font-mono text-[9px] leading-none tracking-tight text-[var(--silver-mid)]"
+              >
                 {viaLabel}
               </span>
             )

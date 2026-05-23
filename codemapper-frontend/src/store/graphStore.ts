@@ -168,6 +168,11 @@ interface GraphState {
   /** F-deep — diagnostics streamed from the backend during deep body
    *  analysis. Reset on every new FOCO. Drives the DiagnosticsPanel. */
   diagnostics: Diagnostic[];
+  /** P1 — controls whether the focus graph renders one edge per (peripheral,
+   *  invoked method) pair ("method", the default) or collapses them into a
+   *  single edge per peripheral class with a "+N métodos" badge ("class").
+   *  Toggled from the FocusConnectionLegend; consumed by FocusGraph. */
+  edgeGrouping: "method" | "class";
 
   setSessionId: (id: string | null) => void;
   addClass: (payload: ClassFoundPayload) => void;
@@ -234,6 +239,9 @@ interface GraphState {
   /** F-deep — append a new diagnostic to the list. Called by useSSE for
    *  every `unresolved_reference` event. */
   addDiagnostic: (d: Diagnostic) => void;
+  /** P1 — swap edge grouping between "method" (per invoked method, default)
+   *  and "class" (collapsed by peripheral with a "+N métodos" badge). */
+  setEdgeGrouping: (mode: "method" | "class") => void;
   reset: () => void;
 }
 
@@ -377,6 +385,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   impactLoading: false,
   openHelpPopover: null,
   diagnostics: [],
+  edgeGrouping: "method",
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -627,7 +636,21 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   addFocusConnection: (conn) =>
     set((state) => {
-      if (state.focusConnections.some((c) => c.id === conn.id)) return state;
+      // P1 — backend now emits one event per (peripheral, invoked method).
+      // Dedup must include the method, otherwise the second arrival for the
+      // same class would be silently dropped and we'd lose the per-method
+      // breakdown the graph relies on. The peripheral node still keys off
+      // the class id (one card per class), but the connection list keeps
+      // every (id, method) tuple.
+      if (
+        state.focusConnections.some(
+          (c) =>
+            c.id === conn.id &&
+            (c.viaMethodInTarget ?? null) === (conn.viaMethodInTarget ?? null),
+        )
+      ) {
+        return state;
+      }
       // Stamp wall-clock arrival time so FocusEdge can drive its draw
       // animation off elapsed-since-arrival rather than mount time. This
       // is what makes the edge animation idempotent under ReactFlow's
@@ -698,6 +721,8 @@ export const useGraphStore = create<GraphState>((set) => ({
   setOpenHelpPopover: (id) => set({ openHelpPopover: id }),
   addDiagnostic: (d) =>
     set((state) => ({ diagnostics: [...state.diagnostics, d] })),
+
+  setEdgeGrouping: (mode) => set({ edgeGrouping: mode }),
 
   // NOTE: `projectPath` and `pendingReanalysis` are intentionally NOT
   // cleared here. Both must survive the map page's reset() on session

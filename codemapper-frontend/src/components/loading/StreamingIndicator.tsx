@@ -76,6 +76,7 @@ export function StreamingIndicator() {
       className="cm-hairline-top relative flex items-center gap-3 overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-3 shadow-[0_0_20px_rgba(185,28,66,0.15)]"
       role="status"
       aria-live="polite"
+      data-testid={isComplete ? "focus-streaming-done" : "focus-streaming"}
     >
       <div
         aria-hidden

@@ -21,6 +21,8 @@ import { GraphSearchInput } from "./GraphSearchInput";
 import { JavaVersionBadge } from "./JavaVersionBadge";
 import { ImpactSimulationButton } from "./ImpactSimulationButton";
 import { useGraphStore } from "@/store/graphStore";
+import { buildFocusEdgeDescriptors } from "./focusGraphGrouping";
+import type { FocusConnectionPayload } from "@/lib/types";
 
 const FOCUS_NODE_TYPES = {
   focusCenter: FocusCenterNode,
@@ -72,6 +74,7 @@ function FocusGraphInner() {
   const showTests = useGraphStore((s) => s.showTests);
   const impactReport = useGraphStore((s) => s.impactReport);
   const selectNode = useGraphStore((s) => s.selectNode);
+  const edgeGrouping = useGraphStore((s) => s.edgeGrouping);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -113,12 +116,28 @@ function FocusGraphInner() {
         focusConnectionTypeFilters[c.connectionType] !== false &&
         (showTests || !c.isTest),
     );
-    const N = visibleConnections.length;
+
+    // P1 — group visible connections by peripheral class id. Each group renders
+    // as ONE peripheral node. The edge descriptors come from a pure helper so
+    // the per-method dedupe + curve-index math stays trivially testable.
+    const descriptors = buildFocusEdgeDescriptors(visibleConnections, edgeGrouping);
+    const orderedGroupKeys: string[] = [];
+    for (const d of descriptors) {
+      if (!orderedGroupKeys.includes(d.classId)) orderedGroupKeys.push(d.classId);
+    }
+    const N = orderedGroupKeys.length;
     const radius = radiusFor(N);
 
-    const peripheralNodes: Node[] = [];
-    const peripheralEdges: Edge[] = [];
-    visibleConnections.forEach((conn, i) => {
+    const groupHead = new Map<string, FocusConnectionPayload>();
+    const groupIndex = new Map<string, number>();
+    orderedGroupKeys.forEach((classId, i) => {
+      groupIndex.set(classId, i);
+      const head = descriptors.find((d) => d.classId === classId)!.connection;
+      groupHead.set(classId, head);
+    });
+
+    const peripheralNodes: Node[] = orderedGroupKeys.map((classId, i) => {
+      const head = groupHead.get(classId)!;
       const angle = -Math.PI / 2 + (i / Math.max(N, 1)) * 2 * Math.PI;
       const cx = radius * Math.cos(angle);
       const cy = radius * Math.sin(angle);
@@ -127,47 +146,46 @@ function FocusGraphInner() {
       // then transitive. Without a report all classNames are undefined.
       let impactClass: string | undefined;
       if (impactReport) {
-        if (testSet.has(conn.fullyQualifiedName)) impactClass = "cm-impact-test";
-        else if (directSet.has(conn.fullyQualifiedName)) impactClass = "cm-impact-direct";
-        else if (transitiveSet.has(conn.fullyQualifiedName)) impactClass = "cm-impact-transitive";
+        if (testSet.has(head.fullyQualifiedName)) impactClass = "cm-impact-test";
+        else if (directSet.has(head.fullyQualifiedName)) impactClass = "cm-impact-direct";
+        else if (transitiveSet.has(head.fullyQualifiedName)) impactClass = "cm-impact-transitive";
       }
-
-      peripheralNodes.push({
-        id: conn.id,
+      return {
+        id: head.id,
         type: "focusPeripheral",
         position: { x: cx - PERIPHERAL_W / 2, y: cy - PERIPHERAL_H / 2 },
         width: PERIPHERAL_W,
         height: PERIPHERAL_H,
-        data: { payload: conn, index: i },
+        data: { payload: head, index: i },
         draggable: false,
         className: impactClass,
-      });
-      // Floating edge — no sourceHandle/targetHandle. FocusEdge computes its
-      // own endpoints from node centers so the line follows when the radial
-      // layout rebalances. firstSeenAt is forwarded so the draw animation is
-      // wall-clock driven and idempotent under ReactFlow's edge-layer remounts.
-      peripheralEdges.push({
-        id: `focus-edge-${conn.id}`,
-        source: focusClass.id,
-        target: conn.id,
-        type: "focusEdge",
-        data: {
-          connectionType: conn.connectionType,
-          index: i,
-          viaMethodInSource: conn.viaMethodInSource ?? null,
-          viaMethodInTarget: conn.viaMethodInTarget ?? null,
-          isTest: conn.isTest ?? false,
-          isMock: conn.isMock ?? false,
-          firstSeenAt: conn.firstSeenAt ?? Date.now(),
-        },
-      });
+      } satisfies Node;
     });
+
+    const peripheralEdges: Edge[] = descriptors.map((d) => ({
+      id: d.edgeId,
+      source: focusClass.id,
+      target: d.classId,
+      type: "focusEdge",
+      data: {
+        connectionType: d.connection.connectionType,
+        index: groupIndex.get(d.classId) ?? 0,
+        viaMethodInSource: d.connection.viaMethodInSource ?? null,
+        viaMethodInTarget: d.connection.viaMethodInTarget ?? null,
+        isTest: d.connection.isTest ?? false,
+        isMock: d.connection.isMock ?? false,
+        firstSeenAt: d.connection.firstSeenAt ?? Date.now(),
+        siblingIndex: d.siblingIndex,
+        siblingCount: d.siblingCount,
+        aggregatedMethods: d.aggregatedMethods,
+      },
+    }));
 
     return {
       nodes: [centerNode, ...peripheralNodes],
       edges: peripheralEdges,
     };
-  }, [focusClass, focusConnections, classTypeFilters, focusConnectionTypeFilters, showTests, impactReport]);
+  }, [focusClass, focusConnections, classTypeFilters, focusConnectionTypeFilters, showTests, impactReport, edgeGrouping]);
 
   useEffect(() => {
     if (fitTimer.current) clearTimeout(fitTimer.current);

@@ -102,6 +102,8 @@ export function FocusConnectionLegend() {
   const toggle = useGraphStore((s) => s.toggleFocusConnectionTypeFilter);
   const openHelpPopover = useGraphStore((s) => s.openHelpPopover);
   const setOpenHelpPopover = useGraphStore((s) => s.setOpenHelpPopover);
+  const edgeGrouping = useGraphStore((s) => s.edgeGrouping);
+  const setEdgeGrouping = useGraphStore((s) => s.setEdgeGrouping);
   const helpOpen = openHelpPopover === POPOVER_ID;
 
   return (
@@ -119,6 +121,46 @@ export function FocusConnectionLegend() {
         >
           <HelpCircle className="h-3.5 w-3.5" />
         </button>
+      </div>
+      <div
+        className="flex items-center gap-1.5"
+        data-testid="edge-grouping-toggle"
+      >
+        <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+          Vista:
+        </span>
+        <div
+          role="group"
+          aria-label="Agrupado de aristas"
+          className="flex overflow-hidden rounded border border-[var(--border-silver)] text-[10px] font-mono"
+        >
+          <button
+            type="button"
+            onClick={() => setEdgeGrouping("method")}
+            data-testid="edge-grouping-method"
+            aria-pressed={edgeGrouping === "method"}
+            className={`px-2 py-0.5 transition-colors ${
+              edgeGrouping === "method"
+                ? "bg-[var(--bordo)] text-white"
+                : "bg-transparent text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            }`}
+          >
+            Por método
+          </button>
+          <button
+            type="button"
+            onClick={() => setEdgeGrouping("class")}
+            data-testid="edge-grouping-class"
+            aria-pressed={edgeGrouping === "class"}
+            className={`px-2 py-0.5 transition-colors ${
+              edgeGrouping === "class"
+                ? "bg-[var(--bordo)] text-white"
+                : "bg-transparent text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            }`}
+          >
+            Por clase
+          </button>
+        </div>
       </div>
       <div className="flex flex-col gap-1">
         {ITEMS.map((item) => {

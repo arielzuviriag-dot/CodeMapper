@@ -335,20 +335,22 @@ public class FocusTracerService {
                 usesProperties.size(),
                 isPro);
 
-        // Emit pass 1 results with stagger
+        // Emit pass 1 results with stagger. emitConnections may emit multiple
+        // events per peripheral class (one per distinct invoked method) — so
+        // position and emittedCount advance by the returned count, not by 1.
         int position = 0;
         int emittedCount = 0;
         for (PendingConnection pc : pass1ToEmit) {
-            position++;
-            emittedCount++;
-            emitConnection(sink, pc, position, focusFqn, focusType, focusParsed.getName(), session);
+            int emitted;
             try {
-                Thread.sleep(60);
+                emitted = emitConnections(sink, pc, position + 1, focusFqn, focusType, focusParsed.getName(), session, 60L);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 log.warn("Focus tracing interrupted for session {}", session.getSessionId());
                 return;
             }
+            position += emitted;
+            emittedCount += emitted;
         }
 
         // ─── PASS 2 — deep body analysis (always runs) ─────────────────
@@ -424,19 +426,20 @@ public class FocusTracerService {
 
                 if (shouldEmit) {
                     // Live emit path — stagger like P1 so the graph keeps
-                    // populating during deep search.
+                    // populating during deep search. May emit multiple events
+                    // when the caller invokes several distinct focus methods.
                     PendingConnection conn = new PendingConnection(
                             pc, FocusConnectionType.CALLED_BY, td);
-                    position++;
-                    emittedCount++;
-                    pass2Emitted++;
-                    emitConnection(sink, conn, position, focusFqn, focusType, focusSimpleName, session);
+                    int emitted;
                     try {
-                        Thread.sleep(60);
+                        emitted = emitConnections(sink, conn, position + 1, focusFqn, focusType, focusSimpleName, session, 60L);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         return;
                     }
+                    position += emitted;
+                    emittedCount += emitted;
+                    pass2Emitted += emitted;
                     // After emitting, did we just hit the FREE visual cap?
                     if (!isPro && emittedCount >= focusMaxConnections) {
                         // Stop emitting — but keep counting so the panel
@@ -598,48 +601,136 @@ public class FocusTracerService {
         return result;
     }
 
-    /** Emit a single FocusConnectionEvent. Centralizes the per-connection
-     *  prep (via-method resolution, isTest/isMock derivation, persisting to
-     *  session). Used by both pass 1 (in-bulk) and pass 2 (live). */
-    private void emitConnection(
+    /** Emit one or more FocusConnectionEvents for {@code pc} — one per unique
+     *  method invoked across the peripheral/focus boundary. Returns the count
+     *  of events emitted, so callers can advance their position/emit counters.
+     *
+     *  <p>Dedup is by INVOKED method name: if a caller has three call sites to
+     *  {@code focus.save()} and one to {@code focus.delete()}, this emits two
+     *  events (one for {@code save}, one for {@code delete}). For EXTENDS,
+     *  IMPLEMENTS and USES_PROPERTIES — and for "structural-only" CALLED_BY
+     *  cases where no call expression resolves to the target — a single event
+     *  is emitted with {@code viaMethodInTarget = null}.</p>
+     *
+     *  <p>{@code sleepMs} between events keeps the SSE stream staggered so the
+     *  frontend renders an animated graph instead of a sudden dump.</p>
+     */
+    private int emitConnections(
             Consumer<BaseEvent> sink,
             PendingConnection pc,
-            int position,
+            int startPosition,
             String focusFqn,
             TypeDeclaration<?> focusType,
             String focusSimpleName,
-            SessionData session) {
+            SessionData session,
+            long sleepMs) throws InterruptedException {
         if (pc.connectionType != FocusConnectionType.USES_PROPERTIES) {
             session.getParsedClasses().add(pc.parsed);
         }
-        String via = null;
+
+        List<InvocationInfo> invocations;
         if (pc.connectionType == FocusConnectionType.CALLED_BY && pc.callerTd != null) {
-            via = findViaMethod(pc.callerTd, focusFqn).orElse(null);
+            invocations = findInvokedMethods(pc.callerTd, focusFqn);
         } else if (pc.connectionType == FocusConnectionType.CALLS) {
-            via = findViaMethod(focusType, pc.parsed.getFullyQualifiedName()).orElse(null);
+            invocations = findInvokedMethods(focusType, pc.parsed.getFullyQualifiedName());
+        } else {
+            // EXTENDS / IMPLEMENTS / USES_PROPERTIES — no per-method breakdown.
+            invocations = Collections.singletonList(new InvocationInfo(null, null));
         }
+
         boolean isTest = isTestPath(pc.parsed.getFilePath());
         boolean isMock = isTest
                 && pc.connectionType == FocusConnectionType.CALLED_BY
                 && pc.callerTd != null
                 && declaresMockOf(pc.callerTd, focusSimpleName);
-        sink.accept(new FocusConnectionEvent(
-                pc.parsed.getId(),
-                pc.parsed.getFullyQualifiedName(),
-                pc.parsed.getName(),
-                pc.parsed.getPackageName(),
-                pc.parsed.getType(),
-                pc.parsed.getAnnotations(),
-                pc.connectionType,
-                pc.parsed.getFields(),
-                pc.parsed.getMethods(),
-                position,
-                pc.parsed.getFilePath(),
-                via,
-                null,
-                null,
-                isTest,
-                isMock));
+
+        int pos = startPosition;
+        int emitted = 0;
+        for (InvocationInfo inv : invocations) {
+            sink.accept(new FocusConnectionEvent(
+                    pc.parsed.getId(),
+                    pc.parsed.getFullyQualifiedName(),
+                    pc.parsed.getName(),
+                    pc.parsed.getPackageName(),
+                    pc.parsed.getType(),
+                    pc.parsed.getAnnotations(),
+                    pc.connectionType,
+                    pc.parsed.getFields(),
+                    pc.parsed.getMethods(),
+                    pos++,
+                    pc.parsed.getFilePath(),
+                    inv.callerMethod,    // viaMethodInSource — method on the call-site side
+                    inv.invokedMethod,   // viaMethodInTarget — method actually invoked
+                    null,
+                    isTest,
+                    isMock));
+            emitted++;
+            if (sleepMs > 0L) {
+                Thread.sleep(sleepMs);
+            }
+        }
+        return emitted;
+    }
+
+    /** Pair of (caller-side method, invoked method on the target) used when
+     *  emitting one event per distinct invoked method. */
+    private static final class InvocationInfo {
+        final String callerMethod;
+        final String invokedMethod;
+
+        InvocationInfo(String callerMethod, String invokedMethod) {
+            this.callerMethod = callerMethod;
+            this.invokedMethod = invokedMethod;
+        }
+    }
+
+    /**
+     * Returns the unique methods invoked on {@code targetFqn} from inside
+     * {@code callerTd}, deduplicated by invoked-method name. Each entry pairs
+     * (a) the caller-side method that contains the call with (b) the simple
+     * name of the invoked method on the target.
+     *
+     * <p>If three call sites invoke {@code target.save()} and one invokes
+     * {@code target.delete()} — even from different caller methods — the
+     * result is two entries (one per invoked method). The first caller method
+     * seen is used as the pair's caller field.</p>
+     *
+     * <p>When no call expression can be resolved against the target (e.g. the
+     * relationship is structural — {@code @Autowired} field with no body
+     * invocation), falls back to the existing signature/heuristic match and
+     * returns one entry with {@code invokedMethod == null}. That preserves
+     * the legacy "una arista por clase periférica" behavior for non-call
+     * connections.</p>
+     */
+    private List<InvocationInfo> findInvokedMethods(TypeDeclaration<?> callerTd, String targetFqn) {
+        Map<String, String> dedup = new LinkedHashMap<>();
+        for (var member : callerTd.getMembers()) {
+            if (!(member instanceof MethodDeclaration md)) continue;
+            String callerMethod = md.getNameAsString();
+            for (MethodCallExpr call : md.findAll(MethodCallExpr.class)) {
+                try {
+                    var resolved = call.resolve();
+                    String declaring = resolved.declaringType().getQualifiedName();
+                    if (targetFqn.equals(declaring)) {
+                        String invokedName = resolved.getName();
+                        dedup.putIfAbsent(invokedName, callerMethod);
+                    }
+                } catch (Exception ignored) {
+                    // unresolvable — try next call
+                }
+            }
+        }
+        if (!dedup.isEmpty()) {
+            List<InvocationInfo> result = new ArrayList<>(dedup.size());
+            for (Map.Entry<String, String> e : dedup.entrySet()) {
+                result.add(new InvocationInfo(e.getValue(), e.getKey()));
+            }
+            return result;
+        }
+        // No resolved calls — fall back to the existing 3-step heuristic for
+        // a single representative caller method, with null invoked method.
+        String fallbackCaller = findViaMethod(callerTd, targetFqn).orElse(null);
+        return Collections.singletonList(new InvocationInfo(fallbackCaller, null));
     }
 
     // ───────────────────────────── helpers ────────────────────────────
