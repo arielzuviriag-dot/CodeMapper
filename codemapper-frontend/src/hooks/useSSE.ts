@@ -10,12 +10,14 @@ import type {
   ClassFoundPayload,
   ConnectionFoundPayload,
   ErrorPayload,
+  ExceptionReportPayload,
   FieldsParsedPayload,
   FocusClassLoadedPayload,
   FocusConnectionPayload,
   FocusMethodLoadedPayload,
   LimitReachedPayload,
   MethodsParsedPayload,
+  MobileOriginPayload,
   PackageFoundPayload,
   SessionCompletePayload,
   SessionStartPayload,
@@ -56,6 +58,8 @@ export function useSSE(sessionId: string | null) {
   const setFocusMethod = useGraphStore((s) => s.setFocusMethod);
   const setDetectedJavaVersion = useGraphStore((s) => s.setDetectedJavaVersion);
   const addDiagnostic = useGraphStore((s) => s.addDiagnostic);
+  const setExceptionReport = useGraphStore((s) => s.setExceptionReport);
+  const setMobileOrigins = useGraphStore((s) => s.setMobileOrigins);
 
   const bufferRef = useRef<Buffer>(emptyBuffer());
 
@@ -202,6 +206,20 @@ export function useSSE(sessionId: string | null) {
               message: p.message,
               truncated: p.truncated ?? false,
             });
+            break;
+          }
+          case "exception_report": {
+            const p = data as { report?: ExceptionReportPayload } | ExceptionReportPayload;
+            // Backend wraps it as { report: ... }; tolerate a bare payload too.
+            const report =
+              (p as { report?: ExceptionReportPayload }).report ??
+              (p as ExceptionReportPayload);
+            if (report) setExceptionReport(report);
+            break;
+          }
+          case "mobile_origins": {
+            const p = data as { origins?: MobileOriginPayload[] };
+            if (Array.isArray(p?.origins)) setMobileOrigins(p.origins);
             break;
           }
           case "unresolved_reference": {

@@ -150,6 +150,31 @@ export async function analyzeFocusMethod(
   return data;
 }
 
+export interface AnalyzeExceptionInput {
+  projectPath: string;
+  stackTrace: string;
+  /** Optional RN project path to link mobile screens → endpoints. */
+  mobilePath?: string;
+  demoMode?: DemoMode;
+}
+
+/**
+ * Ariadna — start an exception-investigation session. Same pending-promise
+ * pattern as {@link analyzeFocus}: the POST creates the session, the SSE
+ * stream parses the trace + builds the map. Returns the sessionId.
+ */
+export async function analyzeException(
+  input: AnalyzeExceptionInput,
+): Promise<AnalyzeFocusResponse> {
+  const { data } = await api.post<AnalyzeFocusResponse>("/api/analyze/exception", {
+    projectPath: input.projectPath,
+    stackTrace: input.stackTrace,
+    mobilePath: input.mobilePath,
+    demoMode: input.demoMode,
+  });
+  return data;
+}
+
 export interface FocoExportRequest {
   focusClass: FocusClassLoadedPayload;
   connections: FocusConnectionPayload[];
@@ -202,6 +227,26 @@ export async function getClassSource(
 ): Promise<ClassSourceResponse> {
   const { data } = await api.get<ClassSourceResponse>(
     `/api/analyze/source/${encodeURIComponent(sessionId)}/${encodeURIComponent(classId)}`,
+  );
+  return data;
+}
+
+export interface ProjectFileResponse {
+  fileName: string;
+  filePath: string;
+  sourceCode: string;
+  lineCount: number;
+}
+
+/** Read any file inside the session's project/mobile roots (e.g. a RN screen)
+ *  for the mobile code viewer. */
+export async function getProjectFile(
+  sessionId: string,
+  path: string,
+): Promise<ProjectFileResponse> {
+  const { data } = await api.get<ProjectFileResponse>(
+    `/api/analyze/file/${encodeURIComponent(sessionId)}`,
+    { params: { path } },
   );
   return data;
 }

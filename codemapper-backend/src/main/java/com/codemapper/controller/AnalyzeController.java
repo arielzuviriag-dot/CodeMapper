@@ -94,6 +94,22 @@ public class AnalyzeController {
         return ResponseEntity.ok(body);
     }
 
+    @PostMapping(value = "/exception", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AnalyzeResponse> analyzeException(
+            @Valid @RequestBody com.codemapper.model.dto.AnalyzeExceptionRequest request)
+            throws IOException {
+        boolean isPro = isProMode(request.getDemoMode());
+        log.info("Analyze EXCEPTION request: project={} traceLen={} [demoMode={}]",
+                request.getProjectPath(),
+                request.getStackTrace() == null ? 0 : request.getStackTrace().length(),
+                request.getDemoMode());
+        return ResponseEntity.ok(analysisService.handleException(
+                request.getProjectPath(),
+                request.getStackTrace(),
+                request.getMobilePath(),
+                isPro));
+    }
+
     @PostMapping(value = "/focus-method", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AnalyzeResponse> analyzeFocusMethod(
             @Valid @RequestBody AnalyzeFocusMethodRequest request) throws IOException {
@@ -144,6 +160,15 @@ public class AnalyzeController {
     public ResponseEntity<ClassSourceResponse> getSource(@PathVariable String sessionId,
                                                          @PathVariable String classId) throws IOException {
         return ResponseEntity.ok(analysisService.getClassSource(sessionId, classId));
+    }
+
+    /** Read any file inside the session's project/mobile roots (e.g. a RN
+     *  screen) — for the mobile code viewer. */
+    @GetMapping("/file/{sessionId}")
+    public ResponseEntity<com.codemapper.model.dto.ProjectFileResponse> getFile(
+            @PathVariable String sessionId,
+            @RequestParam("path") String path) throws IOException {
+        return ResponseEntity.ok(analysisService.getProjectFile(sessionId, path));
     }
 
     /**

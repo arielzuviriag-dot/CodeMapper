@@ -95,6 +95,8 @@ export const SSE_EVENT_NAMES = [
   "focus_class_loaded",
   "focus_method_loaded",
   "unresolved_reference",
+  "exception_report",
+  "mobile_origins",
   "error",
 ] as const;
 
@@ -324,6 +326,63 @@ export interface ImpactReport {
   transitiveCallers: string[];
   affectedTests: string[];
   cycles: string[][];
+}
+
+/** Ariadna — a React Native screen that reaches a backend endpoint present in
+ *  the exception chain. Drives the first node(s) of the flow graph. */
+export interface MobileOriginPayload {
+  screenName: string;
+  screenFile: string;
+  apiFunction: string;
+  apiFile: string;
+  method: string;
+  path: string;
+  /** Graph node id of the controller class this screen reaches. */
+  attachClassId: string;
+  attachFqn: string;
+}
+
+/** Ariadna — one frame (`at ...` line) of a parsed stack trace. */
+export interface ExceptionFramePayload {
+  /** Declaring class as it appears in the trace (may include `Outer$Inner`). */
+  declaringClass: string;
+  /** `declaringClass` with any `$Inner` suffix stripped — used to match the
+   *  project's parsed classes. */
+  topLevelFqn: string;
+  simpleName: string;
+  methodName: string;
+  /** Source file (e.g. `AuthService.java`) or null for native/unknown frames. */
+  fileName: string | null;
+  /** 1-based line number, 0 when the trace didn't carry one. */
+  lineNumber: number;
+  /** True when this class exists in the analysed project — drives the
+   *  clickable link + full opacity (library frames stay dimmed). */
+  userCode: boolean;
+  /** Graph node id (FQN with dots→dashes) for user-code frames; null otherwise. */
+  classId: string | null;
+}
+
+/** Ariadna — one exception in the causal chain. */
+export interface ExceptionCausePayload {
+  exceptionType: string;
+  message: string;
+  frames: ExceptionFramePayload[];
+}
+
+/** Ariadna — the structured "Informe del error" the backend ships once, after
+ *  the focus class + peripheral connection events. */
+export interface ExceptionReportPayload {
+  causes: ExceptionCausePayload[];
+  topExceptionType: string;
+  topExceptionMessage: string;
+  rootCauseType: string;
+  rootCauseMessage: string;
+  /** Top-level FQN of the focus class (root-cause throw site). Null when no
+   *  project class appeared in the trace. */
+  focusFqn: string | null;
+  focusClassId: string | null;
+  focusMethod: string | null;
+  focusLine: number;
 }
 
 export interface FocusMethodLoadedPayload {

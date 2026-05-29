@@ -28,6 +28,7 @@ import { FilterPanel } from "@/components/graph/FilterPanel";
 import { ProjectStats } from "@/components/sidebar/ProjectStats";
 import { ParseProgress } from "@/components/sidebar/ParseProgress";
 import { ClassDetailSheet } from "@/components/sidebar/ClassDetailSheet";
+import { MobileCodeSheet } from "@/components/sidebar/MobileCodeSheet";
 import { DiagnosticsContent } from "@/components/graph/DiagnosticsPanel";
 import { Bitacora } from "@/components/marcopolo/Bitacora";
 import { BitacoraIndicator } from "@/components/marcopolo/BitacoraIndicator";
@@ -62,6 +63,14 @@ const FocusMethodGraph = dynamic(
   { ssr: false, loading: () => <GraphSkeleton /> },
 );
 
+const ExceptionFlowGraph = dynamic(
+  () =>
+    import("@/components/graph/ExceptionFlowGraph").then(
+      (m) => m.ExceptionFlowGraph,
+    ),
+  { ssr: false, loading: () => <GraphSkeleton /> },
+);
+
 export default function MapPage() {
   const params = useParams<{ sessionId: string }>();
   const searchParams = useSearchParams();
@@ -73,6 +82,8 @@ export default function MapPage() {
   const reset = useGraphStore((s) => s.reset);
   const setFocusMode = useGraphStore((s) => s.setFocusMode);
   const setFocusMethodMode = useGraphStore((s) => s.setFocusMethodMode);
+  const setExceptionMode = useGraphStore((s) => s.setExceptionMode);
+  const exceptionMode = useGraphStore((s) => s.exceptionMode);
   const stats = useGraphStore((s) => s.stats);
   const nodeCount = useGraphStore((s) => s.nodes.size);
   const edgeCount = useGraphStore((s) => s.edges.length);
@@ -97,11 +108,29 @@ export default function MapPage() {
   const showFullLimitBanner =
     !isPro && !inAnyFocusMode && limitReached.reached && !bannerDismissed;
 
+  // "Árbol" (bitácora) indicator on the right — only once there's data to
+  // summarize. The BitacoraIndicator itself also self-hides at 0 nodes.
+  const showActivityIndicators =
+    (sessionStatus === "streaming" || sessionStatus === "complete") &&
+    (inAnyFocusMode
+      ? focusConnectionCount > 0 || focusClass !== null || focusMethod !== null
+      : nodeCount > 0);
+
+  // "Analizando / Analizado" indicator on the left is a PROCESS icon — it must
+  // stay visible the whole time the map is active (even before the first class
+  // arrives, while it's still "studying"), so the dev always sees that work is
+  // happening. Hidden only on hard error.
+  const showStreamingIndicator = sessionStatus !== "error";
+
   useEffect(() => {
     setIsPro(resolveDemoMode() === "pro");
     reset();
     setSessionId(sessionId);
-    if (urlMode === "focus") {
+    if (urlMode === "exception") {
+      // Ariadna — linear flow graph; keep focusMode for the chrome (header/PDF).
+      setFocusMode(true);
+      setExceptionMode(true);
+    } else if (urlMode === "focus") {
       setFocusMode(true);
     } else if (urlMode === "focus-method") {
       setFocusMethodMode(true);
@@ -139,6 +168,7 @@ export default function MapPage() {
         const next = new URLSearchParams();
         if (pending.mode === "focus") next.set("mode", "focus");
         if (pending.mode === "focus-method") next.set("mode", "focus-method");
+        if (pending.mode === "exception") next.set("mode", "exception");
         if (pending.demo) next.set("demo", pending.demo);
         const qs = next.toString();
         router.replace(`/map/${res.sessionId}${qs ? `?${qs}` : ""}`);
@@ -293,7 +323,13 @@ export default function MapPage() {
             <span className="text-xs uppercase tracking-[0.14em]">Volver</span>
           </Button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-8">
+            {/* IZQUIERDA del título — indicador de proceso "Analizando /
+                Analizado". Siempre visible mientras el mapa está activo. */}
+            <AnimatePresence>
+              {showStreamingIndicator && <StreamingIndicator />}
+            </AnimatePresence>
+
             {/* Crosshair removido — el badge "Foco" ya comunica el modo y
                 no hace falta el icono extra. Mantenemos el dot bordó solo
                 para los modos no-foco. */}
@@ -322,6 +358,12 @@ export default function MapPage() {
                 totalAvailable={limitReached.totalAvailable}
               />
             </div>
+
+            {/* DERECHA del título — indicador "Árbol" (bitácora). Solo en
+                modos foco; se auto-oculta si la bitácora está vacía. */}
+            <AnimatePresence>
+              {showActivityIndicators && inAnyFocusMode && <BitacoraIndicator />}
+            </AnimatePresence>
           </div>
 
           <div className="flex items-center gap-2">
@@ -398,35 +440,19 @@ export default function MapPage() {
           <section className="relative flex-1">
             {focusMethodMode ? (
               <FocusMethodGraph />
+            ) : exceptionMode ? (
+              <ExceptionFlowGraph />
             ) : focusMode ? (
               <FocusGraph />
             ) : (
               <CodeGraph />
             )}
-            {/* Floating "Analizando..." → "Analizado" indicator. Stays
-                visible after streaming ends, summarizing the final stats. */}
-            <AnimatePresence>
-              {(sessionStatus === "streaming" || sessionStatus === "complete") &&
-                (inAnyFocusMode
-                  ? focusConnectionCount > 0 ||
-                    focusClass !== null ||
-                    focusMethod !== null
-                  : nodeCount > 0) && (
-                  <div className="absolute bottom-4 left-4 z-20 flex items-end gap-2">
-                    <div className="w-[260px]">
-                      <StreamingIndicator />
-                    </div>
-                    {/* Bitácora indicator — only renders when the bitácora
-                        has at least the origen, so it sits next to the
-                        StreamingIndicator without taking space when empty. */}
-                    {inAnyFocusMode && <BitacoraIndicator />}
-                  </div>
-                )}
-            </AnimatePresence>
           </section>
         </div>
 
         <ClassDetailSheet />
+        {/* Ariadna — code viewer for mobile (RN) screen files. */}
+        <MobileCodeSheet />
         {/* Bitácora panel — fixed-positioned floating modal, lives at the
             page root so it can render above the graph regardless of which
             focus mode is active. Hidden until the user opens it via the

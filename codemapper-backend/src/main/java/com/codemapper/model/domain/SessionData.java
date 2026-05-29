@@ -22,7 +22,8 @@ public class SessionData {
     public enum Mode {
         FULL,
         FOCUS,
-        FOCUS_METHOD
+        FOCUS_METHOD,
+        EXCEPTION
     }
 
     private String sessionId;
@@ -37,6 +38,11 @@ public class SessionData {
     private Path focusFile;
     /** Method name to trace when mode == FOCUS_METHOD. */
     private String focusMethodName;
+    /** Raw stack-trace text pasted by the user when mode == EXCEPTION. */
+    private String stackTrace;
+    /** Optional absolute path to a React Native project, used in EXCEPTION
+     *  mode to link mobile screens → backend endpoints (URL ↔ @Mapping). */
+    private String mobilePath;
     /** Major Java version detected from pom.xml/build.gradle ("8","11","17","21").
      *  Null when no manifest could be parsed — parser falls back to BLEEDING_EDGE
      *  and per-feature compat checks treat unknown as "show everything supported". */

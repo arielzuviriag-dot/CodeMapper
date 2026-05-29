@@ -6,12 +6,14 @@ import type {
   ClassNodeData,
   Connection,
   ConnectionFoundPayload,
+  ExceptionReportPayload,
   FieldsParsedPayload,
   FocusClassLoadedPayload,
   FocusConnectionPayload,
   FocusMethodLoadedPayload,
   ImpactReport,
   MethodsParsedPayload,
+  MobileOriginPayload,
   ParsedField,
   ParsedMethod,
   SheetMode,
@@ -30,7 +32,7 @@ export interface PendingAnalysis {
   /** Short text shown in the loading screen ("Analizando User.java..."). */
   description: string;
   /** Mode the map should be in once we know the sessionId. */
-  mode: "focus" | "focus-method" | "project";
+  mode: "focus" | "focus-method" | "project" | "exception";
   /** Demo flag carried through so the redirect URL keeps it. */
   demo?: "pro";
   /** For FOCUS modes — the absolute project path the FOCO SCANER button
@@ -183,6 +185,19 @@ interface GraphState {
    *  focusConnectionTypeFilters — never overrides them. Driven by the
    *  FocusDirectionFilter segmented control above the graph. */
   focusDirectionFilter: "all" | "incoming" | "outgoing";
+  /** Ariadna — the structured exception report for an EXCEPTION-mode session.
+   *  Null in every other mode. When set, FocusGraph mounts the ErrorReportPanel
+   *  (Informe del error) with clickable links into the radial map. */
+  exceptionReport: ExceptionReportPayload | null;
+  /** Ariadna — true when this is an EXCEPTION-mode session. Drives rendering
+   *  the linear exception flow graph instead of the radial FocusGraph. */
+  exceptionMode: boolean;
+  /** Ariadna — mobile (RN) screens that reach endpoints in the chain. Drives
+   *  the screen nodes at the start of the flow. */
+  mobileOrigins: MobileOriginPayload[];
+  /** Ariadna — a mobile file open in the code viewer (path + display name),
+   *  or null. Set when the dev clicks a mobile screen node/step. */
+  mobileFile: { path: string; name: string } | null;
 
   setSessionId: (id: string | null) => void;
   addClass: (payload: ClassFoundPayload) => void;
@@ -233,6 +248,13 @@ interface GraphState {
     classNodeId: string,
     focusClassName: string,
   ) => void;
+  /** Ariadna — open the class sheet and mark the lines that mention `methodName`
+   *  (the frame's method) in red. Used by the Informe panel's clickable links
+   *  so the dev lands on the exact spot the trace points to. */
+  openClassSheetAtMethod: (
+    classNodeId: string,
+    methodName: string | null,
+  ) => void;
   setPendingReanalysis: (pending: boolean) => void;
   triggerLayoutReset: () => void;
   markUserInteracted: () => void;
@@ -252,6 +274,13 @@ interface GraphState {
   /** P1 — swap edge grouping between "method" (per invoked method, default)
    *  and "class" (collapsed by peripheral with a "+N métodos" badge). */
   setEdgeGrouping: (mode: "method" | "class") => void;
+  /** Ariadna — set/clear the exception report (consumed by the Informe panel). */
+  setExceptionReport: (report: ExceptionReportPayload | null) => void;
+  setExceptionMode: (enabled: boolean) => void;
+  setMobileOrigins: (origins: MobileOriginPayload[]) => void;
+  /** Ariadna — open/close the mobile file code viewer. */
+  openMobileFile: (path: string, name: string) => void;
+  closeMobileFile: () => void;
   /** P2 — swap the directional filter between "all", "incoming" and
    *  "outgoing". Applied as an additional mask over the per-type filters. */
   setFocusDirectionFilter: (mode: "all" | "incoming" | "outgoing") => void;
@@ -411,6 +440,10 @@ export const useGraphStore = create<GraphState>((set) => ({
   diagnostics: [],
   edgeGrouping: "method",
   focusDirectionFilter: "all",
+  exceptionReport: null,
+  exceptionMode: false,
+  mobileOrigins: [],
+  mobileFile: null,
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -729,6 +762,15 @@ export const useGraphStore = create<GraphState>((set) => ({
       methodSheetHighlight: { className: focusClassName, methodName: null },
     }),
 
+  openClassSheetAtMethod: (classNodeId, methodName) =>
+    set({
+      selectedNodeId: classNodeId,
+      sheetMode: "class",
+      selectedVariable: null,
+      selectedMethod: null,
+      methodSheetHighlight: { className: null, methodName },
+    }),
+
   setPendingReanalysis: (pending) => set({ pendingReanalysis: pending }),
 
   triggerLayoutReset: () =>
@@ -748,6 +790,12 @@ export const useGraphStore = create<GraphState>((set) => ({
     set((state) => ({ diagnostics: [...state.diagnostics, d] })),
 
   setEdgeGrouping: (mode) => set({ edgeGrouping: mode }),
+
+  setExceptionReport: (report) => set({ exceptionReport: report }),
+  setExceptionMode: (enabled) => set({ exceptionMode: enabled }),
+  setMobileOrigins: (origins) => set({ mobileOrigins: origins }),
+  openMobileFile: (path, name) => set({ mobileFile: { path, name } }),
+  closeMobileFile: () => set({ mobileFile: null }),
 
   setFocusDirectionFilter: (mode) => set({ focusDirectionFilter: mode }),
 
@@ -851,6 +899,11 @@ export const useGraphStore = create<GraphState>((set) => ({
       // P2 — directional filter is also per-session: a new FOCO should start
       // with the radial view ungated so the dev sees the full picture first.
       focusDirectionFilter: "all",
+      // Ariadna — exception report is per-session.
+      exceptionReport: null,
+      exceptionMode: false,
+      mobileOrigins: [],
+      mobileFile: null,
     }),
 }));
 

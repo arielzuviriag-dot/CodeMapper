@@ -20,6 +20,7 @@ import { FocusConnectionLegend } from "./FocusConnectionLegend";
 import { GraphSearchInput } from "./GraphSearchInput";
 import { JavaVersionBadge } from "./JavaVersionBadge";
 import { ImpactSimulationButton } from "./ImpactSimulationButton";
+import { ErrorReportPanel } from "./ErrorReportPanel";
 import { useGraphStore } from "@/store/graphStore";
 import { buildFocusEdgeDescriptors } from "./focusGraphGrouping";
 import { passesDirectionFilter } from "./focusDirection";
@@ -78,6 +79,7 @@ function FocusGraphInner() {
   const selectNode = useGraphStore((s) => s.selectNode);
   const edgeGrouping = useGraphStore((s) => s.edgeGrouping);
   const focusDirectionFilter = useGraphStore((s) => s.focusDirectionFilter);
+  const exceptionReport = useGraphStore((s) => s.exceptionReport);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -306,10 +308,18 @@ function FocusGraphInner() {
           legends. Becomes a banner with the impact counter once active. P2
           adds the direction segmented control right below it so the dev can
           collapse the radial to incoming/outgoing without opening the legend. */}
-      <div className="absolute left-4 top-4 z-10 flex w-[220px] flex-col gap-2">
-        <ImpactSimulationButton />
-        <FocusDirectionFilter />
-      </div>
+      {/* Ariadna — in exception mode the Informe panel replaces the FOCO
+          controls on the left. Otherwise the usual impact + direction tools. */}
+      {exceptionReport ? (
+        <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
+          <ErrorReportPanel />
+        </div>
+      ) : (
+        <div className="absolute left-4 top-4 z-10 flex w-[220px] flex-col gap-2">
+          <ImpactSimulationButton />
+          <FocusDirectionFilter />
+        </div>
+      )}
       <aside className="absolute right-4 top-4 z-10 flex w-[170px] flex-col items-end gap-2">
         <JavaVersionBadge />
         <ShowTestsToggle />

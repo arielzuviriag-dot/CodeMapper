@@ -84,7 +84,7 @@ export function ImpactSimulationButton() {
         <Zap className="h-4 w-4" strokeWidth={2.4} />
       )}
       <span className="font-semibold">
-        {impactLoading ? "Calculando..." : "Simular cambio"}
+        {impactLoading ? "Calculando..." : "Ver impacto"}
       </span>
       {error && (
         <span className="ml-1 text-[9px] normal-case opacity-80">— {error}</span>
@@ -154,7 +154,7 @@ function ImpactBanner({
           className="flex items-center justify-center gap-1.5 rounded-sm border border-[var(--border-silver)] bg-[var(--bg-card)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver)] transition-colors hover:border-[var(--bordo)] hover:text-[var(--bordo)]"
         >
           <ZapOff className="h-3 w-3" />
-          Salir del modo simular
+          Ocultar impacto
         </button>
       </motion.div>
     </AnimatePresence>

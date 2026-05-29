@@ -39,6 +39,7 @@ public class AnalysisService {
     private final JavaParserService javaParserService;
     private final FocusTracerService focusTracerService;
     private final FocusMethodTracerService focusMethodTracerService;
+    private final ExceptionTracerService exceptionTracerService;
     private final ImpactAnalysisService impactAnalysisService;
     private final ExecutorService analysisExecutor;
 
@@ -176,6 +177,44 @@ public class AnalysisService {
         return base;
     }
 
+    /**
+     * Ariadna — create an EXCEPTION-mode session from a project path + a pasted
+     * stack trace. The heavy lifting (parse trace, resolve frames, pick focus)
+     * happens during the SSE stream in {@link ExceptionTracerService}.
+     */
+    public AnalyzeResponse handleException(String absoluteProjectPath, String stackTrace,
+                                           String mobilePath, boolean isPro)
+            throws IOException {
+        if (absoluteProjectPath == null || absoluteProjectPath.isBlank()) {
+            throw new IllegalArgumentException("projectPath is required");
+        }
+        if (stackTrace == null || stackTrace.isBlank()) {
+            throw new IllegalArgumentException("stackTrace is required");
+        }
+        Path root = Path.of(absoluteProjectPath).toAbsolutePath().normalize();
+        if (!Files.exists(root)) {
+            throw new FileNotFoundException("Project path does not exist: " + absoluteProjectPath);
+        }
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException("Project path is not a directory: " + absoluteProjectPath);
+        }
+        if (!Files.isReadable(root)) {
+            throw new IllegalArgumentException("Project path is not readable: " + absoluteProjectPath);
+        }
+
+        Path pom = ProjectInfoUtils.findClosestPom(root).orElse(null);
+        String projectName = ProjectInfoUtils.deriveName(root, pom);
+        int totalFiles = ProjectInfoUtils.countJavaFiles(root);
+
+        SessionData session = sessionService.createSession(root, projectName, totalFiles, false, isPro);
+        session.setMode(SessionData.Mode.EXCEPTION);
+        session.setStackTrace(stackTrace);
+        if (mobilePath != null && !mobilePath.isBlank()) {
+            session.setMobilePath(mobilePath.trim());
+        }
+        return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
+    }
+
     public AnalyzeResponse handleGithub(String repoUrl, boolean isPro) throws Exception {
         if (repoUrl == null || repoUrl.isBlank()) {
             throw new IllegalArgumentException("repoUrl is required");
@@ -225,6 +264,8 @@ public class AnalysisService {
                             focusMethodTracerService.traceMethod(session, sink);
                     case FOCUS ->
                             focusTracerService.traceFocus(session, sink);
+                    case EXCEPTION ->
+                            exceptionTracerService.trace(session, sink);
                     case FULL ->
                             javaParserService.parseProject(session, sink);
                 }
@@ -266,6 +307,42 @@ public class AnalysisService {
                 source,
                 clazz.getFilePath(),
                 clazz.getLineCount());
+    }
+
+    /**
+     * Read any file under the session's project OR mobile root. Used by the
+     * mobile-screen code viewer (RN files aren't parsed ParsedClasses). Path
+     * is validated to live inside an allowed root — no traversal escape.
+     */
+    public com.codemapper.model.dto.ProjectFileResponse getProjectFile(String sessionId, String rawPath)
+            throws IOException {
+        if (rawPath == null || rawPath.isBlank()) {
+            throw new IllegalArgumentException("path is required");
+        }
+        SessionData session = sessionService.getSession(sessionId);
+        Path target = Path.of(rawPath).toAbsolutePath().normalize();
+
+        boolean allowed = false;
+        for (Path root : new Path[]{session.getProjectPath(),
+                session.getMobilePath() == null ? null : Path.of(session.getMobilePath())}) {
+            if (root == null) continue;
+            Path normRoot = root.toAbsolutePath().normalize();
+            if (target.startsWith(normRoot)) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
+            throw new IllegalArgumentException("File is outside the session's allowed roots");
+        }
+        if (!Files.exists(target) || !Files.isRegularFile(target)) {
+            throw new FileNotFoundException("File not found: " + rawPath);
+        }
+        String source = Files.readString(target);
+        int lineCount = (int) source.lines().count();
+        String fileName = target.getFileName() == null ? rawPath : target.getFileName().toString();
+        return new com.codemapper.model.dto.ProjectFileResponse(
+                fileName, target.toString(), source, lineCount);
     }
 
     public boolean deleteSession(String sessionId) {

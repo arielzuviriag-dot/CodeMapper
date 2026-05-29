@@ -1,11 +1,12 @@
 "use client";
 
-import { Crosshair, Folder, Github, Sparkles, Upload } from "lucide-react";
+import { Bug, Crosshair, Folder, Github, Sparkles, Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UploadZone } from "./UploadZone";
 import { GitHubInput } from "./GitHubInput";
 import { LocalPathInput } from "./LocalPathInput";
 import { FocusInput } from "./FocusInput";
+import { ExceptionInput } from "./ExceptionInput";
 
 const TRIGGER_CLASS = [
   "gap-2 rounded-[6px] text-xs uppercase tracking-[0.14em]",
@@ -23,7 +24,7 @@ const TRIGGER_CLASS = [
 export function UploadTabs() {
   return (
     <Tabs defaultValue="upload" className="w-full">
-      <TabsList className="grid w-full grid-cols-5 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
+      <TabsList className="grid w-full grid-cols-6 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
         <TabsTrigger value="upload" className={TRIGGER_CLASS}>
           <Upload className="h-3.5 w-3.5" /> Aplicación
         </TabsTrigger>
@@ -35,6 +36,9 @@ export function UploadTabs() {
         </TabsTrigger>
         <TabsTrigger value="focus" className={`${TRIGGER_CLASS} normal-case`}>
           <Crosshair className="h-3.5 w-3.5" /> Marco Polo
+        </TabsTrigger>
+        <TabsTrigger value="exception" className={`${TRIGGER_CLASS} normal-case`}>
+          <Bug className="h-3.5 w-3.5" /> Bug
         </TabsTrigger>
         {/* TEMPORAL — tab para testear modo PRO sin tocar la URL.
             Borrar este TabsTrigger + el TabsContent="focus-pro" cuando
@@ -55,6 +59,9 @@ export function UploadTabs() {
       </TabsContent>
       <TabsContent value="focus" className="mt-6">
         <FocusInput />
+      </TabsContent>
+      <TabsContent value="exception" className="mt-6">
+        <ExceptionInput />
       </TabsContent>
       <TabsContent value="focus-pro" className="mt-6">
         <FocusInput forcePro />
