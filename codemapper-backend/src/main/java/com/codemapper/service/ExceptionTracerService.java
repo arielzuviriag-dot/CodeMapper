@@ -153,12 +153,16 @@ public class ExceptionTracerService {
 
         if (focusFrame == null) {
             // Trace had no class belonging to this project — can't anchor a map.
-            sink.accept(new ErrorEvent(
-                    "Ninguna clase del stack trace pertenece a este proyecto. "
-                            + "¿Es el proyecto correcto?", null, null));
-            // Still ship the report so the Informe panel can show the chain.
+            // No hard error event (that would close the stream): just ship the
+            // report so the Informe panel still shows the exception type/message
+            // (útil cuando es un error de config/librería, ej. Firebase/Gradle),
+            // y completamos limpio.
             sink.accept(new ExceptionReportEvent(buildReport(causes, null)));
+            long ms = Duration.between(start, Instant.now()).toMillis();
+            sink.accept(new SessionCompleteEvent(0, 0, ms));
             session.setStatus(SessionData.Status.COMPLETED);
+            log.info("Exception trace for session {}: {} causes, sin código del proyecto",
+                    session.getSessionId(), causes.size());
             return;
         }
 

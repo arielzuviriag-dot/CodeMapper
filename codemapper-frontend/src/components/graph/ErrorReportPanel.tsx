@@ -120,6 +120,13 @@ export function ErrorReportPanel() {
           <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--silver-dark)]">
             Recorrido — paso a paso
           </span>
+          {steps.length === 0 && (
+            <p className="rounded-sm border border-[var(--border-silver)] bg-[var(--bg-input)] px-2 py-1.5 text-[10px] leading-snug text-[var(--fg-secondary)]">
+              No se detectó código de tu proyecto en este trace (todo es
+              librería/SDK o runtime). Suele ser un error de configuración —
+              revisá el mensaje de arriba.
+            </p>
+          )}
           <ol className="flex flex-col gap-1">
             {steps.map((step, i) => (
               <StepRow

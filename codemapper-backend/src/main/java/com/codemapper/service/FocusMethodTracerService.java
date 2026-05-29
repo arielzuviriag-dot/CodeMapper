@@ -174,7 +174,8 @@ public class FocusMethodTracerService {
                 methodSource,
                 Math.max(endLine - startLine + 1, 0),
                 startLine,
-                endLine
+                endLine,
+                focusPath.toString()
         ));
 
         // ─── Walk project once: build FQN registry + collect callers ────

@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo } from "react";
-import { AlertOctagon, Smartphone } from "lucide-react";
+import { AlertOctagon, Info, Smartphone } from "lucide-react";
 import { useGraphStore } from "@/store/graphStore";
 import { ErrorReportPanel } from "./ErrorReportPanel";
 import { buildClassChain } from "./exceptionChain";
@@ -215,11 +215,18 @@ function ExceptionFlowInner() {
 
       <div className="relative flex-1">
       {nodes.length === 0 ? (
-        <div className="flex h-full w-full items-center justify-center">
-          <span className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--fg-muted)]">
-            Construyendo el tren de la excepción...
-          </span>
-        </div>
+        report ? (
+          <NoUserCodeCard
+            type={report.topExceptionType}
+            message={report.topExceptionMessage}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--fg-muted)]">
+              Construyendo el tren de la excepción...
+            </span>
+          </div>
+        )
       ) : (
         <ReactFlow
           nodes={nodes}
@@ -258,6 +265,41 @@ function ExceptionFlowInner() {
           />
         </ReactFlow>
       )}
+      </div>
+    </div>
+  );
+}
+
+/** Shown when the trace has no class from the user's project (e.g. a pure
+ *  library/SDK crash like Firebase, or a build/config error). We still surface
+ *  the exception type + message so the dev can act on it. */
+function NoUserCodeCard({ type, message }: { type: string; message: string }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center p-8">
+      <div className="flex max-w-[560px] flex-col gap-3 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)] p-5 shadow-[var(--shadow-md)]">
+        <div className="flex items-center gap-2">
+          <Info className="h-4 w-4 shrink-0 text-[var(--silver)]" />
+          <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--silver)]">
+            Sin código de tu proyecto en el trace
+          </span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="break-words font-mono text-sm font-semibold text-[var(--bordo)]">
+            {type}
+          </span>
+          {message && (
+            <span className="break-words font-mono text-[12px] leading-snug text-[var(--silver)]">
+              {message}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] leading-relaxed text-[var(--fg-secondary)]">
+          Todos los frames son de librerías/SDK o del runtime (no aparece ninguna
+          clase de los proyectos cargados). Suele ser un{" "}
+          <span className="text-[var(--bordo)]">error de configuración/build</span>{" "}
+          (ej. un plugin de Gradle/Firebase faltante) — la solución casi siempre
+          está en el propio mensaje de arriba.
+        </p>
       </div>
     </div>
   );

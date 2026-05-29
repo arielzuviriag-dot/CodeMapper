@@ -43,9 +43,11 @@ public class ExceptionTraceParser {
     private static final Pattern HEADER = Pattern.compile(
             "([\\w.$]*(?:Exception|Error|Throwable)[\\w$]*)(?::\\s?(.*))?$");
 
-    /** {@code SomeFile.java:123} inside the frame's parenthesised location. */
+    /** {@code SomeFile.java:123} inside the frame's parenthesised location.
+     *  Accepts JVM-language source files (Java, Kotlin, Scala, Groovy, Clojure)
+     *  so non-Java traces don't lose their line numbers. */
     private static final Pattern LOCATION = Pattern.compile(
-            "([\\w$]+\\.java)(?::(\\d+))?");
+            "([\\w$]+\\.(?:java|kt|kts|scala|groovy|clj))(?::(\\d+))?");
 
     public List<ExceptionCauseDto> parse(String raw) {
         List<ExceptionCauseDto> causes = new ArrayList<>();

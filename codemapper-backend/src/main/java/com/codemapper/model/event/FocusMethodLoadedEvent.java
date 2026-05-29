@@ -32,6 +32,9 @@ public class FocusMethodLoadedEvent extends BaseEvent {
     private int lineCount;
     private int startLine;
     private int endLine;
+    /** Absolute path of the .java file that contains the focus method — lets
+     *  the UI offer "Foco a la clase" (focus the whole containing class). */
+    private String sourceFile;
 
     @Override
     public String eventName() {

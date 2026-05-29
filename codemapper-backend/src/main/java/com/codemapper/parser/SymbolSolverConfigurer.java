@@ -106,6 +106,12 @@ public class SymbolSolverConfigurer {
             case "15" -> ParserConfiguration.LanguageLevel.JAVA_15;
             case "16" -> ParserConfiguration.LanguageLevel.JAVA_16;
             case "17" -> ParserConfiguration.LanguageLevel.JAVA_17;
+            case "18" -> ParserConfiguration.LanguageLevel.JAVA_18;
+            case "19" -> ParserConfiguration.LanguageLevel.JAVA_19;
+            case "20" -> ParserConfiguration.LanguageLevel.JAVA_20;
+            case "21" -> ParserConfiguration.LanguageLevel.JAVA_21;
+            // 22+ todavía no tiene constante nombrada en JavaParser 3.26.4 →
+            // BLEEDING_EDGE parsea la sintaxis más nueva que la librería conoce.
             default -> ParserConfiguration.LanguageLevel.BLEEDING_EDGE;
         };
     }

@@ -400,4 +400,7 @@ export interface FocusMethodLoadedPayload {
   lineCount: number;
   startLine: number;
   endLine: number;
+  /** Absolute path of the .java file holding the method — enables the
+   *  "Foco a la clase" action from method-focus mode. */
+  sourceFile?: string;
 }

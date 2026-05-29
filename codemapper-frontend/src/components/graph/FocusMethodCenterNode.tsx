@@ -3,18 +3,79 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { Crosshair } from "lucide-react";
+import { Crosshair, FileCode2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { analyzeFocus, resolveDemoMode } from "@/lib/api";
+import { useGraphStore } from "@/store/graphStore";
+import { useBitacoraStore } from "@/store/bitacoraStore";
 import type { FocusMethodLoadedPayload } from "@/lib/types";
 
 interface CenterData extends Record<string, unknown> {
   focus: FocusMethodLoadedPayload;
 }
 
+/** Relative path of `filePath` inside `projectPath`, or null when it's not
+ *  under it. Mirrors ClassDetailSheet.computeRelativeFocusFile. */
+function relFocusFile(projectPath: string, filePath: string): string | null {
+  const norm = (s: string) => s.replace(/\\/g, "/").replace(/\/+$/, "");
+  const np = norm(projectPath);
+  const nf = norm(filePath);
+  if (!nf.startsWith(np)) return null;
+  let rel = nf.slice(np.length);
+  if (rel.startsWith("/")) rel = rel.slice(1);
+  return rel;
+}
+
 function FocusMethodCenterNodeComponent({ data }: NodeProps) {
   const { focus } = data as CenterData;
+  const router = useRouter();
+  const projectPath = useGraphStore((s) => s.projectPath);
+  const setPendingAnalysis = useGraphStore((s) => s.setPendingAnalysis);
+  const setPendingReanalysis = useGraphStore((s) => s.setPendingReanalysis);
+
   const params = focus.parameters
     .map((p) => `${p.type} ${p.name}`)
     .join(", ");
+
+  const canFocusClass = Boolean(
+    projectPath &&
+      focus.sourceFile &&
+      relFocusFile(projectPath, focus.sourceFile) !== null,
+  );
+
+  const onFocusClass = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!projectPath || !focus.sourceFile) {
+      toast.error("No tengo la ruta del proyecto para enfocar la clase");
+      return;
+    }
+    const rel = relFocusFile(projectPath, focus.sourceFile);
+    if (!rel) {
+      toast.error("No se puede deducir el path relativo del archivo");
+      return;
+    }
+    const demoMode = resolveDemoMode();
+    const promise = analyzeFocus({ projectPath, focusFile: rel, demoMode });
+    useGraphStore.getState().setPendingAnalysis({
+      promise,
+      description: `Analizando ${focus.containingClass}...`,
+      mode: "focus",
+      demo: demoMode === "pro" ? "pro" : undefined,
+      projectPath,
+    });
+    // Bitácora — registramos el salto del método a su clase contenedora.
+    useBitacoraStore.getState().addJump({
+      fromClass: focus.containingClass,
+      fromMethod: focus.methodName,
+      toClass: focus.containingClass,
+      toMethod: null,
+    });
+    setPendingReanalysis(true);
+    const qs = new URLSearchParams({ mode: "focus" });
+    if (demoMode === "pro") qs.set("demo", "pro");
+    router.push(`/map/pending?${qs.toString()}`);
+  };
 
   return (
     <motion.div
@@ -60,6 +121,19 @@ function FocusMethodCenterNodeComponent({ data }: NodeProps) {
       <div className="truncate bg-[var(--bg-input)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted)]">
         {focus.containingClassPackage || "(sin paquete)"}
       </div>
+
+      {/* Acción — enfocar la clase entera que contiene este método */}
+      {canFocusClass && (
+        <button
+          type="button"
+          onClick={onFocusClass}
+          className="nodrag flex items-center justify-center gap-1.5 border-t border-[var(--border-silver)] bg-[var(--bg-card)] px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--silver)] transition-colors hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)]"
+          title={`Enfocar la clase ${focus.containingClass} completa`}
+        >
+          <FileCode2 className="h-3.5 w-3.5" />
+          Foco a la clase {focus.containingClass}
+        </button>
+      )}
     </motion.div>
   );
 }
