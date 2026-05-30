@@ -221,6 +221,43 @@ export async function exportFocoMethodPdf(
   return data;
 }
 
+/** One row of the Escuchando PDF detail table — mirrors a ClassNode. */
+export interface TraceExportNode {
+  className: string;
+  fqcn: string | null;
+  http: boolean;
+  hitCount: number;
+  order: number;
+  depth: number;
+  methods: string[];
+  status: string;
+}
+
+export interface TraceExportRequest {
+  view: string;
+  urlFilter: string;
+  rootClassName: string | null;
+  /** PNG data-URL snapshot of the on-screen graph (optional). */
+  imageBase64: string | null;
+  nodes: TraceExportNode[];
+}
+
+/**
+ * Render the live "Escuchando" graph as a PDF. Stateless on the server — sends
+ * the on-screen nodes + a snapshot, so the PDF mirrors the screen. Returns the
+ * raw blob for download.
+ */
+export async function exportTracePdf(
+  request: TraceExportRequest,
+): Promise<Blob> {
+  const { data } = await api.post<Blob>("/api/trace/export/pdf", request, {
+    responseType: "blob",
+    headers: { "Content-Type": "application/json" },
+    timeout: 60_000,
+  });
+  return data;
+}
+
 export async function getClassSource(
   sessionId: string,
   classId: string,

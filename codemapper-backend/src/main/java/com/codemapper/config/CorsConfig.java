@@ -10,8 +10,13 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(@NonNull CorsRegistry registry) {
+        // Dev: the Next.js dev server falls back to 3001/3002/… when 3000 is
+        // taken, so allow any localhost port rather than pinning to 3000.
+        // allowedOriginPatterns (not allowedOrigins) is required to combine a
+        // wildcard with allowCredentials(true). The "Escuchando" SSE stream
+        // (/api/trace/stream) is browser-origin, so it needs this too.
         registry.addMapping("/**")
-                .allowedOrigins("http://localhost:3000")
+                .allowedOriginPatterns("http://localhost:[*]", "http://127.0.0.1:[*]")
                 .allowedMethods("GET", "POST", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true)

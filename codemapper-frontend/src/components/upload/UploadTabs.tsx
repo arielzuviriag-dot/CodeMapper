@@ -1,9 +1,9 @@
 "use client";
 
-import { Bug, Crosshair, Folder, Github, Sparkles, Upload } from "lucide-react";
+import { Bug, Crosshair, Folder, Radio, Sparkles, Upload } from "lucide-react";
+import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UploadZone } from "./UploadZone";
-import { GitHubInput } from "./GitHubInput";
 import { LocalPathInput } from "./LocalPathInput";
 import { FocusInput } from "./FocusInput";
 import { ExceptionInput } from "./ExceptionInput";
@@ -31,14 +31,14 @@ export function UploadTabs() {
         <TabsTrigger value="local" className={TRIGGER_CLASS}>
           <Folder className="h-3.5 w-3.5" /> Proyecto Java
         </TabsTrigger>
-        <TabsTrigger value="github" className={TRIGGER_CLASS}>
-          <Github className="h-3.5 w-3.5" /> GitHub
-        </TabsTrigger>
         <TabsTrigger value="focus" className={`${TRIGGER_CLASS} normal-case`}>
           <Crosshair className="h-3.5 w-3.5" /> Marco Polo
         </TabsTrigger>
         <TabsTrigger value="exception" className={`${TRIGGER_CLASS} normal-case`}>
           <Bug className="h-3.5 w-3.5" /> Bug
+        </TabsTrigger>
+        <TabsTrigger value="listening" className={`${TRIGGER_CLASS} normal-case`}>
+          <Radio className="h-3.5 w-3.5" /> Escuchando
         </TabsTrigger>
         {/* TEMPORAL — tab para testear modo PRO sin tocar la URL.
             Borrar este TabsTrigger + el TabsContent="focus-pro" cuando
@@ -54,9 +54,6 @@ export function UploadTabs() {
       <TabsContent value="local" className="mt-6">
         <LocalPathInput />
       </TabsContent>
-      <TabsContent value="github" className="mt-6">
-        <GitHubInput />
-      </TabsContent>
       <TabsContent value="focus" className="mt-6">
         <FocusInput />
       </TabsContent>
@@ -65,6 +62,28 @@ export function UploadTabs() {
       </TabsContent>
       <TabsContent value="focus-pro" className="mt-6">
         <FocusInput forcePro />
+      </TabsContent>
+      <TabsContent value="listening" className="mt-6">
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-input)] p-8 text-center">
+          <Radio className="h-8 w-8 text-[var(--bordo)]" strokeWidth={1.8} />
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-[var(--fg-primary)]">
+              Escuchá la ejecución en vivo
+            </span>
+            <span className="max-w-md text-xs leading-relaxed text-[var(--fg-secondary)]">
+              Conectá tu app Java instrumentada con el agente OpenTelemetry y mirá
+              cómo se van llamando las clases en tiempo real, con la estética del
+              modo Foco.
+            </span>
+          </div>
+          <Link
+            href="/escuchar"
+            className="flex items-center gap-2 rounded-md bg-[var(--bordo)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-white transition-all hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_18px_rgba(185,28,66,0.45)]"
+          >
+            <Radio className="h-3.5 w-3.5" />
+            Abrir modo Escuchando
+          </Link>
+        </div>
       </TabsContent>
     </Tabs>
   );
