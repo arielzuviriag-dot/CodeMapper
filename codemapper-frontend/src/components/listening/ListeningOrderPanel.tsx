@@ -105,7 +105,7 @@ export function ListeningOrderPanel() {
   const incoming = sel ? edges.filter((e) => e.target === sel.className) : [];
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-[64px] z-20 flex max-h-[calc(100vh-240px)] w-[300px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)]/60 shadow-[var(--shadow-lg)] backdrop-blur-md">
+    <div className="pointer-events-auto absolute left-3 top-[64px] z-20 flex max-h-[calc(100vh-90px)] w-[300px] flex-col overflow-hidden rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)]/60 shadow-[var(--shadow-lg)] backdrop-blur-md">
       <div className="flex items-center justify-between border-b border-[var(--border-silver)] px-3 py-2">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--silver)]">
           Orden de llamadas

@@ -267,7 +267,13 @@ function ListeningGraphInner() {
         size={1}
         color="rgba(192, 192, 200, 0.08)"
       />
-      <Controls showInteractive={false} />
+      {/* Zoom controls top-right, below the Detener button — the left order
+          panel covers the bottom-left, so they'd be hidden there. */}
+      <Controls
+        showInteractive={false}
+        position="top-right"
+        style={{ top: 64, right: 16 }}
+      />
       <MiniMap
         nodeColor={(n) =>
           (n.data as { node?: { status?: string } })?.node?.status === "ERROR"
