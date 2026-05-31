@@ -193,7 +193,11 @@ export function buildTraceGraph(
   // matches all its paths; a path fragment matches just that.
   const norm = (s: string) =>
     s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  const filter = norm(urlFilter);
+  // Safety net: a filesystem path is not a URL — ignore it as a filter so it
+  // can't hide the whole graph (the UI routes it to the front scan instead).
+  const looksLikePath =
+    urlFilter.includes("\\") || /^[a-z]:[\\/]/i.test(urlFilter.trim());
+  const filter = looksLikePath ? "" : norm(urlFilter);
   let spans = allSpans;
   if (filter) {
     const traceUrl = new Map<string, string>();

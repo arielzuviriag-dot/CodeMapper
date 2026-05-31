@@ -84,9 +84,26 @@ export default function EscucharPage() {
   const [frontPath, setFrontPath] = useState("");
   const [armed, setArmed] = useState(false);
 
+  // A filesystem path (has a backslash or a "C:\" / "/Users/" shape) is NOT a
+  // URL — if the user pastes one in the URL filter, it would match no trace and
+  // hide everything. Detect it and treat it as the front path instead.
+  const looksLikePath = (s: string) =>
+    s.includes("\\") || /^[A-Za-z]:[\\/]/.test(s) || /\/(Users|home|mnt|var)\//i.test(s);
+
   const escuchar = () => {
-    setUrlFilter(urlInput.trim());
-    const fp = frontPath.trim();
+    const raw = urlInput.trim();
+    let urlFilterVal = raw;
+    let fp = frontPath.trim();
+    if (raw && looksLikePath(raw) && !fp) {
+      // They pasted a project folder into the URL filter — use it to scan the
+      // front (detect screens), and DON'T filter URLs by it.
+      fp = raw;
+      urlFilterVal = "";
+      toast.message(
+        "Eso parece la ruta del front — la uso para detectar pantallas, no como filtro de URL",
+      );
+    }
+    setUrlFilter(urlFilterVal);
     if (fp) {
       scanFrontendScreens(fp)
         .then((calls) => {
@@ -104,8 +121,8 @@ export default function EscucharPage() {
     }
     setArmed(true);
     toast.success(
-      urlInput.trim()
-        ? `Escuchando llamadas de "${urlInput.trim()}" — navegá esa URL`
+      urlFilterVal
+        ? `Escuchando llamadas de "${urlFilterVal}" — navegá esa URL`
         : "Escuchando todo — navegá tu app",
     );
   };
