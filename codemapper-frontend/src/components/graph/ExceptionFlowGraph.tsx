@@ -17,6 +17,7 @@ import { useEffect, useMemo } from "react";
 import { AlertOctagon, Info, Smartphone } from "lucide-react";
 import { useGraphStore } from "@/store/graphStore";
 import { useGraphInteraction } from "@/hooks/useGraphInteraction";
+import { SpreadControl } from "./SpreadControl";
 import { ErrorReportPanel } from "./ErrorReportPanel";
 import { buildClassChain } from "./exceptionChain";
 
@@ -217,6 +218,7 @@ function ExceptionFlowInner() {
     onNodeDoubleClick,
     onPaneClick,
     shouldAutoFit,
+    spreadNodes,
   } = useGraphInteraction(computedNodes, computedEdges, (node) => {
     const data = node.data as Record<string, unknown>;
     if (data.kind === "class") {
@@ -293,6 +295,7 @@ function ExceptionFlowInner() {
             color="rgba(192, 192, 200, 0.08)"
           />
           <Controls showInteractive={false} />
+          <SpreadControl onSpread={spreadNodes} />
         </ReactFlow>
       )}
       </div>

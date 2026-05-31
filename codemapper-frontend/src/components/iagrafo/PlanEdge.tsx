@@ -43,8 +43,15 @@ function rectEdge(node: InternalNode, toward: { x: number; y: number }) {
   return { x: cx + dx * scale, y: cy + dy * scale };
 }
 
-function PlanEdgeComponent({ source, target, data, markerEnd }: EdgeProps) {
+function PlanEdgeComponent({ source, target, data, markerEnd, style }: EdgeProps) {
   const edgeData = (data ?? {}) as PlanEdgeData;
+  // El resaltado por doble-clic llega vía `style` (stroke/opacity); si no, usamos
+  // el color base.
+  const hl = (style ?? {}) as React.CSSProperties;
+  const stroke = (hl.stroke as string) ?? STROKE;
+  const strokeWidth = hl.strokeWidth != null ? Number(hl.strokeWidth) : 1.75;
+  const opacity = hl.opacity != null ? Number(hl.opacity) : 1;
+  const dimmed = opacity < 1;
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
   if (!sourceNode || !targetNode) return null;
@@ -64,9 +71,10 @@ function PlanEdgeComponent({ source, target, data, markerEnd }: EdgeProps) {
         d={path}
         fill="none"
         markerEnd={markerEnd}
-        style={{ stroke: STROKE, strokeWidth: 1.75 }}
+        style={{ stroke, strokeWidth, opacity }}
         className="react-flow__edge-path"
       />
+      {!dimmed && (
       <EdgeLabelRenderer>
         <div
           style={{
@@ -85,6 +93,7 @@ function PlanEdgeComponent({ source, target, data, markerEnd }: EdgeProps) {
           {edgeData.reason}
         </div>
       </EdgeLabelRenderer>
+      )}
     </>
   );
 }

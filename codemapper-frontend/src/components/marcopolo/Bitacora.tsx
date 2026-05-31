@@ -22,6 +22,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { toPng } from "html-to-image";
 import { useGraphInteraction } from "@/hooks/useGraphInteraction";
+import { SpreadControl } from "@/components/graph/SpreadControl";
 import {
   ArrowLeft,
   Clock,
@@ -347,6 +348,7 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
     onNodeDoubleClick,
     onPaneClick,
     shouldAutoFit,
+    spreadNodes,
   } = useGraphInteraction(computedNodes, computedEdges);
 
   // Frame the tree on first render and whenever the node count changes —
@@ -664,6 +666,7 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
             color="rgba(192, 192, 200, 0.07)"
           />
           <Controls showInteractive={false} />
+          <SpreadControl onSpread={spreadNodes} style={{ bottom: 96, left: 12 }} />
         </ReactFlow>
       </div>
     </div>

@@ -15,10 +15,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PlanNode } from "./PlanNode";
 import { PlanEdge } from "./PlanEdge";
+import { SpreadControl } from "@/components/graph/SpreadControl";
 import { useIaGrafoStore } from "@/store/iaGrafoStore";
 import { fetchSource } from "@/lib/iaGrafo";
 
@@ -51,6 +52,30 @@ function PlanGraphInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView } = useReactFlow();
+
+  // Doble-clic resalta las conexiones del nodo; clic simple (con delay) abre.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Separador de cards (+/−): escala posiciones desde el centro (mismo que el
+  // resto de los grafos).
+  const spreadNodes = useCallback(
+    (factor: number) => {
+      setNodes((curr) => {
+        if (curr.length === 0) return curr;
+        const cx = curr.reduce((s, n) => s + n.position.x, 0) / curr.length;
+        const cy = curr.reduce((s, n) => s + n.position.y, 0) / curr.length;
+        return curr.map((n) => ({
+          ...n,
+          position: {
+            x: cx + (n.position.x - cx) * factor,
+            y: cy + (n.position.y - cy) * factor,
+          },
+        }));
+      });
+    },
+    [setNodes],
+  );
 
   // Reconstruye nodos/edges del plan y los acomoda con dagre.
   const computed = useMemo(() => {
@@ -85,18 +110,46 @@ function PlanGraphInner() {
     return () => clearTimeout(t);
   }, [computed, setNodes, setEdges, fitView]);
 
-  // Resaltado de la card seleccionada sin recalcular layout.
-  const displayNodes = useMemo(
-    () =>
-      nodes.map((n) => ({
+  // Resaltado: doble-clic ilumina las conexiones del nodo (vecinos crecen y
+  // brillan, el resto se atenúa); el clic simple solo selecciona/abre.
+  const displayNodes = useMemo(() => {
+    const connected = new Set<string>();
+    if (highlightId) {
+      connected.add(highlightId);
+      for (const e of edges) {
+        if (e.source === highlightId) connected.add(e.target);
+        if (e.target === highlightId) connected.add(e.source);
+      }
+    }
+    return nodes.map((n) => {
+      const base = {
         ...n,
         data: { ...(n.data as object), selected: n.id === selectedNodeId },
-      })),
-    [nodes, selectedNodeId],
-  );
+      };
+      if (!highlightId) return base;
+      return connected.has(n.id)
+        ? {
+            ...base,
+            zIndex: 10,
+            style: { ...(n.style ?? {}), scale: "1.2", opacity: 1, transition: "scale 0.15s ease-out" },
+          }
+        : { ...base, style: { ...(n.style ?? {}), opacity: 0.25 } };
+    });
+  }, [nodes, edges, selectedNodeId, highlightId]);
 
-  const onNodeClick = useCallback(
-    (_: unknown, node: Node) => {
+  const displayEdges = useMemo(() => {
+    if (!highlightId) return edges;
+    return edges.map((e) => {
+      const lit = e.source === highlightId || e.target === highlightId;
+      const base = (e.style ?? {}) as React.CSSProperties;
+      return lit
+        ? { ...e, zIndex: 1000, style: { ...base, stroke: "#FFD166", strokeWidth: 3, opacity: 1 } }
+        : { ...e, style: { ...base, opacity: 0.12 } };
+    });
+  }, [edges, highlightId]);
+
+  const openNode = useCallback(
+    (node: Node) => {
       selectNode(node.id);
       const pn = plan?.nodes.find((p) => p.id === node.id);
       if (!pn) return;
@@ -120,16 +173,38 @@ function PlanGraphInner() {
     [plan, projectPath, selectNode, openSource],
   );
 
+  // Clic simple con delay → abrir (un doble-clic lo cancela).
+  const onNodeClick = useCallback(
+    (_: unknown, node: Node) => {
+      if (clickTimer.current) clearTimeout(clickTimer.current);
+      const n = node;
+      clickTimer.current = setTimeout(() => openNode(n), 220);
+    },
+    [openNode],
+  );
+
+  const onNodeDoubleClick = useCallback((_: unknown, node: Node) => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    setHighlightId((prev) => (prev === node.id ? null : node.id));
+  }, []);
+
   return (
     <ReactFlow
       nodes={displayNodes}
-      edges={edges}
+      edges={displayEdges}
       nodeTypes={NODE_TYPES}
       edgeTypes={EDGE_TYPES}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
-      onPaneClick={() => selectNode(null)}
+      onNodeDoubleClick={onNodeDoubleClick}
+      onPaneClick={() => {
+        selectNode(null);
+        setHighlightId(null);
+      }}
       proOptions={{ hideAttribution: true }}
       minZoom={0.1}
       maxZoom={2}
@@ -137,6 +212,7 @@ function PlanGraphInner() {
       nodesConnectable={false}
     >
       <Background variant={BackgroundVariant.Dots} gap={28} size={1} color="rgba(192,192,200,0.08)" />
+      <SpreadControl onSpread={spreadNodes} />
       <MiniMap
         nodeColor="#B91C42"
         nodeStrokeColor="rgba(192,192,200,0.5)"

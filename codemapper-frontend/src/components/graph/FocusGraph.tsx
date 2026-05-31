@@ -14,6 +14,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useRef } from "react";
 import { useGraphInteraction } from "@/hooks/useGraphInteraction";
+import { SpreadControl } from "./SpreadControl";
 import { FocusCenterNode } from "./FocusCenterNode";
 import { FocusPeripheralNode } from "./FocusPeripheralNode";
 import { FocusEdge } from "./FocusEdge";
@@ -299,6 +300,7 @@ function FocusGraphInner() {
     onNodeDoubleClick,
     onPaneClick,
     shouldAutoFit,
+    spreadNodes,
   } = useGraphInteraction(computedNodes, computedEdges, (node) =>
     selectNode(node.id),
   );
@@ -381,6 +383,7 @@ function FocusGraphInner() {
           color="rgba(192, 192, 200, 0.08)"
         />
         <Controls showInteractive={false} />
+        <SpreadControl onSpread={spreadNodes} />
         {/* MiniMap — paleta consistente con CodeGraph: bordó para el centro
             y para llamadas, silver para herencia. Para FOCO la coloración
             la determina el connectionType del peripheral, no la annotation. */}
