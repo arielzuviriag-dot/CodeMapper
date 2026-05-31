@@ -73,6 +73,11 @@ public class CrossStackLinker {
     /** A controller endpoint tagged with the node id of its controller class. */
     private record ControllerEndpoint(String verb, String path, String controllerId) {}
 
+    /** A front-end screen that calls an endpoint — used by the live "Escuchar"
+     *  mode to show which screen triggered a request. */
+    public record ScreenCall(String verb, String path, String screenName,
+                             String screenFile, boolean mobile) {}
+
     /** Safety cap so a huge front-end can't flood the graph. */
     private static final int MAX_WEB_NODES = 200;
 
@@ -170,6 +175,37 @@ public class CrossStackLinker {
 
         log.info("Cross-stack link of {}: {} web node(s), {} edge(s)",
                 frontendPath, emittedNodes.size(), emittedEdges.size());
+    }
+
+    /**
+     * Scan a front-end project for screens that call the backend — returns each
+     * (verb, path, screen, mobile?) so the live "Escuchar" mode can match a
+     * runtime request to the screen that triggered it. React/RN today; native
+     * Android/iOS would be future adapters.
+     */
+    public List<ScreenCall> scanScreens(String frontendPath) {
+        List<ScreenCall> out = new ArrayList<>();
+        if (frontendPath == null || frontendPath.isBlank()) return out;
+        Path root = Path.of(frontendPath);
+        if (!Files.isDirectory(root)) {
+            log.warn("Frontend scan: not a directory: {}", frontendPath);
+            return out;
+        }
+        // Broad scan so we catch web pages, RN screens and old HTML alike.
+        MobileEndpointScanner.ScanResult scan = scanner.scan(root, true);
+        Set<String> seen = new HashSet<>();
+        for (MobileEndpointScanner.RnApiCall call : scan.apiCalls()) {
+            List<String> screens = scan.screensByFunction()
+                    .getOrDefault(call.functionName(), List.of());
+            List<String> files = screens.isEmpty() ? List.of(call.file()) : screens;
+            for (String f : files) {
+                String key = call.verb() + "|" + call.path() + "|" + f;
+                if (!seen.add(key)) continue;
+                out.add(new ScreenCall(call.verb(), call.path(), baseName(f), f, isMobileFile(f)));
+            }
+        }
+        log.info("Frontend screen scan of {}: {} screen call(s)", frontendPath, out.size());
+        return out;
     }
 
     private ClassFoundEvent webNode(String id, String screenFile, Path frontendRoot) {

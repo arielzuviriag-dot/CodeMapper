@@ -17,7 +17,7 @@ import {
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { exportTracePdf } from "@/lib/api";
+import { exportTracePdf, scanFrontendScreens } from "@/lib/api";
 import { ConcentricWaves } from "@/components/listening/ConcentricWaves";
 import { ListeningErrorPanel } from "@/components/listening/ListeningErrorPanel";
 import { useListeningStore } from "@/store/listeningStore";
@@ -62,6 +62,7 @@ export default function EscucharPage() {
   const setView = useListeningStore((s) => s.setView);
   const nodes = useListeningStore((s) => s.nodes);
   const rootClassName = useListeningStore((s) => s.rootClassName);
+  const setScreenIndex = useListeningStore((s) => s.setScreenIndex);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const listening = phase === "listening";
@@ -78,10 +79,29 @@ export default function EscucharPage() {
   // different port, which reads as "nothing is arriving". Start wide; the user
   // narrows with the filter box if they need to.
   const [urlInput, setUrlInput] = useState("");
+  // Optional front-end path: when set, scan it so the live graph shows which
+  // screen (web/mobile) triggered each request.
+  const [frontPath, setFrontPath] = useState("");
   const [armed, setArmed] = useState(false);
 
   const escuchar = () => {
     setUrlFilter(urlInput.trim());
+    const fp = frontPath.trim();
+    if (fp) {
+      scanFrontendScreens(fp)
+        .then((calls) => {
+          setScreenIndex(
+            calls.map((c) => ({
+              verb: c.verb,
+              path: c.path,
+              screen: c.screenName,
+              mobile: c.mobile,
+            })),
+          );
+          toast.success(`Front escaneado — ${calls.length} pantalla(s) detectada(s)`);
+        })
+        .catch(() => toast.error("No se pudo escanear el front"));
+    }
     setArmed(true);
     toast.success(
       urlInput.trim()
@@ -268,10 +288,26 @@ export default function EscucharPage() {
                     Escuchar
                   </Button>
                 </div>
+                {/* Optional: front-end path so the graph shows which screen
+                    (web 🌐 / mobile 📱) triggered each request. */}
+                <div className="flex w-[min(520px,86vw)] items-center gap-2 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)]/80 p-1.5">
+                  <input
+                    type="text"
+                    value={frontPath}
+                    onChange={(e) => setFrontPath(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") escuchar();
+                    }}
+                    placeholder="ruta del front (opcional) — ej: C:\Users\ariel\Plixe\plixe-mobile"
+                    className="flex-1 bg-transparent px-2 font-mono text-xs text-[var(--fg-primary)] placeholder:text-[var(--silver-dark)] focus:outline-none"
+                  />
+                </div>
                 <span className="max-w-md text-center font-mono text-[11px] leading-relaxed text-[var(--silver-dark)]">
                   Poné la URL del servicio (o una parte). Después navegá esa app
                   en otra solapa — voy dibujando el recorrido a medida que pasa.
-                  (El servicio tiene que correr con el agente OpenTelemetry.)
+                  (El servicio tiene que correr con el agente OpenTelemetry.) Si
+                  agregás la ruta del front, te muestro qué pantalla disparó cada
+                  llamada.
                 </span>
               </div>
             ) : (

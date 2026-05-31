@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Globe, Radio } from "lucide-react";
+import { AlertTriangle, Globe, Radio, Smartphone } from "lucide-react";
 import type { ClassNode } from "@/lib/trace";
 import { useListeningStore } from "@/store/listeningStore";
 
@@ -21,6 +21,10 @@ function ListeningNodeComponent({ data }: NodeProps) {
   const { node, isCenter } = data as ListeningNodeData;
   const selectError = useListeningStore((s) => s.selectError);
   const isError = node.status === "ERROR";
+  // Injected front-end screen — the screen that triggered the request.
+  const isScreen = !!node.isScreen;
+  const isMobileScreen = node.screenKind === "mobile";
+  const screenColor = isMobileScreen ? "#0F9D58" : "#2F81F7";
 
   // Re-pulse when a repeat call lands on this class (hitCount climbs). CSS
   // animations only run on mount, so we toggle the class off→on around a tick.
@@ -43,12 +47,18 @@ function ListeningNodeComponent({ data }: NodeProps) {
   const width = isCenter ? 320 : 220;
 
   // Border / glow: bordó normally (heavier for the center), red when errored.
-  const borderColor = isError ? "#DC2626" : "var(--bordo)";
+  const borderColor = isError
+    ? "#DC2626"
+    : isScreen
+      ? screenColor
+      : "var(--bordo)";
   const glow = isError
     ? undefined // handled by the breathing .cm-trace-error animation
-    : isCenter
-      ? "0 0 28px rgba(185,28,66,0.55), 0 0 56px rgba(185,28,66,0.22), var(--shadow-md)"
-      : "0 0 16px rgba(185,28,66,0.28), var(--shadow-sm)";
+    : isScreen
+      ? `0 0 18px ${screenColor}55, var(--shadow-sm)`
+      : isCenter
+        ? "0 0 28px rgba(185,28,66,0.55), 0 0 56px rgba(185,28,66,0.22), var(--shadow-md)"
+        : "0 0 16px rgba(185,28,66,0.28), var(--shadow-sm)";
 
   const maxPills = isCenter ? 10 : 6;
   const pills = node.methods.slice(0, maxPills);
@@ -75,7 +85,9 @@ function ListeningNodeComponent({ data }: NodeProps) {
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2 text-white"
-        style={{ background: isError ? "#DC2626" : "var(--bordo)" }}
+        style={{
+          background: isError ? "#DC2626" : isScreen ? screenColor : "var(--bordo)",
+        }}
       >
         {/* Execution-order badge — the call sequence number (1 → 2 → 3 …). */}
         <span
@@ -86,6 +98,12 @@ function ListeningNodeComponent({ data }: NodeProps) {
         </span>
         {isError ? (
           <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.2} />
+        ) : isScreen ? (
+          isMobileScreen ? (
+            <Smartphone className="h-4 w-4 shrink-0" strokeWidth={2.2} />
+          ) : (
+            <Globe className="h-4 w-4 shrink-0" strokeWidth={2.2} />
+          )
         ) : node.isHttp ? (
           <Globe className="h-4 w-4 shrink-0" strokeWidth={2.2} />
         ) : (
@@ -143,6 +161,13 @@ function ListeningNodeComponent({ data }: NodeProps) {
             {node.error?.type ?? "Excepción"} — ver detalle
           </span>
         </button>
+      ) : isScreen ? (
+        <div
+          className="truncate bg-[var(--bg-input)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em]"
+          style={{ color: screenColor }}
+        >
+          pantalla {isMobileScreen ? "mobile 📱" : "web 🌐"} · disparó la llamada
+        </div>
       ) : node.isHttp ? (
         <div className="truncate bg-[var(--bg-input)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--silver-dark)]">
           petición HTTP (entrada)

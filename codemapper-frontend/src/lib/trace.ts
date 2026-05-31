@@ -65,6 +65,21 @@ export interface ClassNode {
   hitCount: number;
   /** Latest exception detail if any span for this class errored. */
   error: TraceError | null;
+  /** Request URL of an HTTP-entry node (used to match it to a front screen). */
+  httpUrl?: string | null;
+  /** True for an injected front-end screen node (not from a Java span). */
+  isScreen?: boolean;
+  /** "web" | "mobile" for a screen node — drives the globe/phone icon. */
+  screenKind?: "web" | "mobile";
+}
+
+/** A front-end screen that calls an endpoint (from the front scan) — used to
+ *  inject "which screen triggered this" into the live listening graph. */
+export interface ScreenLink {
+  verb: string;
+  path: string;
+  screen: string;
+  mobile: boolean;
 }
 
 export interface ClassEdge {
@@ -155,6 +170,7 @@ export function buildTraceGraph(
   now: number,
   urlFilter = "",
   view: TraceView = "all",
+  screenIndex: ScreenLink[] = [],
 ): TraceGraph {
   const classFirstSeen = { ...prevClassFirstSeen };
   const edgeFirstSeen = { ...prevEdgeFirstSeen };
@@ -215,6 +231,7 @@ export function buildTraceGraph(
         firstSeen: classFirstSeen[cn],
         hitCount: 0,
         error: null,
+        httpUrl: span.httpUrl,
       };
       nodes.set(cn, node);
     }
@@ -262,6 +279,66 @@ export function buildTraceGraph(
       if (!childToParent.has(cn)) childToParent.set(cn, parent);
     } else if (!childToParent.has(cn)) {
       rootCandidates.push(cn);
+    }
+  }
+
+  // Inject front-end screen nodes: for each HTTP-entry node, attach the
+  // screen(s) whose call matches its route (from the front scan), so the live
+  // graph shows WHICH SCREEN triggered the request. The screen sits one ring
+  // out from the entry with an arrow screen → entry.
+  if (screenIndex.length > 0) {
+    const cleanPath = (p: string): string => {
+      let s = (p || "").split("?")[0];
+      if (s.startsWith("/api/")) s = s.slice(4);
+      if (s.length > 1 && s.endsWith("/")) s = s.slice(0, -1);
+      return s.replace(/\{[^}]*\}/g, "{}").toLowerCase();
+    };
+    const routeOf = (node: ClassNode): string | null => {
+      const m = node.className.match(/\s(\/\S*)$/); // "GET /api/x" → "/api/x"
+      if (m) return m[1];
+      if (node.httpUrl) {
+        const i = node.httpUrl.indexOf("/");
+        return i >= 0 ? node.httpUrl.slice(i) : null;
+      }
+      return null;
+    };
+    for (const entry of [...nodes.values()]) {
+      if (!entry.isHttp) continue;
+      const route = routeOf(entry);
+      if (!route) continue;
+      const rk = cleanPath(route);
+      for (const sc of screenIndex) {
+        if (cleanPath(sc.path) !== rk) continue;
+        const screenKey = `screen:${sc.screen}`;
+        if (!nodes.has(screenKey)) {
+          if (classFirstSeen[screenKey] === undefined) classFirstSeen[screenKey] = now;
+          nodes.set(screenKey, {
+            className: sc.screen,
+            isHttp: false,
+            isScreen: true,
+            screenKind: sc.mobile ? "mobile" : "web",
+            fqcn: null,
+            methods: [],
+            status: "UNSET",
+            depth: 0,
+            order: 0,
+            startNano: Number.POSITIVE_INFINITY,
+            firstSeen: classFirstSeen[screenKey],
+            hitCount: 1,
+            error: null,
+            httpUrl: null,
+          });
+        }
+        const ekey = `${screenKey}__${entry.className}`;
+        if (!edgeKeys.has(ekey)) {
+          edgeKeys.add(ekey);
+          if (edgeFirstSeen[ekey] === undefined) edgeFirstSeen[ekey] = now;
+        }
+        edgeCount.set(ekey, (edgeCount.get(ekey) ?? 0) + 1);
+        if (!childToParent.has(screenKey)) {
+          childToParent.set(screenKey, entry.className);
+        }
+      }
     }
   }
 

@@ -309,6 +309,34 @@ describe("buildTraceGraph", () => {
     expect(g.nodes.find((n) => n.className === "UserRepository")?.hitCount).toBe(2);
   });
 
+  it("injects the front-end screen that triggered an HTTP entry", () => {
+    // Live trace: POST /api/daily/start hits AdminController; the screen index
+    // (from a front scan) says daily.tsx (mobile) calls /api/daily/start.
+    const g = buildTraceGraph(
+      byId([
+        span({ spanId: "S", traceId: "t", spanName: "POST /api/daily/start", httpUrl: "localhost:5180/api/daily/start" }),
+        span({ spanId: "C", traceId: "t", parentSpanId: "S", className: "DailyController", method: "start" }),
+      ]),
+      {},
+      {},
+      1000,
+      "",
+      "all",
+      [{ verb: "POST", path: "/api/daily/start", screen: "daily.tsx", mobile: true }],
+    );
+
+    const screen = g.nodes.find((n) => n.isScreen);
+    expect(screen).toBeTruthy();
+    expect(screen!.className).toBe("daily.tsx");
+    expect(screen!.screenKind).toBe("mobile");
+    // Arrow goes screen → HTTP entry.
+    expect(
+      g.edges.some(
+        (e) => e.source === "screen:daily.tsx" && e.target === "POST /api/daily/start",
+      ),
+    ).toBe(true);
+  });
+
   it("preserves firstSeen stamps across rebuilds", () => {
     const first = buildTraceGraph(
       byId([span({ spanId: "1", className: "A" })]),

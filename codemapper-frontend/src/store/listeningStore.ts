@@ -5,6 +5,7 @@ import {
   buildTraceGraph,
   type ClassEdge,
   type ClassNode,
+  type ScreenLink,
   type TraceSpan,
   type TraceView,
 } from "@/lib/trace";
@@ -46,11 +47,16 @@ interface ListeningState {
    *  classes ("java"). Persists across start/stop/reset (it's a preference). */
   view: TraceView;
 
+  /** Front-end screens (verb/path/screen/mobile) from a front scan — used to
+   *  inject "which screen triggered this" into the live graph. */
+  screenIndex: ScreenLink[];
+
   start: () => void;
   stop: () => void;
   clearGraph: () => void;
   setUrlFilter: (filter: string) => void;
   setView: (view: TraceView) => void;
+  setScreenIndex: (screens: ScreenLink[]) => void;
   ingest: (spans: TraceSpan[]) => void;
   selectError: (className: string | null) => void;
   reset: () => void;
@@ -73,6 +79,8 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
   // view is intentionally OUTSIDE EMPTY so it survives start/stop/clearGraph —
   // it's a viewing preference, not part of the per-session graph data.
   view: "all" as TraceView,
+  // Also outside EMPTY — the front scan survives reset/clear.
+  screenIndex: [] as ScreenLink[],
   ...EMPTY,
 
   start: () => set({ phase: "listening", ...EMPTY }),
@@ -104,6 +112,7 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
       Date.now(),
       filter,
       state.view,
+      state.screenIndex,
     );
     set({
       urlFilter: filter,
@@ -129,6 +138,7 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
       Date.now(),
       state.urlFilter,
       view,
+      state.screenIndex,
     );
     set({
       view,
@@ -139,6 +149,30 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
       edgeFirstSeen: graph.edgeFirstSeen,
       hasGraph: graph.nodes.length > 0,
       selectedErrorClass: null,
+    });
+  },
+
+  // Set the front-screen index (from a front scan) and re-inject the matching
+  // screen nodes into the current graph.
+  setScreenIndex: (screens) => {
+    const state = get();
+    const graph = buildTraceGraph(
+      state.spansById,
+      state.classFirstSeen,
+      state.edgeFirstSeen,
+      Date.now(),
+      state.urlFilter,
+      state.view,
+      screens,
+    );
+    set({
+      screenIndex: screens,
+      nodes: graph.nodes,
+      edges: graph.edges,
+      rootClassName: graph.rootClassName,
+      classFirstSeen: graph.classFirstSeen,
+      edgeFirstSeen: graph.edgeFirstSeen,
+      hasGraph: graph.nodes.length > 0,
     });
   },
 
@@ -160,6 +194,7 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
       Date.now(),
       state.urlFilter,
       state.view,
+      state.screenIndex,
     );
     set({
       spansById,

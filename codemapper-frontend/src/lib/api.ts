@@ -268,6 +268,27 @@ export async function exportTracePdf(
   return data;
 }
 
+/** A front-end screen that calls the backend — returned by the listening
+ *  front scan so the live graph can show which screen triggered a request. */
+export interface FrontScreenCall {
+  verb: string;
+  path: string;
+  screenName: string;
+  screenFile: string;
+  mobile: boolean;
+}
+
+/** Scan a front-end project (React/RN/HTML) for screens that call the backend.
+ *  Used by "Escuchar" to inject the triggering screen into the live graph. */
+export async function scanFrontendScreens(
+  path: string,
+): Promise<FrontScreenCall[]> {
+  const { data } = await api.post<FrontScreenCall[]>("/api/trace/frontend-scan", {
+    path,
+  });
+  return data;
+}
+
 export async function getClassSource(
   sessionId: string,
   classId: string,

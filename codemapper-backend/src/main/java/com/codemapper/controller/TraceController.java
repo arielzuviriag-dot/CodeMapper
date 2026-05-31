@@ -45,6 +45,7 @@ public class TraceController {
     private final OtlpProtobufParser protobufParser;
     private final TraceBroadcaster broadcaster;
     private final TracePdfService tracePdfService;
+    private final com.codemapper.service.CrossStackLinker crossStackLinker;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -91,6 +92,23 @@ public class TraceController {
     @GetMapping(value = "/api/trace/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
         return broadcaster.register();
+    }
+
+    /**
+     * "Escuchar" mode — scan a front-end project for screens that call the
+     * backend, so the live graph can show which screen triggered each request.
+     * Body: {@code {"path": "C:/.../front"}}. Returns the screen calls.
+     */
+    @PostMapping(value = "/api/trace/frontend-scan",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<com.codemapper.service.CrossStackLinker.ScreenCall>> frontendScan(
+            @RequestBody Map<String, String> body) {
+        String path = body == null ? null : body.get("path");
+        if (path == null || path.isBlank()) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(crossStackLinker.scanScreens(path));
     }
 
     /**
