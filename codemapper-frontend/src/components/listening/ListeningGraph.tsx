@@ -13,8 +13,10 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 import { useListeningStore } from "@/store/listeningStore";
 import { useGraphInteraction } from "@/hooks/useGraphInteraction";
+import { resolveJavaSource } from "@/lib/api";
 import { ListeningNode, type ListeningNodeData } from "./ListeningNode";
 import { ListeningEdge } from "./ListeningEdge";
 
@@ -49,7 +51,34 @@ function ListeningGraphInner() {
   const selectError = useListeningStore((s) => s.selectError);
   const highlight = useListeningStore((s) => s.highlight);
   const setHighlight = useListeningStore((s) => s.setHighlight);
+  const backendPath = useListeningStore((s) => s.backendPath);
+  const openSource = useListeningStore((s) => s.openSource);
   const { fitView } = useReactFlow();
+
+  // Double click → show the object's source code (Java classes, via the
+  // backend path). Single click stays as highlight + panel select.
+  const showSource = (node: Node) => {
+    const cn = (node.data as ListeningNodeData).node;
+    setHighlight(node.id);
+    if (!cn?.fqcn) return;
+    if (!backendPath) {
+      toast.message("Agregá la ruta del backend al Iniciar para ver el código");
+      return;
+    }
+    resolveJavaSource(backendPath, cn.fqcn)
+      .then((res) => {
+        if (res.found && res.source != null) {
+          openSource({
+            title: cn.className,
+            source: res.source,
+            path: res.filePath ?? "",
+          });
+        } else {
+          toast.error(`No encontré el archivo de ${cn.className} en el backend`);
+        }
+      })
+      .catch(() => toast.error("No se pudo leer el código"));
+  };
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Target layout computed from the store (radial rings by call depth).
@@ -229,7 +258,7 @@ function ListeningGraphInner() {
       onNodeDragStart={onNodeDragStart}
       onNodeDragStop={onNodeDragStop}
       onNodeClick={onNodeClick}
-      onNodeDoubleClick={(_, node) => setHighlight(node.id)}
+      onNodeDoubleClick={(_, node) => showSource(node)}
       onPaneClick={() => setHighlight(null)}
     >
       <Background
