@@ -39,6 +39,10 @@ interface ListeningState {
   /** className whose error panel is open, or null. */
   selectedErrorClass: string | null;
 
+  /** className selected from the order panel / a node click — highlights it in
+   *  the graph and drives the detail shown in the panel. */
+  highlight: string | null;
+
   /** Substring filter on the request URL — only traces of a matching URL are
    *  drawn. Empty = draw everything. Set by the user before they navigate. */
   urlFilter: string;
@@ -57,6 +61,7 @@ interface ListeningState {
   setUrlFilter: (filter: string) => void;
   setView: (view: TraceView) => void;
   setScreenIndex: (screens: ScreenLink[]) => void;
+  setHighlight: (className: string | null) => void;
   ingest: (spans: TraceSpan[]) => void;
   selectError: (className: string | null) => void;
   reset: () => void;
@@ -71,6 +76,7 @@ const EMPTY = {
   edgeFirstSeen: {} as Record<string, number>,
   hasGraph: false,
   selectedErrorClass: null as string | null,
+  highlight: null as string | null,
   urlFilter: "",
 };
 
@@ -177,6 +183,8 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
   },
 
   selectError: (className) => set({ selectedErrorClass: className }),
+
+  setHighlight: (className) => set({ highlight: className }),
 
   ingest: (spans) => {
     if (spans.length === 0) return;

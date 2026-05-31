@@ -47,6 +47,8 @@ function ListeningGraphInner() {
   const edgesData = useListeningStore((s) => s.edges);
   const rootClassName = useListeningStore((s) => s.rootClassName);
   const selectError = useListeningStore((s) => s.selectError);
+  const highlight = useListeningStore((s) => s.highlight);
+  const setHighlight = useListeningStore((s) => s.setHighlight);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,13 +146,59 @@ function ListeningGraphInner() {
     onNodeDragStart,
     onNodeDragStop,
     onNodeClick,
-    onNodeDoubleClick,
-    onPaneClick,
     shouldAutoFit,
   } = useGraphInteraction(computedNodes, computedEdges, (node) => {
+    // Single click → select it (highlights here + drives the order panel).
+    setHighlight(node.id);
     const d = node.data as ListeningNodeData;
     if (d?.node?.status === "ERROR") selectError(d.node.className);
   });
+
+  // Apply the store-driven highlight (order panel or a node click): the chosen
+  // node + its neighbours grow and glow gold; everything else dims.
+  const finalNodes = useMemo<Node[]>(() => {
+    if (!highlight) return rfNodes;
+    const connected = new Set<string>([highlight]);
+    for (const e of rfEdges) {
+      if (e.source === highlight) connected.add(e.target);
+      if (e.target === highlight) connected.add(e.source);
+    }
+    return rfNodes.map((n) =>
+      connected.has(n.id)
+        ? {
+            ...n,
+            zIndex: 10,
+            style: {
+              ...(n.style ?? {}),
+              scale: "1.2",
+              opacity: 1,
+              transition: "scale 0.15s ease-out",
+            },
+          }
+        : { ...n, style: { ...(n.style ?? {}), opacity: 0.25 } },
+    );
+  }, [rfNodes, rfEdges, highlight]);
+
+  const finalEdges = useMemo<Edge[]>(() => {
+    if (!highlight) return rfEdges;
+    return rfEdges.map((e) => {
+      const lit = e.source === highlight || e.target === highlight;
+      const base = (e.style ?? {}) as React.CSSProperties;
+      return lit
+        ? {
+            ...e,
+            zIndex: 1000,
+            style: {
+              ...base,
+              stroke: "#FFD166",
+              strokeWidth: Math.max(Number(base.strokeWidth ?? 2) * 2.5, 4),
+              opacity: 1,
+              filter: "drop-shadow(0 0 6px rgba(255,209,102,0.85))",
+            },
+          }
+        : { ...e, style: { ...base, opacity: 0.08 } };
+    });
+  }, [rfEdges, highlight]);
 
   // Re-fit as the graph grows so new outer rings stay in view — unless the user
   // has taken manual control of the view.
@@ -164,8 +212,8 @@ function ListeningGraphInner() {
 
   return (
     <ReactFlow
-      nodes={rfNodes}
-      edges={rfEdges}
+      nodes={finalNodes}
+      edges={finalEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       nodeTypes={NODE_TYPES}
@@ -181,8 +229,8 @@ function ListeningGraphInner() {
       onNodeDragStart={onNodeDragStart}
       onNodeDragStop={onNodeDragStop}
       onNodeClick={onNodeClick}
-      onNodeDoubleClick={onNodeDoubleClick}
-      onPaneClick={onPaneClick}
+      onNodeDoubleClick={(_, node) => setHighlight(node.id)}
+      onPaneClick={() => setHighlight(null)}
     >
       <Background
         variant={BackgroundVariant.Dots}

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { exportTracePdf, scanFrontendScreens } from "@/lib/api";
 import { ConcentricWaves } from "@/components/listening/ConcentricWaves";
 import { ListeningErrorPanel } from "@/components/listening/ListeningErrorPanel";
+import { ListeningOrderPanel } from "@/components/listening/ListeningOrderPanel";
 import { useListeningStore } from "@/store/listeningStore";
 import { useTraceStream } from "@/hooks/useTraceStream";
 import type { TraceView } from "@/lib/trace";
@@ -262,6 +263,9 @@ export default function EscucharPage() {
           <ListeningGraph />
         </div>
       )}
+
+      {/* Left order panel — call sequence + per-object detail (see-through). */}
+      {listening && hasGraph && <ListeningOrderPanel />}
 
       {/* INICIAL / ESCUCHANDO — waves + (resting) the Iniciar button. Hidden
           once the graph takes over. */}
