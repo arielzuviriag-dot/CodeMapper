@@ -55,6 +55,13 @@ interface ListeningState {
    *  inject "which screen triggered this" into the live graph. */
   screenIndex: ScreenLink[];
 
+  /** Optional backend project root — lets the panel resolve a class's source
+   *  by fqcn so clicking shows its code. Persists across reset. */
+  backendPath: string;
+
+  /** Source-code viewer payload (or null = closed). */
+  sourceView: { title: string; source: string; path: string } | null;
+
   start: () => void;
   stop: () => void;
   clearGraph: () => void;
@@ -62,6 +69,9 @@ interface ListeningState {
   setView: (view: TraceView) => void;
   setScreenIndex: (screens: ScreenLink[]) => void;
   setHighlight: (className: string | null) => void;
+  setBackendPath: (path: string) => void;
+  openSource: (v: { title: string; source: string; path: string }) => void;
+  closeSource: () => void;
   ingest: (spans: TraceSpan[]) => void;
   selectError: (className: string | null) => void;
   reset: () => void;
@@ -77,6 +87,7 @@ const EMPTY = {
   hasGraph: false,
   selectedErrorClass: null as string | null,
   highlight: null as string | null,
+  sourceView: null as { title: string; source: string; path: string } | null,
   urlFilter: "",
 };
 
@@ -85,8 +96,9 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
   // view is intentionally OUTSIDE EMPTY so it survives start/stop/clearGraph —
   // it's a viewing preference, not part of the per-session graph data.
   view: "all" as TraceView,
-  // Also outside EMPTY — the front scan survives reset/clear.
+  // Also outside EMPTY — the front scan + backend path survive reset/clear.
   screenIndex: [] as ScreenLink[],
+  backendPath: "",
   ...EMPTY,
 
   start: () => set({ phase: "listening", ...EMPTY }),
@@ -185,6 +197,10 @@ export const useListeningStore = create<ListeningState>((set, get) => ({
   selectError: (className) => set({ selectedErrorClass: className }),
 
   setHighlight: (className) => set({ highlight: className }),
+
+  setBackendPath: (path) => set({ backendPath: path }),
+  openSource: (v) => set({ sourceView: v }),
+  closeSource: () => set({ sourceView: null }),
 
   ingest: (spans) => {
     if (spans.length === 0) return;

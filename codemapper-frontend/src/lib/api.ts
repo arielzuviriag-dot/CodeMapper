@@ -289,6 +289,26 @@ export async function scanFrontendScreens(
   return data;
 }
 
+export interface ResolvedSource {
+  found: boolean;
+  fqcn?: string;
+  filePath?: string;
+  source?: string;
+}
+
+/** Resolve a class's .java source by fqcn under a backend path — used by the
+ *  live "Escuchar" source viewer (no analysis session). */
+export async function resolveJavaSource(
+  backendPath: string,
+  fqcn: string,
+): Promise<ResolvedSource> {
+  const { data } = await api.post<ResolvedSource>("/api/trace/source", {
+    backendPath,
+    fqcn,
+  });
+  return data;
+}
+
 export async function getClassSource(
   sessionId: string,
   classId: string,

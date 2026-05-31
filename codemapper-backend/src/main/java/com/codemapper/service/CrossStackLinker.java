@@ -78,6 +78,9 @@ public class CrossStackLinker {
     public record ScreenCall(String verb, String path, String screenName,
                              String screenFile, boolean mobile) {}
 
+    /** Resolved Java source for a fqcn (live "Escuchar" source viewer). */
+    public record JavaSource(String fqcn, String filePath, String source) {}
+
     /** Safety cap so a huge front-end can't flood the graph. */
     private static final int MAX_WEB_NODES = 200;
 
@@ -206,6 +209,67 @@ public class CrossStackLinker {
         }
         log.info("Frontend screen scan of {}: {} screen call(s)", frontendPath, out.size());
         return out;
+    }
+
+    /**
+     * Resolve a fully-qualified class name to its .java source under the given
+     * backend project root. Prefers the conventional path
+     * ({@code .../com/x/Foo.java}); falls back to a file whose name matches the
+     * simple class name. Used by the live "Escuchar" source viewer (no session).
+     */
+    public JavaSource resolveJavaSource(String backendPath, String fqcn) {
+        if (backendPath == null || backendPath.isBlank()
+                || fqcn == null || fqcn.isBlank()) {
+            return null;
+        }
+        Path root = Path.of(backendPath);
+        if (!Files.isDirectory(root)) return null;
+
+        String relTail = "/" + fqcn.replace('.', '/') + ".java";
+        String simpleName = fqcn.substring(fqcn.lastIndexOf('.') + 1) + ".java";
+        Path[] exact = new Path[1];
+        Path[] byName = new Path[1];
+        try {
+            Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes a) {
+                    Path name = dir.getFileName();
+                    if (!dir.equals(root) && name != null
+                            && XML_EXCLUDED.contains(name.toString())) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes a) {
+                    String f = file.toString().replace('\\', '/');
+                    if (f.endsWith(relTail)) {
+                        exact[0] = file;
+                        return FileVisitResult.TERMINATE;
+                    }
+                    if (byName[0] == null
+                            && file.getFileName().toString().equals(simpleName)) {
+                        byName[0] = file;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            log.warn("Source resolve walk failed under {}: {}", backendPath, e.getMessage());
+        }
+        Path hit = exact[0] != null ? exact[0] : byName[0];
+        if (hit == null) return null;
+        try {
+            return new JavaSource(fqcn, hit.toString(), Files.readString(hit));
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private ClassFoundEvent webNode(String id, String screenFile, Path frontendRoot) {

@@ -21,6 +21,7 @@ import { exportTracePdf, scanFrontendScreens } from "@/lib/api";
 import { ConcentricWaves } from "@/components/listening/ConcentricWaves";
 import { ListeningErrorPanel } from "@/components/listening/ListeningErrorPanel";
 import { ListeningOrderPanel } from "@/components/listening/ListeningOrderPanel";
+import { ListeningSourceSheet } from "@/components/listening/ListeningSourceSheet";
 import { useListeningStore } from "@/store/listeningStore";
 import { useTraceStream } from "@/hooks/useTraceStream";
 import type { TraceView } from "@/lib/trace";
@@ -64,6 +65,7 @@ export default function EscucharPage() {
   const nodes = useListeningStore((s) => s.nodes);
   const rootClassName = useListeningStore((s) => s.rootClassName);
   const setScreenIndex = useListeningStore((s) => s.setScreenIndex);
+  const setBackendPath = useListeningStore((s) => s.setBackendPath);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const listening = phase === "listening";
@@ -83,6 +85,8 @@ export default function EscucharPage() {
   // Optional front-end path: when set, scan it so the live graph shows which
   // screen (web/mobile) triggered each request.
   const [frontPath, setFrontPath] = useState("");
+  // Optional backend path: lets the panel resolve a class's source by fqcn.
+  const [backendPathInput, setBackendPathInput] = useState("");
   const [armed, setArmed] = useState(false);
 
   // A filesystem path (has a backslash or a "C:\" / "/Users/" shape) is NOT a
@@ -105,6 +109,7 @@ export default function EscucharPage() {
       );
     }
     setUrlFilter(urlFilterVal);
+    setBackendPath(backendPathInput.trim());
     if (fp) {
       scanFrontendScreens(fp)
         .then((calls) => {
@@ -323,6 +328,19 @@ export default function EscucharPage() {
                     className="flex-1 bg-transparent px-2 font-mono text-xs text-[var(--fg-primary)] placeholder:text-[var(--silver-dark)] focus:outline-none"
                   />
                 </div>
+                {/* Optional: backend project path → click a class to see its code. */}
+                <div className="flex w-[min(520px,86vw)] items-center gap-2 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-card)]/80 p-1.5">
+                  <input
+                    type="text"
+                    value={backendPathInput}
+                    onChange={(e) => setBackendPathInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") escuchar();
+                    }}
+                    placeholder="ruta del backend (opcional) — ver código al clickear, ej: C:\Users\ariel\Plixe\plixe-backend"
+                    className="flex-1 bg-transparent px-2 font-mono text-xs text-[var(--fg-primary)] placeholder:text-[var(--silver-dark)] focus:outline-none"
+                  />
+                </div>
                 <span className="max-w-md text-center font-mono text-[11px] leading-relaxed text-[var(--silver-dark)]">
                   Poné la URL del servicio (o una parte). Después navegá esa app
                   en otra solapa — voy dibujando el recorrido a medida que pasa.
@@ -410,6 +428,9 @@ export default function EscucharPage() {
 
       {/* ERROR — stacktrace panel (opens on red-node click). */}
       <ListeningErrorPanel />
+
+      {/* Source code viewer — opens from the order panel "Ver código". */}
+      <ListeningSourceSheet />
     </main>
   );
 }

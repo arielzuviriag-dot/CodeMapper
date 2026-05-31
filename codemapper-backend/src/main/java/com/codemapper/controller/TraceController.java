@@ -112,6 +112,28 @@ public class TraceController {
     }
 
     /**
+     * "Escuchar" mode — resolve a class's source by fqcn under a backend project
+     * path, so clicking a node in the live graph can show its code (no session).
+     * Body: {@code {"backendPath": "...", "fqcn": "com.x.Foo"}}.
+     */
+    @PostMapping(value = "/api/trace/source",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> source(@RequestBody Map<String, String> body) {
+        String backendPath = body == null ? null : body.get("backendPath");
+        String fqcn = body == null ? null : body.get("fqcn");
+        var src = crossStackLinker.resolveJavaSource(backendPath, fqcn);
+        if (src == null) {
+            return ResponseEntity.ok(Map.of("found", false));
+        }
+        return ResponseEntity.ok(Map.of(
+                "found", true,
+                "fqcn", src.fqcn(),
+                "filePath", src.filePath(),
+                "source", src.source()));
+    }
+
+    /**
      * Renders the live "Escuchando" graph as a PDF. Stateless, like the FOCO
      * export: the browser posts the on-screen nodes (order, Web/Java, hit count)
      * plus a PNG snapshot, and we format it. No re-analysis — the PDF mirrors

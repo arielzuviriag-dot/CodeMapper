@@ -1,6 +1,15 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, Coffee, Globe, Smartphone } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Coffee,
+  FileCode,
+  Globe,
+  Smartphone,
+} from "lucide-react";
+import { toast } from "sonner";
+import { resolveJavaSource } from "@/lib/api";
 import { useListeningStore } from "@/store/listeningStore";
 import type { ClassNode } from "@/lib/trace";
 
@@ -31,6 +40,26 @@ export function ListeningOrderPanel() {
   const highlight = useListeningStore((s) => s.highlight);
   const setHighlight = useListeningStore((s) => s.setHighlight);
   const selectError = useListeningStore((s) => s.selectError);
+  const backendPath = useListeningStore((s) => s.backendPath);
+  const openSource = useListeningStore((s) => s.openSource);
+
+  const viewSource = async (n: ClassNode) => {
+    if (!n.fqcn) return;
+    if (!backendPath) {
+      toast.message("Agregá la ruta del backend al Iniciar para ver el código");
+      return;
+    }
+    try {
+      const res = await resolveJavaSource(backendPath, n.fqcn);
+      if (res.found && res.source != null) {
+        openSource({ title: n.className, source: res.source, path: res.filePath ?? "" });
+      } else {
+        toast.error(`No encontré el archivo de ${n.className} en el backend`);
+      }
+    } catch {
+      toast.error("No se pudo leer el código");
+    }
+  };
 
   if (nodes.length === 0) return null;
 
@@ -94,6 +123,16 @@ export function ListeningOrderPanel() {
               #{sel.order}
             </span>
           </div>
+
+          {sel.fqcn && (
+            <button
+              type="button"
+              onClick={() => viewSource(sel)}
+              className="flex items-center gap-1.5 self-start rounded-sm border border-[var(--border-silver)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--silver)] transition-colors hover:border-[var(--bordo)] hover:bg-[var(--bordo)]/10 hover:text-[var(--bordo)]"
+            >
+              <FileCode className="h-3 w-3" /> Ver código
+            </button>
+          )}
 
           {sel.status === "ERROR" && (
             <button
