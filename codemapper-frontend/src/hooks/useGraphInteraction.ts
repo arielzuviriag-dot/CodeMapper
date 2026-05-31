@@ -132,7 +132,19 @@ export function useGraphInteraction(
     }
     return nodes.map((n) =>
       connected.has(n.id)
-        ? n
+        ? {
+            ...n,
+            // CSS `scale` (not transform) so it composes with React Flow's
+            // translate — the connected cards grow without breaking position,
+            // and stay relatively bigger as you zoom in.
+            zIndex: 10,
+            style: {
+              ...(n.style ?? {}),
+              scale: "1.35",
+              opacity: 1,
+              transition: "scale 0.15s ease-out",
+            },
+          }
         : { ...n, style: { ...(n.style ?? {}), opacity: 0.25 } },
     );
   }, [nodes, edges, highlightId]);
