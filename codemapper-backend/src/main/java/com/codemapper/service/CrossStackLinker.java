@@ -94,16 +94,11 @@ public class CrossStackLinker {
      *  {@code targetClass.method()}. */
     public record CallSite(int line, String targetClass, String method) {}
 
-    /** JDK / framework types we don't treat as "project classes" worth listing. */
-    private static final Set<String> COMMON_TYPES = Set.of(
-            "String", "Integer", "Long", "Double", "Float", "Boolean", "Byte",
-            "Character", "Short", "Object", "List", "Map", "Set", "Collection",
-            "Optional", "Collectors", "Objects", "Math", "Arrays", "Collections",
-            "Stream", "ArrayList", "HashMap", "HashSet", "LinkedList", "LinkedHashMap",
-            "StringBuilder", "Exception", "RuntimeException", "Instant", "LocalDate",
-            "LocalDateTime", "LocalTime", "Duration", "UUID", "BigDecimal", "BigInteger",
-            "ResponseEntity", "PageRequest", "Sort", "Pageable", "Page", "System",
-            "Files", "Path", "Paths");
+    /** backendPath → set of project class simple names (one per .java file).
+     *  A method-call target counts as a "project class" only if it's in here,
+     *  which excludes JDK/framework types AND nested-only DTOs. Cached. */
+    private final Map<String, Set<String>> projectClassCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Safety cap so a huge front-end can't flood the graph. */
     private static final int MAX_WEB_NODES = 200;
@@ -308,6 +303,7 @@ public class CrossStackLinker {
         JavaSource js = resolveJavaSource(backendPath, fqcn);
         if (js == null || methodName == null || methodName.isBlank()) return out;
         String simpleSelf = fqcn.substring(fqcn.lastIndexOf('.') + 1);
+        Set<String> project = projectClassNames(Path.of(backendPath));
         try {
             CompilationUnit cu = parseJava(Path.of(js.filePath()));
             for (TypeDeclaration<?> type : cu.getTypes()) {
@@ -331,14 +327,14 @@ public class CrossStackLinker {
 
                     for (MethodCallExpr call : md.findAll(MethodCallExpr.class)) {
                         String target = resolveScope(call, scopeTypes);
-                        if (target == null || COMMON_TYPES.contains(target)
-                                || target.equals(simpleSelf)) continue;
+                        if (target == null || target.equals(simpleSelf)
+                                || !project.contains(target)) continue;
                         int line = call.getBegin().map(p -> p.line).orElse(0);
                         out.add(new CallSite(line, target, call.getNameAsString()));
                     }
                     for (ObjectCreationExpr oc : md.findAll(ObjectCreationExpr.class)) {
                         String target = oc.getType().getNameAsString();
-                        if (COMMON_TYPES.contains(target) || target.equals(simpleSelf)) continue;
+                        if (target.equals(simpleSelf) || !project.contains(target)) continue;
                         int line = oc.getBegin().map(p -> p.line).orElse(0);
                         out.add(new CallSite(line, target, "new"));
                     }
@@ -381,6 +377,45 @@ public class CrossStackLinker {
         int dot = s.lastIndexOf('.');
         if (dot >= 0) s = s.substring(dot + 1); // strip package
         return s;
+    }
+
+    /** Simple names of every project class (one per .java file under the root).
+     *  Lets us keep only calls to the user's own classes. Cached per root. */
+    private Set<String> projectClassNames(Path root) {
+        if (!Files.isDirectory(root)) return Set.of();
+        return projectClassCache.computeIfAbsent(root.toString(), k -> {
+            Set<String> names = new HashSet<>();
+            try {
+                Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes a) {
+                        Path name = dir.getFileName();
+                        if (!dir.equals(root) && name != null
+                                && XML_EXCLUDED.contains(name.toString())) {
+                            return FileVisitResult.SKIP_SUBTREE;
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes a) {
+                        String fn = file.getFileName().toString();
+                        if (fn.endsWith(".java")) {
+                            names.add(fn.substring(0, fn.length() - 5));
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+            } catch (IOException e) {
+                log.warn("Project class scan failed under {}: {}", root, e.getMessage());
+            }
+            return names;
+        });
     }
 
     private ClassFoundEvent webNode(String id, String screenFile, Path frontendRoot) {
