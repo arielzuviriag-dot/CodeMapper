@@ -1,0 +1,6 @@
+F0 Fundacional: cómo levantar backend + analizar backend-reserva + buscar log de versión + verificar store con useGraphStore.getState() en devtools.
+F1 Contrato: probar con AuthService.java (que tiene 3 excepciones + 7 métodos públicos), inspeccionar SSE, validar cap FREE.
+F1.5 Badge: hacer click en ?, validar popover educativo, simular versión Java 8 hardcodeando en devtools.
+F2 Configuración: validar chips de @Transactional en AuthService, click chip → abre ClassDetailSheet.
+F3 Tests + cobertura: comando exacto para generar Jacoco XML en backend-reserva, validar mocks (AuthControllerTest) vs uso real (AuthServiceTest).
+F4 Radio de impacto: curl de ejemplo al endpoint, JSON esperado, modo simular visual + validar cap FREE.

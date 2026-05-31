@@ -1,0 +1,88 @@
+Dale. Vamos en orden. Empezamos por F0. Cuando termines cada prueba, decime "OK F0" (o lo que falló) y te paso F1.
+
+✅ Cómo probar F0 — Fundacional (detección de versión Java + isPro en store)
+Qué es F0: invisible para el usuario final. Solo afecta (a) qué log emite el backend al detectar la versión Java del proyecto que analizás, y (b) que isPro y detectedJavaVersion estén accesibles desde el store del frontend (cualquier componente puede leerlos). Es la base sobre la que se monta F1.5 (badge visible) y todo el resto.
+
+Paso 0 — Setup
+Abrí dos terminales.
+Terminal 1 (backend):
+
+cd C:\Users\ariel\CodeMapper\codemapper-backend
+.\mvnw.cmd spring-boot:run
+Esperá hasta ver Started CodemapperBackendApplication in X seconds.
+Terminal 2 (frontend):
+
+cd C:\Users\ariel\CodeMapper\codemapper-frontend
+pnpm dev
+Esperá hasta ver Ready in X ms.
+Abrí Chrome en http://localhost:3000.
+Prueba F0.A — Detección de versión Java (Java 17, FREE)
+En la home, andá al tab FOCO (o donde se ingresa el path del proyecto + archivo focus).
+
+Project path: C:\Users\ariel\Reserva\backend-reserva
+
+Focus file: C:\Users\ariel\Reserva\backend-reserva\src\main\java\com\reserva\reservabackend\service\AuthService.java
+
+Click "Analizar" (o el botón equivalente).
+
+Mirá la Terminal 1 (backend). Tenés que ver dos líneas en el log, cerca en el tiempo:
+
+Java version detected from pom.xml: 17 (raw: 17)
+Symbol solver configured with N source root(s), language level JAVA_17
+✅ Si ves esas dos líneas, el detector backend funciona.
+
+En el browser, una vez que cargue el grafo de FOCO (vas a ver AuthService al centro y los peripherals alrededor), abrí DevTools (F12) → tab Console.
+
+Tipeá:
+
+
+useGraphStore.getState()
+y enter.
+
+En el objeto que devuelve, buscá:
+
+isPro: false
+detectedJavaVersion: "17"
+showTests: false (sumado en F3, ya está en el store por estar todo cerrado)
+impactReport: null (sumado en F4)
+✅ Si los 4 valores están así, el plumbing del store funciona.
+
+Prueba F0.B — Modo PRO (mismo flujo + query param)
+En la URL del browser, modificá la URL del map agregándole ?demo=pro al final. Ejemplo:
+
+
+http://localhost:3000/map/<sessionId>?mode=focus&demo=pro
+(Si la URL ya tiene ?mode=focus, agregás &demo=pro. Si no tiene query string, agregás ?demo=pro.)
+
+Hacé Enter para recargar.
+
+En DevTools Console: useGraphStore.getState() otra vez.
+
+Esta vez isPro debería ser true.
+
+✅ Si isPro: true después de ?demo=pro, la integración con resolveDemoMode está bien.
+
+Tip: el modo PRO queda persistido en sessionStorage con key cm-demo-mode. Para volver a FREE, abrí DevTools → Application → Session Storage → borrá la key, o simplemente cerrá la pestaña.
+
+Prueba F0.C — Fallback sin manifest (opcional)
+Si tenés algún proyecto Java a mano que NO tenga pom.xml ni build.gradle, podés probar:
+
+FOCO sobre cualquier .java de ese proyecto.
+
+Log del backend tiene que decir:
+
+
+Java version: null (no pom.xml/build.gradle parseable, falling back to BLEEDING_EDGE)
+Symbol solver configured with N source root(s), language level BLEEDING_EDGE
+En el store: detectedJavaVersion: null.
+
+✅ El fallback funciona — el parser usa BLEEDING_EDGE en vez de fallar.
+
+Si no tenés un proyecto así a mano, saltala — F0.A + F0.B alcanzan.
+
+❌ Qué hacer si algo falla
+No aparece el log de "Java version detected": chequear que el backend efectivamente arrancó. ¿Hay algún error de compile? Si lo recompilaste con cambios, asegurate que el restart se hizo después del último build.
+El store no tiene isPro ni detectedJavaVersion: hot-reload del frontend. Si persiste, abrir DevTools → Network → filtrar por SSE → ver el evento session_start y confirmar que el payload tiene detectedJavaVersion.
+?demo=pro no activa PRO: probá en una pestaña incógnita por las dudas que tengas sessionStorage sucio.
+Tu acción: ejecutá F0.A (obligatorio) + F0.B (obligatorio) + F0.C (opcional). Decime "OK F0" si todo pasa, o pegame qué falló.
+Reiniciar: ya levantaste backend + frontend, así quedan para todas las fases.

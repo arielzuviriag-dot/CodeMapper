@@ -1,0 +1,61 @@
+FREE — "Conocé tu código"
+Para quién: dev curioso, dev entrando a proyecto nuevo, estudiante, alguien probando la herramienta.
+Qué incluye:
+
+Análisis GENERAL con límite de 100 archivos
+Marco Polo (FOCO) con límite de 10 conexiones
+Bitácora completa (sin límite de nodos)
+Login obligatorio
+10 búsquedas por semana
+Mensaje permanente "Estás usando FREE"
+
+Mensaje de venta: "Visualizá tu proyecto y descubrí cómo está conectado."
+
+PRO — "Dominá tu código"
+Para quién: dev profesional trabajando en proyectos reales, equipos chicos, freelancers.
+Qué incluye:
+
+Todo lo del FREE sin límites (sin 100 archivos, sin 10 conexiones, sin 10 búsquedas)
+Bitácoras guardadas en la nube (persistencia con tu cuenta)
+Compartir bitácoras por link
+Modo verificación de diff: pegás un PR o conectás GitHub, ves el grafo del antes/después con el blast radius del cambio
+Múltiples lenguajes (COBOL, C#, .NET, PHP, Python, Node/TS según roadmap)
+Sin mensajes de FREE
+
+Mensaje de venta: "Auditá cualquier cambio antes de mergearlo. Documentá cómo entendés tu sistema."
+
+DIAMANTE — "Programá con IA viendo todo"
+Para quién: dev que ya usa IA todo el día y se cansó de leer paredes de texto. Equipos serios. Empresas que quieren control visual sobre lo que la IA propone.
+Qué incluye:
+
+Todo lo del PRO
+Modo conversacional con IA (pantalla tipo Claude design)
+Las tres acciones: crear funcionalidad, resolver error, entender
+Grafo en vivo que se redibuja con cada respuesta de la IA
+Aprobación visual antes de ejecutar cambios
+IA propia integrada (sin necesidad de API key del usuario)
+Cuota generosa de consultas IA por mes
+Documentación integrada al grafo: subís PDFs, MDs, Confluence exportados, y la app indexa todo. Cuando buscás una clase, te dice también en qué páginas del documento aparece mencionada. Cuando hacés Marco Polo sobre una clase, los nodos pueden mostrar "📄 mencionada en doc-arquitectura.pdf p.14, manual-onboarding.md p.3". El grafo deja de ser solo código — es código + conocimiento del equipo.
+
+Mensaje de venta: "Hablá con tu código. Ves lo que la IA va a tocar antes de que lo toque. Y todo conectado a tu documentación."
+
+Por qué este orden funciona:
+El salto FREE → PRO es por límites y persistencia. El dev que probó y le sirvió, paga para sacarse la traba y para guardar su trabajo. Es el upgrade clásico de SaaS.
+El salto PRO → DIAMANTE es por categoría. Ya no es "más de lo mismo sin límites", es otra forma de trabajar. Programás conversando, ves todo visualmente, y tu documentación está conectada al código. El dev que paga DIAMANTE no compra features extra, compra un cambio en cómo trabaja.
+
+Precios sugeridos (referencia):
+
+FREE — $0
+PRO — $15-25 USD/mes
+DIAMANTE — $40-60 USD/mes
+
+
+Lo que cambia el bonus de documentación en DIAMANTE:
+Esto que sumaste no es decorativo. Le da al DIAMANTE una utilidad de equipo, no solo individual. Mirá:
+
+Un dev solo paga DIAMANTE por la IA conversacional → uso individual
+Un equipo paga DIAMANTE porque comparten una base documental que se conecta al código → uso colectivo
+
+El segundo caso es mucho más vendible a empresas. "Suban el manual de arquitectura, los runbooks, los docs de Confluence — y cuando cualquier dev del equipo explore el código, va a ver dónde está mencionado en sus propios documentos." Eso resuelve el dolor universal de documentación que existe pero nadie encuentra cuando la necesita.
+Y va más allá: cuando alguien escriba documentación nueva, podés detectar qué clases del código menciona y crear el link automáticamente. La doc deja de ser un PDF olvidado, pasa a ser una capa viva del proyecto.
+Eso justifica el precio de DIAMANTE para equipos sin discusión. Y abre la puerta a un cuarto tier futuro tipo EMPRESA con licencias por equipo, pero eso lo dejás para mucho más adelante.

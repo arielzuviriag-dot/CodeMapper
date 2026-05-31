@@ -73,3 +73,9 @@ $RECYCLE.BIN/
 *.bak
 *.tmp
 *.cache
+
+# Agente OpenTelemetry (binario de 24MB, se descarga aparte)
+/opentelemetry-javaagent.jar
+
+# Artefactos de compilacion Java sueltos (demo-app)
+*.class
