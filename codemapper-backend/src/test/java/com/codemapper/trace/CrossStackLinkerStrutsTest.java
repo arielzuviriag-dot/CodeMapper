@@ -66,15 +66,17 @@ class CrossStackLinkerStrutsTest {
         // projectRoot + frontendPath = the same root (Struts apps mix JSP + Java).
         linker.streamWebLinks(List.of(action), root.toString(), root.toString(), "web", events::add);
 
-        // A WEB_SCREEN node for the JSP.
-        List<ClassFoundEvent> webNodes = events.stream()
+        // A screen node for the JSP (web or mobile — this test is about the
+        // Struts path→Action link, not the web/mobile classification).
+        List<ClassFoundEvent> screenNodes = events.stream()
                 .filter(e -> e instanceof ClassFoundEvent)
                 .map(e -> (ClassFoundEvent) e)
-                .filter(e -> e.getType() == ClassType.WEB_SCREEN)
+                .filter(e -> e.getType() == ClassType.WEB_SCREEN
+                        || e.getType() == ClassType.MOBILE_SCREEN)
                 .toList();
-        assertThat(webNodes).anyMatch(n -> "users.jsp".equals(n.getName()));
+        assertThat(screenNodes).anyMatch(n -> "users.jsp".equals(n.getName()));
 
-        String jspId = webNodes.stream()
+        String jspId = screenNodes.stream()
                 .filter(n -> "users.jsp".equals(n.getName()))
                 .findFirst().orElseThrow().getId();
 

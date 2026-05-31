@@ -16,6 +16,7 @@ import {
   Hash,
   Loader2,
   Shapes,
+  Smartphone,
   Square,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -516,6 +517,7 @@ const KIND_META: Record<
   RECORD: { label: "Record", Icon: CircleDot },
   ABSTRACT_CLASS: { label: "Abstract", Icon: Square },
   WEB_SCREEN: { label: "Web", Icon: Globe },
+  MOBILE_SCREEN: { label: "Mobile", Icon: Smartphone },
 };
 
 /** Compact metadata chip — class kind + line count. Sits next to the FOCO

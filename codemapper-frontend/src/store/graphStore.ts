@@ -197,7 +197,7 @@ interface GraphState {
   mobileOrigins: MobileOriginPayload[];
   /** Ariadna — a mobile file open in the code viewer (path + display name),
    *  or null. Set when the dev clicks a mobile screen node/step. */
-  mobileFile: { path: string; name: string } | null;
+  mobileFile: { path: string; name: string; kind: "web" | "mobile" } | null;
 
   setSessionId: (id: string | null) => void;
   addClass: (payload: ClassFoundPayload) => void;
@@ -279,7 +279,7 @@ interface GraphState {
   setExceptionMode: (enabled: boolean) => void;
   setMobileOrigins: (origins: MobileOriginPayload[]) => void;
   /** Ariadna — open/close the mobile file code viewer. */
-  openMobileFile: (path: string, name: string) => void;
+  openMobileFile: (path: string, name: string, kind?: "web" | "mobile") => void;
   closeMobileFile: () => void;
   /** P2 — swap the directional filter between "all", "incoming" and
    *  "outgoing". Applied as an additional mask over the per-type filters. */
@@ -316,6 +316,7 @@ const DEFAULT_FILTERS: FilterState = {
     RECORD: true,
     ABSTRACT_CLASS: true,
     WEB_SCREEN: true,
+    MOBILE_SCREEN: true,
   },
   connectionTypeFilters: {
     EXTENDS: true,
@@ -796,7 +797,8 @@ export const useGraphStore = create<GraphState>((set) => ({
   setExceptionReport: (report) => set({ exceptionReport: report }),
   setExceptionMode: (enabled) => set({ exceptionMode: enabled }),
   setMobileOrigins: (origins) => set({ mobileOrigins: origins }),
-  openMobileFile: (path, name) => set({ mobileFile: { path, name } }),
+  openMobileFile: (path, name, kind = "mobile") =>
+    set({ mobileFile: { path, name, kind } }),
   closeMobileFile: () => set({ mobileFile: null }),
 
   setFocusDirectionFilter: (mode) => set({ focusDirectionFilter: mode }),

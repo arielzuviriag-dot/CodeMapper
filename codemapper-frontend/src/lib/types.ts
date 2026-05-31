@@ -4,8 +4,9 @@ export type ClassKind =
   | "ENUM"
   | "RECORD"
   | "ABSTRACT_CLASS"
-  // Front-end screen (not a Java class) emitted by the cross-stack linker.
-  | "WEB_SCREEN";
+  // Front-end screens (not Java classes) emitted by the cross-stack linker.
+  | "WEB_SCREEN"
+  | "MOBILE_SCREEN";
 
 export type ConnectionType =
   | "EXTENDS"

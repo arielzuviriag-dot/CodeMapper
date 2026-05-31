@@ -14,6 +14,7 @@ import {
   Globe,
   Lock,
   Shapes,
+  Smartphone,
 } from "lucide-react";
 import type { ClassKind, ClassNodeData } from "@/lib/types";
 import { useGraphStore } from "@/store/graphStore";
@@ -56,9 +57,12 @@ const INTERFACE_THEME: HeaderTheme = {
 /** Front-end screen — classic "internet blue" so the web layer reads apart
  *  from every Java (bordó/silver) card at a glance. */
 const WEB_THEME: HeaderTheme = { bg: "#2F81F7", fg: "#F5F5F5" };
+/** Mobile screen — emerald, distinct from web blue and Java bordó. */
+const MOBILE_THEME: HeaderTheme = { bg: "#0F9D58", fg: "#F5F5F5" };
 
 function pickHeaderTheme(data: ClassNodeData): HeaderTheme {
   if (data.type === "WEB_SCREEN") return WEB_THEME;
+  if (data.type === "MOBILE_SCREEN") return MOBILE_THEME;
   if (data.type === "INTERFACE") return INTERFACE_THEME;
   if (data.type === "ENUM") return ENUM_THEME;
   for (const ann of data.annotations ?? []) {
@@ -68,14 +72,12 @@ function pickHeaderTheme(data: ClassNodeData): HeaderTheme {
   return DEFAULT_THEME;
 }
 
-/** The stack marker the user asked for: 🌐 globe = web (front-end), ☕ coffee =
- *  Java (backend). Shown on every card so you can tell the layer at a glance. */
+/** The stack marker the user asked for: 🌐 globe = web, 📱 phone = mobile,
+ *  ☕ coffee = Java. Shown on every card so you read the layer at a glance. */
 function StackBadge({ kind }: { kind: ClassKind }) {
-  return kind === "WEB_SCREEN" ? (
-    <Globe className="h-4 w-4" />
-  ) : (
-    <Coffee className="h-4 w-4" />
-  );
+  if (kind === "WEB_SCREEN") return <Globe className="h-4 w-4" />;
+  if (kind === "MOBILE_SCREEN") return <Smartphone className="h-4 w-4" />;
+  return <Coffee className="h-4 w-4" />;
 }
 
 function KindIcon({ kind }: { kind: ClassKind }) {
@@ -112,6 +114,7 @@ interface CustomData extends Record<string, unknown> {
 function ClassNodeComponent({ data, id }: NodeProps) {
   const classData = (data as CustomData).classData;
   const selectNode = useGraphStore((s) => s.selectNode);
+  const openScreen = useGraphStore((s) => s.openMobileFile);
   const isSelected = useGraphStore((s) => s.selectedNodeId === id);
   const hideGettersSetters = useGraphStore((s) => s.filters.hideGettersSetters);
   const isCompact = useStore((s) => s.transform[2] < COMPACT_ZOOM_THRESHOLD);
@@ -135,8 +138,10 @@ function ClassNodeComponent({ data, id }: NodeProps) {
     : "border-[var(--border-silver)]";
 
   // Front-end screen — a dedicated compact card (no Java fields/methods),
-  // globe-marked and internet-blue so it never reads as a Java class.
-  if (classData.type === "WEB_SCREEN") {
+  // marked with its stack icon + color so it never reads as a Java class.
+  // Click opens the source/simulate/elements viewer (see CodeGraph).
+  if (classData.type === "WEB_SCREEN" || classData.type === "MOBILE_SCREEN") {
+    const isMobile = classData.type === "MOBILE_SCREEN";
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.6 }}
@@ -144,7 +149,13 @@ function ClassNodeComponent({ data, id }: NodeProps) {
         transition={{ duration: 0.25 }}
         whileHover={{ scale: 1.02 }}
         className={`${baseClass} ${selectedClass} w-[240px]`}
-        onClick={() => selectNode(id)}
+        onClick={() =>
+          openScreen(
+            classData.filePath,
+            classData.name,
+            isMobile ? "mobile" : "web",
+          )
+        }
       >
         <Handle type="target" position={Position.Top} className="!opacity-0" />
         <Handle type="source" position={Position.Bottom} className="!opacity-0" />
@@ -152,15 +163,22 @@ function ClassNodeComponent({ data, id }: NodeProps) {
           className="flex items-center gap-2 rounded-t-md px-3 py-2 text-sm font-semibold"
           style={{ backgroundColor: theme.bg, color: theme.fg }}
         >
-          <Globe className="h-4 w-4" />
+          {isMobile ? (
+            <Smartphone className="h-4 w-4" />
+          ) : (
+            <Globe className="h-4 w-4" />
+          )}
           <span className="truncate">{classData.name}</span>
           <span className="ml-auto text-[10px] uppercase tracking-[0.16em] opacity-80">
-            web
+            {isMobile ? "mobile" : "web"}
           </span>
         </div>
         <div className="flex flex-col gap-1 px-3 py-2.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#2F81F7]">
-            Front-end
+          <span
+            className="text-[10px] font-semibold uppercase tracking-[0.18em]"
+            style={{ color: theme.bg }}
+          >
+            {isMobile ? "Front-end mobile" : "Front-end web"} · ver código
           </span>
           <span className="break-all font-mono text-[11px] leading-snug text-[var(--fg-secondary)]">
             {classData.fullyQualifiedName || classData.filePath}

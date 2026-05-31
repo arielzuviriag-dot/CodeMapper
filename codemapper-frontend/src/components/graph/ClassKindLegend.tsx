@@ -7,6 +7,7 @@ import {
   Globe,
   HelpCircle,
   Shapes,
+  Smartphone,
   Square,
   X,
 } from "lucide-react";
@@ -65,7 +66,14 @@ const ITEMS: KindItem[] = [
     label: "Web",
     Icon: Globe,
     description:
-      "Pantalla del front-end (no es Java). Aparece cuando pasás la ruta del front en 'Aplicación': se la linkea al controller que atiende su llamada HTTP. Las cards web salen con el globo 🌐 y en azul.",
+      "Pantalla del front-end web (no es Java). Aparece cuando pasás la ruta del front en 'Aplicación': se la linkea al controller que atiende su llamada HTTP. Las cards web salen con el globo 🌐 y en azul, en su fila propia.",
+  },
+  {
+    id: "MOBILE_SCREEN",
+    label: "Mobile",
+    Icon: Smartphone,
+    description:
+      "Pantalla del front-end mobile (React Native/Expo). Se detecta por el package.json del proyecto. Sale con el ícono de celular 📱 y en verde, en una fila aparte debajo de la web.",
   },
 ];
 

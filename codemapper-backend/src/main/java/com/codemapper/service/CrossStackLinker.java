@@ -65,6 +65,9 @@ public class CrossStackLinker {
 
     private final MobileEndpointScanner scanner;
 
+    /** dir → "is React-Native?" memo, so we read each package.json once. */
+    private final Map<String, Boolean> mobileDirCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     /** A Spring mapping (verb + normalized path). */
     private record Endpoint(String verb, String path) {}
     /** A controller endpoint tagged with the node id of its controller class. */
@@ -176,7 +179,7 @@ public class CrossStackLinker {
         e.setName(baseName(screenFile));
         e.setFullyQualifiedName(rel);
         e.setPackageName(parentDir(rel));
-        e.setType(ClassType.WEB_SCREEN);
+        e.setType(isMobileFile(screenFile) ? ClassType.MOBILE_SCREEN : ClassType.WEB_SCREEN);
         e.setAnnotations(List.of());
         e.setFilePath(screenFile);
         e.setLineCount(0);
@@ -206,6 +209,30 @@ public class CrossStackLinker {
             }
         }
         return out;
+    }
+
+    /** A screen is "mobile" when the nearest package.json up its tree depends
+     *  on react-native/expo. Lets a monorepo with web + mobile fronts tag each
+     *  screen correctly. Cached per directory. */
+    private boolean isMobileFile(String screenFile) {
+        Path start = Path.of(screenFile).getParent();
+        if (start == null) return false;
+        return mobileDirCache.computeIfAbsent(start.toString(), k -> {
+            Path dir = start;
+            while (dir != null) {
+                Path pkg = dir.resolve("package.json");
+                if (Files.isRegularFile(pkg)) {
+                    try {
+                        String t = Files.readString(pkg);
+                        return t.contains("\"react-native\"") || t.contains("\"expo\"");
+                    } catch (Exception e) {
+                        return false;
+                    }
+                }
+                dir = dir.getParent();
+            }
+            return false;
+        });
     }
 
     /** A front-end is React Native when its package.json depends on

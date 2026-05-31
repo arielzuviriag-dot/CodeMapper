@@ -294,6 +294,7 @@ function CodeGraphInner() {
           nodeColor={(n) => {
             const data = (n.data as { classData?: ClassNodeData })?.classData;
             if (data?.type === "WEB_SCREEN") return "#2F81F7"; // web = internet blue
+            if (data?.type === "MOBILE_SCREEN") return "#0F9D58"; // mobile = emerald
             const ann = data?.annotations?.[0]?.replace(/^@/, "").split("(")[0];
             switch (ann) {
               case "Service":
