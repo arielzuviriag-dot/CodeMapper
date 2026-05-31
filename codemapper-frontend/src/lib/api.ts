@@ -309,6 +309,27 @@ export async function resolveJavaSource(
   return data;
 }
 
+export interface MethodCall {
+  line: number;
+  targetClass: string;
+  method: string;
+}
+
+/** Static analysis of one method body: which classes it calls and on what
+ *  line. Used by the live "Escuchar" per-method detail. */
+export async function analyzeMethodCalls(
+  backendPath: string,
+  fqcn: string,
+  methodName: string,
+): Promise<MethodCall[]> {
+  const { data } = await api.post<MethodCall[]>("/api/trace/method-calls", {
+    backendPath,
+    fqcn,
+    methodName,
+  });
+  return data;
+}
+
 export async function getClassSource(
   sessionId: string,
   classId: string,

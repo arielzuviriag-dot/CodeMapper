@@ -7,16 +7,24 @@ import com.codemapper.model.event.BaseEvent;
 import com.codemapper.model.event.ClassFoundEvent;
 import com.codemapper.model.event.ConnectionFoundEvent;
 import com.codemapper.parser.MobileEndpointScanner;
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.type.Type;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -33,6 +41,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -80,6 +89,21 @@ public class CrossStackLinker {
 
     /** Resolved Java source for a fqcn (live "Escuchar" source viewer). */
     public record JavaSource(String fqcn, String filePath, String source) {}
+
+    /** One outgoing call inside a method body: at {@code line}, it calls
+     *  {@code targetClass.method()}. */
+    public record CallSite(int line, String targetClass, String method) {}
+
+    /** JDK / framework types we don't treat as "project classes" worth listing. */
+    private static final Set<String> COMMON_TYPES = Set.of(
+            "String", "Integer", "Long", "Double", "Float", "Boolean", "Byte",
+            "Character", "Short", "Object", "List", "Map", "Set", "Collection",
+            "Optional", "Collectors", "Objects", "Math", "Arrays", "Collections",
+            "Stream", "ArrayList", "HashMap", "HashSet", "LinkedList", "LinkedHashMap",
+            "StringBuilder", "Exception", "RuntimeException", "Instant", "LocalDate",
+            "LocalDateTime", "LocalTime", "Duration", "UUID", "BigDecimal", "BigInteger",
+            "ResponseEntity", "PageRequest", "Sort", "Pageable", "Page", "System",
+            "Files", "Path", "Paths");
 
     /** Safety cap so a huge front-end can't flood the graph. */
     private static final int MAX_WEB_NODES = 200;
@@ -272,6 +296,93 @@ public class CrossStackLinker {
         }
     }
 
+    /**
+     * Static analysis of a single method body: lists each call to another
+     * class with its line number ("en la línea X llama a TargetClass.method()").
+     * No symbol solver — resolves the target type via the class's fields
+     * (incl. constructor-injected deps), the method's params and local vars,
+     * plus {@code new Foo()} and static {@code Foo.bar()} calls. Best-effort.
+     */
+    public List<CallSite> analyzeMethodCalls(String backendPath, String fqcn, String methodName) {
+        List<CallSite> out = new ArrayList<>();
+        JavaSource js = resolveJavaSource(backendPath, fqcn);
+        if (js == null || methodName == null || methodName.isBlank()) return out;
+        String simpleSelf = fqcn.substring(fqcn.lastIndexOf('.') + 1);
+        try {
+            CompilationUnit cu = parseJava(Path.of(js.filePath()));
+            for (TypeDeclaration<?> type : cu.getTypes()) {
+                // name → simple type, from fields + constructor params (DI).
+                Map<String, String> varTypes = new HashMap<>();
+                for (FieldDeclaration fd : type.getFields()) {
+                    for (VariableDeclarator v : fd.getVariables()) {
+                        varTypes.put(v.getNameAsString(), simpleTypeName(v.getType()));
+                    }
+                }
+                for (ConstructorDeclaration c : type.findAll(ConstructorDeclaration.class)) {
+                    c.getParameters().forEach(
+                            p -> varTypes.put(p.getNameAsString(), simpleTypeName(p.getType())));
+                }
+                for (MethodDeclaration md : type.getMethodsByName(methodName)) {
+                    Map<String, String> scopeTypes = new HashMap<>(varTypes);
+                    md.getParameters().forEach(
+                            p -> scopeTypes.put(p.getNameAsString(), simpleTypeName(p.getType())));
+                    md.findAll(VariableDeclarator.class).forEach(
+                            v -> scopeTypes.put(v.getNameAsString(), simpleTypeName(v.getType())));
+
+                    for (MethodCallExpr call : md.findAll(MethodCallExpr.class)) {
+                        String target = resolveScope(call, scopeTypes);
+                        if (target == null || COMMON_TYPES.contains(target)
+                                || target.equals(simpleSelf)) continue;
+                        int line = call.getBegin().map(p -> p.line).orElse(0);
+                        out.add(new CallSite(line, target, call.getNameAsString()));
+                    }
+                    for (ObjectCreationExpr oc : md.findAll(ObjectCreationExpr.class)) {
+                        String target = oc.getType().getNameAsString();
+                        if (COMMON_TYPES.contains(target) || target.equals(simpleSelf)) continue;
+                        int line = oc.getBegin().map(p -> p.line).orElse(0);
+                        out.add(new CallSite(line, target, "new"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Method-call analysis failed for {}.{}: {}", fqcn, methodName, e.getMessage());
+        }
+        // Dedup identical (line, target, method) and sort by line.
+        Set<String> seen = new HashSet<>();
+        out.removeIf(c -> !seen.add(c.line() + "|" + c.targetClass() + "|" + c.method()));
+        out.sort(Comparator.comparingInt(CallSite::line));
+        return out;
+    }
+
+    /** Parse a .java with a modern language level — projects use records /
+     *  sealed / var which the parser's default level rejects. */
+    private CompilationUnit parseJava(Path file) throws Exception {
+        StaticJavaParser.getParserConfiguration()
+                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE);
+        return StaticJavaParser.parse(file.toFile());
+    }
+
+    private String resolveScope(MethodCallExpr call, Map<String, String> scopeTypes) {
+        if (call.getScope().isEmpty()) return null; // implicit this — skip
+        Expression scope = call.getScope().get();
+        if (scope instanceof NameExpr ne) {
+            String n = ne.getNameAsString();
+            if (scopeTypes.containsKey(n)) return scopeTypes.get(n); // var/field → its type
+            if (!n.isEmpty() && Character.isUpperCase(n.charAt(0))) return n; // static Foo.bar()
+        }
+        return null; // chained / complex scopes — skip
+    }
+
+    private String simpleTypeName(Type t) {
+        String s = t.asString();
+        int lt = s.indexOf('<');
+        if (lt >= 0) s = s.substring(0, lt); // strip generics
+        s = s.replace("[]", "").trim();
+        int dot = s.lastIndexOf('.');
+        if (dot >= 0) s = s.substring(dot + 1); // strip package
+        return s;
+    }
+
     private ClassFoundEvent webNode(String id, String screenFile, Path frontendRoot) {
         String rel = relativize(frontendRoot, screenFile);
         ClassFoundEvent e = new ClassFoundEvent();
@@ -295,7 +406,7 @@ public class CrossStackLinker {
         for (ParsedClass pc : classes) {
             if (!looksLikeController(pc) || pc.getFilePath() == null) continue;
             try {
-                CompilationUnit cu = StaticJavaParser.parse(Path.of(pc.getFilePath()).toFile());
+                CompilationUnit cu = parseJava(Path.of(pc.getFilePath()));
                 for (TypeDeclaration<?> type : cu.getTypes()) {
                     for (Endpoint ep : extractMappings(type).values()) {
                         if (ep.path() != null) {

@@ -1,15 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  ChevronDown,
+  ChevronRight,
   Coffee,
   FileCode,
   Globe,
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { resolveJavaSource } from "@/lib/api";
+import { analyzeMethodCalls, resolveJavaSource, type MethodCall } from "@/lib/api";
 import { useListeningStore } from "@/store/listeningStore";
 import type { ClassNode } from "@/lib/trace";
 
@@ -42,6 +45,39 @@ export function ListeningOrderPanel() {
   const selectError = useListeningStore((s) => s.selectError);
   const backendPath = useListeningStore((s) => s.backendPath);
   const openSource = useListeningStore((s) => s.openSource);
+
+  // Per-method static call sites (expanded under a method in the detail).
+  const [openMethod, setOpenMethod] = useState<string | null>(null);
+  const [methodCalls, setMethodCalls] = useState<MethodCall[]>([]);
+  const [loadingMethod, setLoadingMethod] = useState(false);
+
+  // Reset the expanded method when the selected object changes.
+  useEffect(() => {
+    setOpenMethod(null);
+    setMethodCalls([]);
+  }, [highlight]);
+
+  const toggleMethod = async (fqcn: string | null, method: string) => {
+    if (openMethod === method) {
+      setOpenMethod(null);
+      return;
+    }
+    setOpenMethod(method);
+    setMethodCalls([]);
+    if (!fqcn) return;
+    if (!backendPath) {
+      toast.message("Agregá la ruta del backend al Iniciar para ver las llamadas");
+      return;
+    }
+    setLoadingMethod(true);
+    try {
+      setMethodCalls(await analyzeMethodCalls(backendPath, fqcn, method));
+    } catch {
+      toast.error("No se pudo analizar el método");
+    } finally {
+      setLoadingMethod(false);
+    }
+  };
 
   const viewSource = async (n: ClassNode) => {
     if (!n.fqcn) return;
@@ -151,17 +187,64 @@ export function ListeningOrderPanel() {
           )}
 
           {sel.methods.length > 0 && (
-            <Detail title="Métodos">
-              <div className="flex flex-wrap gap-1">
-                {sel.methods.map((m) => (
-                  <span
-                    key={m}
-                    className="rounded-sm border border-[var(--bordo)]/30 bg-[var(--bordo)]/10 px-1.5 py-0.5 font-mono text-[10px] text-[var(--bordo)]"
+            <Detail title="Métodos — click para ver a qué llaman">
+              {sel.methods.map((m) => (
+                <div key={m} className="flex flex-col">
+                  <button
+                    type="button"
+                    onClick={() => toggleMethod(sel.fqcn, m)}
+                    className="flex items-center gap-1 rounded-sm px-1 py-0.5 text-left font-mono text-[10px] text-[var(--bordo)] transition-colors hover:bg-[var(--bg-panel)]"
                   >
+                    {openMethod === m ? (
+                      <ChevronDown className="h-3 w-3 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3 shrink-0" />
+                    )}
                     {m}()
-                  </span>
-                ))}
-              </div>
+                  </button>
+                  {openMethod === m && (
+                    <div className="ml-2 flex flex-col gap-0.5 border-l border-[var(--border-silver)] py-0.5 pl-2">
+                      {loadingMethod ? (
+                        <span className="font-mono text-[9px] text-[var(--silver-dark)]">
+                          analizando…
+                        </span>
+                      ) : methodCalls.length === 0 ? (
+                        <span className="font-mono text-[9px] text-[var(--silver-dark)]">
+                          sin llamadas a otras clases
+                        </span>
+                      ) : (
+                        methodCalls.map((c, i) => {
+                          const isNode = nodes.some(
+                            (n) => n.className === c.targetClass,
+                          );
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              disabled={!isNode}
+                              onClick={() => isNode && setHighlight(c.targetClass)}
+                              title={isNode ? "Resaltar en el grafo" : undefined}
+                              className={`flex items-center gap-1 text-left font-mono text-[9px] ${
+                                isNode
+                                  ? "text-[var(--fg-secondary)] hover:text-[var(--bordo)]"
+                                  : "cursor-default text-[var(--silver-dark)]"
+                              }`}
+                            >
+                              <span className="shrink-0 rounded-[3px] bg-[var(--bg-input)] px-1 text-[var(--silver-dark)]">
+                                L{c.line}
+                              </span>
+                              <ArrowRight className="h-2.5 w-2.5 shrink-0 text-[var(--bordo)]" />
+                              <span className="truncate">
+                                {c.targetClass}.{c.method}()
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </Detail>
           )}
 

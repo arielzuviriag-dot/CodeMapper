@@ -134,6 +134,20 @@ public class TraceController {
     }
 
     /**
+     * "Escuchar" mode — static analysis of one method body: which classes it
+     * calls and on what line. Body: {@code {backendPath, fqcn, methodName}}.
+     */
+    @PostMapping(value = "/api/trace/method-calls",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<com.codemapper.service.CrossStackLinker.CallSite>> methodCalls(
+            @RequestBody Map<String, String> body) {
+        if (body == null) return ResponseEntity.ok(List.of());
+        return ResponseEntity.ok(crossStackLinker.analyzeMethodCalls(
+                body.get("backendPath"), body.get("fqcn"), body.get("methodName")));
+    }
+
+    /**
      * Renders the live "Escuchando" graph as a PDF. Stateless, like the FOCO
      * export: the browser posts the on-screen nodes (order, Web/Java, hit count)
      * plus a PNG snapshot, and we format it. No re-analysis — the PDF mirrors
