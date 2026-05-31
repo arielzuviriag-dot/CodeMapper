@@ -338,6 +338,31 @@ function CodeGraphInner() {
     });
   }, [edges, scheduleFit, setNodes]);
 
+  // Separador de cards: escala la distancia de cada nodo al centro del grafo.
+  // No toca la cámara (eso es el zoom) — mueve las posiciones reales, como si
+  // arrastraras todas las cards hacia afuera/adentro a la vez, gradualmente.
+  // Marca interacción del usuario para que el auto-layout no lo pise.
+  const spreadNodes = useCallback(
+    (factor: number) => {
+      markUserInteracted();
+      setNodes((curr) => {
+        if (curr.length === 0) return curr;
+        const cx =
+          curr.reduce((s, n) => s + n.position.x, 0) / curr.length;
+        const cy =
+          curr.reduce((s, n) => s + n.position.y, 0) / curr.length;
+        return curr.map((n) => ({
+          ...n,
+          position: {
+            x: cx + (n.position.x - cx) * factor,
+            y: cy + (n.position.y - cy) * factor,
+          },
+        }));
+      });
+    },
+    [markUserInteracted, setNodes],
+  );
+
   // React to "Reset layout" clicks fired from the FilterPanel that lives in
   // the outer sidebar — keeps the layout function local to the graph but
   // exposes a trigger via the store. Skips the initial render.
@@ -426,7 +451,7 @@ function CodeGraphInner() {
         />
       </ReactFlow>
 
-      <GraphControls onRelayout={onRelayout} />
+      <GraphControls onRelayout={onRelayout} onSpread={spreadNodes} />
     </div>
   );
 }

@@ -7,11 +7,13 @@ import {
   type Edge,
   MiniMap,
   type Node,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useListeningStore } from "@/store/listeningStore";
@@ -176,6 +178,7 @@ function ListeningGraphInner() {
     onNodeDragStop,
     onNodeClick,
     shouldAutoFit,
+    spreadNodes,
   } = useGraphInteraction(computedNodes, computedEdges, (node) => {
     // Single click → select it (highlights here + drives the order panel).
     setHighlight(node.id);
@@ -274,6 +277,29 @@ function ListeningGraphInner() {
         position="top-right"
         style={{ top: 64, right: 16 }}
       />
+      {/* Separador de cards (+/−): aleja/junta las cards entre sí — distinto del
+          zoom, que solo acerca/aleja la cámara. Va debajo del zoom (que está
+          debajo del botón Detener). */}
+      <Panel position="top-right" style={{ top: 168, right: 16 }}>
+        <div className="flex flex-col items-center gap-1 rounded-md border border-[var(--border-silver)] bg-[var(--bg-card)] p-1 shadow-[var(--shadow-md)]">
+          <button
+            type="button"
+            onClick={() => spreadNodes(1.2)}
+            title="Separar las cards"
+            className="flex h-7 w-7 items-center justify-center rounded-sm text-[var(--silver)] hover:bg-[var(--bordo)]/15 hover:text-[var(--bordo)]"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => spreadNodes(1 / 1.2)}
+            title="Juntar las cards"
+            className="flex h-7 w-7 items-center justify-center rounded-sm text-[var(--silver)] hover:bg-[var(--bordo)]/15 hover:text-[var(--bordo)]"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+        </div>
+      </Panel>
       <MiniMap
         nodeColor={(n) =>
           (n.data as { node?: { status?: string } })?.node?.status === "ERROR"

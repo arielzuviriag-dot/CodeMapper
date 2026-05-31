@@ -71,6 +71,30 @@ export function useGraphInteraction(
   }, []);
   const shouldAutoFit = useCallback(() => !userMovedRef.current, []);
 
+  // Separador de cards: escala la distancia de cada nodo al centro del grafo,
+  // moviendo sus posiciones reales (no la cámara: eso es el zoom). factor > 1
+  // las aleja, factor < 1 las junta. Persiste las posiciones (como un arrastre)
+  // para que no se pisen cuando llega un span nuevo, y frena el auto-fit.
+  const spreadNodes = useCallback(
+    (factor: number) => {
+      userMovedRef.current = true;
+      setNodes((curr) => {
+        if (curr.length === 0) return curr;
+        const cx = curr.reduce((s, n) => s + n.position.x, 0) / curr.length;
+        const cy = curr.reduce((s, n) => s + n.position.y, 0) / curr.length;
+        return curr.map((n) => {
+          const next = {
+            x: cx + (n.position.x - cx) * factor,
+            y: cy + (n.position.y - cy) * factor,
+          };
+          draggedPosRef.current.set(n.id, next);
+          return { ...n, position: next };
+        });
+      });
+    },
+    [setNodes],
+  );
+
   // Single click → activate after a short delay (double-click cancels it).
   const onNodeClick = useCallback(
     (_: unknown, node: Node) => {
@@ -162,5 +186,6 @@ export function useGraphInteraction(
     onNodeDoubleClick,
     onPaneClick,
     shouldAutoFit,
+    spreadNodes,
   };
 }
