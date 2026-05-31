@@ -100,6 +100,10 @@ interface FocusEdgeData extends Record<string, unknown> {
    *  of {@code curvature !== 0}; passed through so consumers can branch on
    *  intent rather than the raw sign. */
   bidirectional?: boolean;
+  /** Orden de llamada (1-based) para salientes de Foco al Método: a cuál llama
+   *  el método primero, segundo… según la línea del código. 0/undefined = no
+   *  mostrar. */
+  callOrder?: number;
 }
 
 const TYPE_STYLE: Record<
@@ -524,6 +528,15 @@ function FocusEdgeComponent({
           className="flex flex-col items-center gap-0.5"
         >
           <div className="flex items-center gap-1">
+            {/* Orden de llamada (Foco al Método): a cuál llama primero/segundo… */}
+            {(edgeData.callOrder ?? 0) > 0 && (
+              <span
+                title={`Llamada Nº ${edgeData.callOrder} en el orden del método`}
+                className="flex h-4 w-4 items-center justify-center rounded-full border border-white/40 bg-[var(--bordo)] font-mono text-[9px] font-bold leading-none text-white shadow-sm"
+              >
+                {edgeData.callOrder}
+              </span>
+            )}
             <span
               className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase leading-none tracking-[0.16em] text-white shadow-sm"
               style={{ backgroundColor: style.stroke }}

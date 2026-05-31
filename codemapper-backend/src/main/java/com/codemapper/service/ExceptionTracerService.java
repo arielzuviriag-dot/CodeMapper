@@ -221,7 +221,8 @@ public class ExceptionTracerService {
                         null,                // controlContext
                         false,               // isTest
                         false,               // isMock
-                        null));              // referenceKind
+                        null,                // referenceKind
+                        0));                 // callOrder (no aplica)
             }
         }
 

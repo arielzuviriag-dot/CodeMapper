@@ -21,6 +21,7 @@ import { FocusConnectionLegend } from "./FocusConnectionLegend";
 import { GraphSearchInput } from "./GraphSearchInput";
 import { useGraphStore } from "@/store/graphStore";
 import { useGraphInteraction } from "@/hooks/useGraphInteraction";
+import { SpreadControl } from "./SpreadControl";
 
 const NODE_TYPES = {
   focusMethodCenter: FocusMethodCenterNode,
@@ -115,6 +116,7 @@ function FocusMethodGraphInner() {
         data: {
           connectionType: conn.connectionType,
           index: i,
+          callOrder: conn.callOrder ?? 0,
           viaMethodInSource: conn.viaMethodInSource ?? null,
           viaMethodInTarget: conn.viaMethodInTarget ?? null,
           // Wall-clock anchor for the draw animation — without this, FocusEdge
@@ -142,6 +144,7 @@ function FocusMethodGraphInner() {
     onNodeDoubleClick,
     onPaneClick,
     shouldAutoFit,
+    spreadNodes,
   } = useGraphInteraction(computedNodes, computedEdges, (node) => {
     // Center node → open the method sheet (selectNode would land on class
     // mode — wrong, this is a method). Peripheral → existing class flow.
@@ -219,6 +222,7 @@ function FocusMethodGraphInner() {
           color="rgba(192, 192, 200, 0.08)"
         />
         <Controls showInteractive={false} />
+        <SpreadControl onSpread={spreadNodes} />
         {/* MiniMap — misma paleta que FocusGraph. El centro acá es el método
             focus (focusMethodCenter), peripherals son las clases que lo
             invocan o que él invoca. */}

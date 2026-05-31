@@ -266,6 +266,9 @@ export interface FocusConnectionPayload {
   /** Enclosing control-flow context for INVOKES_OUTGOING call sites. Null
    *  when the call lives in the linear top-level body. */
   controlContext?: ControlContext | null;
+  /** Orden de llamada (1-based) para salientes de Foco al Método: a cuál llama
+   *  el método primero, segundo… según la línea del código. 0/ausente = sin orden. */
+  callOrder?: number;
   /** True when this peripheral lives under a `/test/java/` source root —
    *  drives the dashed grey edge style and the "Mostrar tests" toggle. */
   isTest?: boolean;

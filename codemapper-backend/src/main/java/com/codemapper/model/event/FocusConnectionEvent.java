@@ -67,6 +67,10 @@ public class FocusConnectionEvent extends BaseEvent {
      *  Null when the connection isn't a CALLED_BY/CALLS body relationship
      *  (e.g. EXTENDS/IMPLEMENTS/USES_PROPERTIES) — frontend renders no icon. */
     private String referenceKind;
+    /** Orden de llamada (1-based) para salientes de Foco al Método: a cuál
+     *  llama el método primero, segundo… según la línea del código fuente.
+     *  0 cuando no aplica (incoming, foco por clase, otros eventos). */
+    private int callOrder;
 
     @Override
     public String eventName() {

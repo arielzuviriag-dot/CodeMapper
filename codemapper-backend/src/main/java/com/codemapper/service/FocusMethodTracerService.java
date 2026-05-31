@@ -283,7 +283,8 @@ public class FocusMethodTracerService {
 
             String calledMethodName = call.getNameAsString();
             String controlContext = resolveControlContext(call, md);
-            outgoing.put(targetFqn, new OutgoingCall(target, calledMethodName, controlContext));
+            int callLine = call.getBegin().map(p -> p.line).orElse(Integer.MAX_VALUE);
+            outgoing.put(targetFqn, new OutgoingCall(target, calledMethodName, controlContext, callLine));
         }
 
         // ─── Combine + cap (free 10 / pro unlimited) ────────────────────
@@ -294,15 +295,23 @@ public class FocusMethodTracerService {
                     FocusConnectionType.INVOKES_METHOD,
                     caller.viaMethodInCaller(),
                     methodName,
-                    null));
+                    null,
+                    0)); // callOrder no aplica a incoming
         }
-        for (OutgoingCall out : outgoing.values()) {
+        // Salientes ordenadas por la línea de la llamada en el cuerpo del método
+        // → a cuál llama 1º, 2º, 3º… (es lo que el usuario quiere ver).
+        List<OutgoingCall> outs = new ArrayList<>(outgoing.values());
+        outs.sort((a, b) -> Integer.compare(a.callLine(), b.callLine()));
+        int callOrder = 0;
+        for (OutgoingCall out : outs) {
+            callOrder++;
             ordered.add(new EmittableConnection(
                     out.target(),
                     FocusConnectionType.INVOKES_OUTGOING,
                     methodName, // viaInSource = focus method (origin of the call)
                     out.calledMethodName(),
-                    out.controlContext()));
+                    out.controlContext(),
+                    callOrder));
         }
 
         int totalAvailable = ordered.size();
@@ -336,7 +345,8 @@ public class FocusMethodTracerService {
                     ec.controlContext(),
                     false,
                     false,
-                    null  // P3 — method-focus events don't carry the class-level kind taxonomy
+                    null,  // P3 — method-focus events don't carry the class-level kind taxonomy
+                    ec.callOrder()
             ));
             try {
                 Thread.sleep(60);
@@ -455,12 +465,13 @@ public class FocusMethodTracerService {
 
     private record IncomingCaller(ParsedClass classData, String viaMethodInCaller) {}
 
-    private record OutgoingCall(ParsedClass target, String calledMethodName, String controlContext) {}
+    private record OutgoingCall(ParsedClass target, String calledMethodName, String controlContext, int callLine) {}
 
     private record EmittableConnection(
             ParsedClass parsed,
             FocusConnectionType connectionType,
             String viaMethodInSource,
             String viaMethodInTarget,
-            String controlContext) {}
+            String controlContext,
+            int callOrder) {}
 }

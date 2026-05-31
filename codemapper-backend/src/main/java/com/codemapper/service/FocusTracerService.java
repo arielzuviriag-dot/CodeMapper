@@ -697,7 +697,8 @@ public class FocusTracerService {
                     null,
                     isTest,
                     isMock,
-                    referenceKind));
+                    referenceKind,
+                    0));   // callOrder — el orden de llamada solo aplica a Foco al Método
             emitted++;
             if (sleepMs > 0L) {
                 Thread.sleep(sleepMs);
