@@ -357,12 +357,24 @@ public class AnalysisService {
         SessionData session = sessionService.getSession(sessionId);
         Path target = Path.of(rawPath).toAbsolutePath().normalize();
 
+        if (!Files.exists(target) || !Files.isRegularFile(target)) {
+            throw new FileNotFoundException("File not found: " + rawPath);
+        }
+        // Resolvemos symlinks (toRealPath) ANTES de validar: así un archivo que
+        // viva dentro del proyecto pero apunte por symlink a /etc/passwd no
+        // escapa del root permitido.
+        Path realTarget = target.toRealPath();
         boolean allowed = false;
         for (Path root : new Path[]{session.getProjectPath(),
                 session.getMobilePath() == null ? null : Path.of(session.getMobilePath())}) {
             if (root == null) continue;
-            Path normRoot = root.toAbsolutePath().normalize();
-            if (target.startsWith(normRoot)) {
+            Path realRoot = root.toAbsolutePath().normalize();
+            try {
+                if (Files.exists(realRoot)) realRoot = realRoot.toRealPath();
+            } catch (IOException ignored) {
+                // si no se puede resolver, usamos la versión normalizada
+            }
+            if (realTarget.startsWith(realRoot)) {
                 allowed = true;
                 break;
             }
@@ -370,10 +382,7 @@ public class AnalysisService {
         if (!allowed) {
             throw new IllegalArgumentException("File is outside the session's allowed roots");
         }
-        if (!Files.exists(target) || !Files.isRegularFile(target)) {
-            throw new FileNotFoundException("File not found: " + rawPath);
-        }
-        String source = Files.readString(target);
+        String source = Files.readString(realTarget);
         int lineCount = (int) source.lines().count();
         String fileName = target.getFileName() == null ? rawPath : target.getFileName().toString();
         return new com.codemapper.model.dto.ProjectFileResponse(

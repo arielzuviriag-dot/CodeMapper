@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { runAgent, type AgentEmit } from "@/lib/server/iaAgent";
 import { COOKIE_NAME } from "@/lib/server/iaCookie";
+import { assertProjectAllowed, ForbiddenRootError } from "@/lib/server/iaSandbox";
 
 export const runtime = "nodejs";
 // El análisis agéntico puede tardar; subimos el límite de la función.
@@ -30,6 +31,15 @@ export async function POST(req: Request) {
   const prompt = (body.prompt ?? "").trim();
   if (!projectPath) return new NextResponse("Falta la ruta del proyecto", { status: 400 });
   if (!prompt) return new NextResponse("Falta el pedido", { status: 400 });
+
+  // Multiusuario: la carpeta debe estar permitida (IA_ALLOWED_ROOTS). En local
+  // sin esa env, no restringe.
+  try {
+    await assertProjectAllowed(projectPath);
+  } catch (e) {
+    if (e instanceof ForbiddenRootError) return new NextResponse(e.message, { status: 403 });
+    return new NextResponse((e as Error).message, { status: 400 });
+  }
 
   const history = Array.isArray(body.history)
     ? (body.history as { role: "user" | "assistant"; text: string }[]).filter(

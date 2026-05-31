@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
+import { assertProjectAllowed, ForbiddenRootError } from "@/lib/server/iaSandbox";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,13 @@ export async function POST(req: Request) {
     return new NextResponse("Faltan projectPath/file", { status: 400 });
   }
 
-  const root = path.resolve(projectPath);
+  let root: string;
+  try {
+    root = await assertProjectAllowed(projectPath);
+  } catch (e) {
+    if (e instanceof ForbiddenRootError) return new NextResponse(e.message, { status: 403 });
+    return new NextResponse((e as Error).message, { status: 400 });
+  }
   const abs = path.isAbsolute(file) ? path.normalize(file) : path.resolve(root, file);
   if (abs !== root && !abs.startsWith(root + path.sep)) {
     return new NextResponse("Ruta fuera del proyecto", { status: 403 });

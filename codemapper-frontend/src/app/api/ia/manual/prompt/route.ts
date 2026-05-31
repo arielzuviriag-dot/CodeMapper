@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { promises as fs } from "fs";
-import path from "path";
 import { buildManualPrompt } from "@/lib/server/iaManual";
+import { assertProjectAllowed, ForbiddenRootError } from "@/lib/server/iaSandbox";
 
 export const runtime = "nodejs";
 
@@ -22,9 +21,11 @@ export async function POST(req: Request) {
   if (!projectPath) return new NextResponse("Falta la ruta del proyecto", { status: 400 });
   if (!prompt) return new NextResponse("Falta el pedido", { status: 400 });
 
-  const stat = await fs.stat(path.resolve(projectPath)).catch(() => null);
-  if (!stat || !stat.isDirectory()) {
-    return new NextResponse(`La ruta del proyecto no existe: ${projectPath}`, { status: 400 });
+  try {
+    await assertProjectAllowed(projectPath);
+  } catch (e) {
+    if (e instanceof ForbiddenRootError) return new NextResponse(e.message, { status: 403 });
+    return new NextResponse((e as Error).message, { status: 400 });
   }
 
   try {
