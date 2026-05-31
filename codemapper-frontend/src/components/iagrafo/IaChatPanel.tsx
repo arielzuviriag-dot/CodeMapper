@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useIaGrafoStore } from "@/store/iaGrafoStore";
 import { streamChat } from "@/lib/iaGrafo";
 import { DiffViewer } from "./DiffViewer";
+import { ManualRelayPanel } from "./ManualRelayPanel";
 
 /**
  * Panel de chat de IA.Grafo. El usuario pide un cambio; el panel streamea la
@@ -16,6 +17,8 @@ import { DiffViewer } from "./DiffViewer";
 export function IaChatPanel() {
   const projectPath = useIaGrafoStore((s) => s.projectPath);
   const setProjectPath = useIaGrafoStore((s) => s.setProjectPath);
+  const manualMode = useIaGrafoStore((s) => s.manualMode);
+  const setManualMode = useIaGrafoStore((s) => s.setManualMode);
   const messages = useIaGrafoStore((s) => s.messages);
   const streaming = useIaGrafoStore((s) => s.streaming);
   const setStreaming = useIaGrafoStore((s) => s.setStreaming);
@@ -94,11 +97,25 @@ export function IaChatPanel() {
 
   return (
     <div className="flex h-full flex-col border-r border-[var(--border-silver)] bg-[var(--bg-card)]">
-      {/* Ruta del proyecto */}
+      {/* Ruta del proyecto + toggle de modo */}
       <div className="border-b border-[var(--border-silver)] p-3">
-        <label className="mb-1 block font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
-          Proyecto a analizar
-        </label>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--silver-dark)]">
+            Proyecto a analizar
+          </label>
+          <button
+            type="button"
+            onClick={() => setManualMode(!manualMode)}
+            title="Modo manual: armás el prompt y lo pegás en claude.ai (sin costo de API)"
+            className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] transition-colors ${
+              manualMode
+                ? "border-[var(--bordo)] bg-[var(--bordo)]/15 text-[var(--bordo)]"
+                : "border-[var(--border-silver)] text-[var(--silver-dark)] hover:text-[var(--bordo)]"
+            }`}
+          >
+            {manualMode ? "Modo manual (sin API)" : "Modo API"}
+          </button>
+        </div>
         <input
           type="text"
           value={projectPath}
@@ -155,7 +172,11 @@ export function IaChatPanel() {
       {/* Diffs propuestos */}
       <DiffViewer />
 
-      {/* Input */}
+      {/* Modo manual: relay de copiar/pegar (sin API). */}
+      {manualMode && <ManualRelayPanel />}
+
+      {/* Input (modo API) */}
+      {!manualMode && (
       <div className="border-t border-[var(--border-silver)] p-3">
         <div className="flex items-end gap-2">
           <textarea
@@ -190,6 +211,7 @@ export function IaChatPanel() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

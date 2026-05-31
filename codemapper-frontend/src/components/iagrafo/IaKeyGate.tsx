@@ -22,6 +22,7 @@ import { setApiKey } from "@/lib/iaGrafo";
 export function IaKeyGate() {
   const hasKey = useIaGrafoStore((s) => s.hasKey);
   const setHasKey = useIaGrafoStore((s) => s.setHasKey);
+  const manualMode = useIaGrafoStore((s) => s.manualMode);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -48,7 +49,7 @@ export function IaKeyGate() {
   };
 
   return (
-    <Dialog open={!hasKey}>
+    <Dialog open={!hasKey && !manualMode}>
       <DialogContent className="border-[var(--border-silver)] bg-[var(--bg-card)] sm:max-w-md [&>button]:hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[var(--fg-primary)]">

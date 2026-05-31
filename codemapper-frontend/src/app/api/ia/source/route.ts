@@ -1,8 +1,6 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import { COOKIE_NAME } from "@/lib/server/iaCookie";
 
 export const runtime = "nodejs";
 
@@ -35,10 +33,6 @@ function langFor(file: string): string {
  * código de IA.Grafo. Sirve cualquier tipo de archivo, no solo Java.
  */
 export async function POST(req: Request) {
-  const store = await cookies();
-  if (!store.get(COOKIE_NAME)?.value) {
-    return new NextResponse("Falta la API key", { status: 401 });
-  }
   let body: { projectPath?: string; file?: string };
   try {
     body = await req.json();

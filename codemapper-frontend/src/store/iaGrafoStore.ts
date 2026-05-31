@@ -34,6 +34,11 @@ interface IaGrafoState {
   hasKey: boolean;
   setHasKey: (v: boolean) => void;
 
+  /** Modo manual: la app no llama a la API; el usuario copia el prompt a
+   *  claude.ai y pega la respuesta. No requiere key ni genera costo de API. */
+  manualMode: boolean;
+  setManualMode: (v: boolean) => void;
+
   messages: ChatMessage[];
   /** True mientras Claude está respondiendo (stream abierto). */
   streaming: boolean;
@@ -79,6 +84,11 @@ export const useIaGrafoStore = create<IaGrafoState>((set, get) => ({
 
   hasKey: false,
   setHasKey: (v) => set({ hasKey: v }),
+
+  // Arranca en manual: no pide API key al entrar (sin popup ni costo). El
+  // usuario cambia a "Modo API" si quiere que la app llame a Claude por él.
+  manualMode: true,
+  setManualMode: (v) => set({ manualMode: v }),
 
   messages: [],
   streaming: false,

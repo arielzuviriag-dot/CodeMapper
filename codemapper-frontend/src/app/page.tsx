@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
-import { Network } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { UploadTabs } from "@/components/upload/UploadTabs";
 import { resolveDemoMode } from "@/lib/api";
@@ -73,16 +71,6 @@ export default function HomePage() {
         >
           <UploadTabs />
         </section>
-
-        {/* Acceso a IA.Grafo — chat con Claude que dibuja el impacto de un
-            cambio como grafo y propone el diff. */}
-        <Link
-          href="/ia-grafo"
-          className="group flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--bordo)]/50 bg-[var(--bordo)]/10 px-4 py-3 font-mono text-sm uppercase tracking-[0.14em] text-[var(--bordo)] transition-colors hover:bg-[var(--bordo)]/20"
-        >
-          <Network className="h-4 w-4" />
-          IA.Grafo — pedile un cambio y vé el impacto
-        </Link>
 
         <footer className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-[var(--fg-muted)]">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--bordo)] shadow-[0_0_8px_rgba(185,28,66,0.6)]" />

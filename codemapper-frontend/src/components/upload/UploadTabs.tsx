@@ -1,6 +1,6 @@
 "use client";
 
-import { Radio } from "lucide-react";
+import { Network, Radio } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UploadZone } from "./UploadZone";
@@ -24,7 +24,7 @@ const TRIGGER_CLASS = [
 export function UploadTabs() {
   return (
     <Tabs defaultValue="upload" className="w-full">
-      <TabsList className="grid w-full grid-cols-6 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
+      <TabsList className="grid w-full grid-cols-7 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
         <TabsTrigger value="upload" className={TRIGGER_CLASS}>
           Aplicación
         </TabsTrigger>
@@ -45,6 +45,9 @@ export function UploadTabs() {
             exista billing real. Acción equivalente a `?demo=pro`. */}
         <TabsTrigger value="focus-pro" className={`${TRIGGER_CLASS} normal-case`}>
           Marco Polo PRO
+        </TabsTrigger>
+        <TabsTrigger value="ia-grafo" className={`${TRIGGER_CLASS} normal-case`}>
+          IA.Grafo
         </TabsTrigger>
       </TabsList>
 
@@ -82,6 +85,28 @@ export function UploadTabs() {
           >
             <Radio className="h-3.5 w-3.5" />
             Abrir modo Escuchando
+          </Link>
+        </div>
+      </TabsContent>
+      <TabsContent value="ia-grafo" className="mt-6">
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-[var(--border-silver)] bg-[var(--bg-input)] p-8 text-center">
+          <Network className="h-8 w-8 text-[var(--bordo)]" strokeWidth={1.8} />
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-[var(--fg-primary)]">
+              Pedile un cambio a la IA y mirá el impacto
+            </span>
+            <span className="max-w-md text-xs leading-relaxed text-[var(--fg-secondary)]">
+              Chat con Claude que dibuja en un grafo todos los lugares que tocaría
+              un cambio y el por qué de cada uno, con el código y el diff aplicable.
+              Podés usarlo en modo manual (sin costo de API).
+            </span>
+          </div>
+          <Link
+            href="/ia-grafo"
+            className="flex items-center gap-2 rounded-md bg-[var(--bordo)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-white transition-all hover:bg-[var(--bordo-mid)] hover:shadow-[0_0_18px_rgba(185,28,66,0.45)]"
+          >
+            <Network className="h-3.5 w-3.5" />
+            Abrir IA.Grafo
           </Link>
         </div>
       </TabsContent>

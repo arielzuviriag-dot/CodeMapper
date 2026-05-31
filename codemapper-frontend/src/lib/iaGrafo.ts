@@ -161,6 +161,73 @@ export async function streamChat(
   }
 }
 
+/* ============================================================
+ * Modo manual (copiar/pegar) — sin API.
+ * ============================================================ */
+
+/** Pide al server el prompt autocontenido para pegar en claude.ai. */
+export async function buildManualPrompt(
+  projectPath: string,
+  prompt: string,
+): Promise<string> {
+  const res = await fetch("/api/ia/manual/prompt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectPath, prompt }),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "");
+    throw new Error(msg || `Error ${res.status} al armar el prompt`);
+  }
+  const data = await res.json();
+  return data.prompt as string;
+}
+
+/**
+ * Parsea la respuesta que el usuario pegó desde claude.ai. Espera un bloque
+ * ```json con { summary, nodes, edges, diffs }. Devuelve el plan y los diffs.
+ */
+export function parseManualResponse(text: string): {
+  plan: ChangePlan;
+  diffs: ProposedDiff[];
+} {
+  let raw = text.trim();
+  // Extraer el bloque ```json ... ``` si vino con fences (o cualquier fence).
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) raw = fence[1].trim();
+  else {
+    // Si no hay fence, tomar desde el primer { hasta el último }.
+    const first = raw.indexOf("{");
+    const last = raw.lastIndexOf("}");
+    if (first >= 0 && last > first) raw = raw.slice(first, last + 1);
+  }
+
+  let parsed: {
+    summary?: string;
+    nodes?: PlanNode[];
+    edges?: PlanEdge[];
+    diffs?: ProposedDiff[];
+  };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "No pude leer el JSON de la respuesta. Pegá el bloque ```json que devolvió Claude, completo.",
+    );
+  }
+  if (!Array.isArray(parsed.nodes)) {
+    throw new Error("La respuesta no tiene 'nodes'. ¿Pegaste el JSON completo?");
+  }
+  return {
+    plan: {
+      summary: parsed.summary ?? "",
+      nodes: parsed.nodes ?? [],
+      edges: parsed.edges ?? [],
+    },
+    diffs: Array.isArray(parsed.diffs) ? parsed.diffs : [],
+  };
+}
+
 /** Lee el código fuente de un archivo del proyecto (cualquier tipo). */
 export async function fetchSource(
   projectPath: string,
