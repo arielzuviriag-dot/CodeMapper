@@ -129,7 +129,12 @@ function ListeningEdgeComponent({ id, source, target, data, style }: EdgeProps) 
     targetY: ty,
   });
 
-  const dashOffset = 1500 * (1 - progress);
+  // Dash length = el largo REAL del trazo, no un valor fijo. Si fuera fijo (ej.
+  // 1500), al separar las cards la línea supera ese largo y el sobrante cae en
+  // el "gap" del patrón → la línea no llega a la card aunque la flecha sí. Con
+  // el largo real, el guion cubre siempre toda la línea sin importar el espaseo.
+  const pathLen = Math.max(1, Math.hypot(tx - sx, ty - sy));
+  const dashOffset = pathLen * (1 - progress);
   const opacity = Math.min(1, progress * 5);
   const markerId = `trace-arrow-${id}`;
 
@@ -166,7 +171,7 @@ function ListeningEdgeComponent({ id, source, target, data, style }: EdgeProps) 
           style={{
             stroke,
             strokeWidth,
-            strokeDasharray: "1500",
+            strokeDasharray: pathLen,
             strokeDashoffset: dashOffset,
             opacity: opacity * styleOpacity,
             filter: highlighted ? (hl.filter as string) : undefined,
