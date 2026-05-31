@@ -456,3 +456,11 @@
 .cm-trace-error {
   animation: cm-trace-error-pulse 1.8s ease-in-out infinite;
 }
+
+/* IA.Grafo — resaltado de la línea que la IA va a tocar en el visor de código. */
+.cm-ia-changed-line {
+  background: rgba(185, 28, 66, 0.18);
+}
+.cm-ia-changed-gutter {
+  border-left: 3px solid var(--bordo);
+}
