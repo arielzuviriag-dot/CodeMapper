@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Database, HardDrive, Layout, Loader2, Server } from "lucide-react";
+import {
+  Database,
+  FolderTree,
+  HardDrive,
+  Layout,
+  Loader2,
+  Server,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -19,47 +26,79 @@ import { toast } from "sonner";
  */
 export function UploadZone() {
   const router = useRouter();
+  const [monorepoPath, setMonorepoPath] = useState("");
   const [frontendPath, setFrontendPath] = useState("");
   const [backendPath, setBackendPath] = useState("");
   const [dbPath, setDbPath] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const onAnalyze = () => {
-    const backend = backendPath.trim();
-    if (!backend) {
-      toast.error("Ingresá la ruta del backend Java");
-      return;
-    }
+  const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+
+  const launch = (projectPath: string, frontPath: string | undefined, label: string) => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     const demoMode = resolveDemoMode();
-    const front = frontendPath.trim();
     // Fire-and-forget POST. El map page consume la promesa vía pendingAnalysis
-    // bajo sessionId="pending" y redirige a la URL real cuando está listo. Si
-    // hay ruta de front, el backend la escanea y linkea pantalla → controller.
-    // No frontendKind — the backend auto-detects web vs React Native from the
-    // front-end's package.json.
-    const promise = analyzeLocalPath(backend, demoMode, {
-      frontendPath: front || undefined,
+    // bajo sessionId="pending" y redirige a la URL real cuando está listo.
+    const promise = analyzeLocalPath(projectPath, demoMode, {
+      frontendPath: frontPath,
     });
     useGraphStore.getState().setPendingAnalysis({
       promise,
-      description: `Analizando ${backend.split(/[\\/]/).pop() ?? backend}...`,
+      description: label,
       mode: "project",
       demo: demoMode === "pro" ? "pro" : undefined,
-      projectPath: backend,
+      projectPath,
     });
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
     router.push(`/map/pending${suffix}`);
   };
 
+  const onAnalyze = () => {
+    const mono = monorepoPath.trim();
+    if (mono) {
+      // Monorepo: una sola carpeta padre con front y back juntos. Paso la misma
+      // raíz como proyecto (parsea TODO el .java debajo) y como front (escanea
+      // TODO el front debajo) → linkeo cruzado sobre el repo entero.
+      launch(mono, mono, `Analizando monorepo ${baseName(mono)}...`);
+      return;
+    }
+    const backend = backendPath.trim();
+    if (!backend) {
+      toast.error("Ingresá la carpeta del monorepo o la ruta del backend Java");
+      return;
+    }
+    // Por partes: backend Java + (opcional) front. Igual que antes.
+    launch(backend, frontendPath.trim() || undefined, `Analizando ${baseName(backend)}...`);
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <p className="rounded-md border border-[var(--border-silver)] bg-[var(--bg-panel)]/40 px-3 py-2.5 text-xs leading-relaxed text-[var(--fg-secondary)]">
-        Analizá el proyecto completo de una aplicación. Pegá las rutas locales
-        donde viven el front-end y el backend en tu PC, más la documentación de
-        la base de datos. El análisis arranca desde el backend Java.
+        Analizá el proyecto completo de una aplicación. Si front y back viven en
+        una misma carpeta, usá <strong className="text-[var(--fg-primary)]">Monorepo</strong>{" "}
+        y estudio todo lo que haya adentro. Si están separados, cargalos por
+        partes abajo.
       </p>
+
+      <PathSlot
+        icon={<FolderTree className="h-4 w-4" />}
+        label="Monorepo"
+        hint="Carpeta padre con front + back juntos — la recorro entera y conecto lo que encuentre"
+        value={monorepoPath}
+        onChange={setMonorepoPath}
+        placeholder="C:\Users\ariel\Plixe"
+        disabled={isAnalyzing}
+        onEnter={onAnalyze}
+      />
+
+      <div className="flex items-center gap-3 py-0.5">
+        <span className="h-px flex-1 bg-[var(--border-silver)]" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--silver-dark)]">
+          o por partes
+        </span>
+        <span className="h-px flex-1 bg-[var(--border-silver)]" />
+      </div>
 
       <PathSlot
         icon={<Layout className="h-4 w-4" />}
@@ -105,7 +144,7 @@ export function UploadZone() {
 
       <Button
         onClick={onAnalyze}
-        disabled={!backendPath.trim() || isAnalyzing}
+        disabled={(!monorepoPath.trim() && !backendPath.trim()) || isAnalyzing}
         size="lg"
         className={cn(
           "uppercase tracking-[0.16em] text-white",
