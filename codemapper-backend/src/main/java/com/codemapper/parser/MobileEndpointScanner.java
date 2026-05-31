@@ -182,7 +182,7 @@ public class MobileEndpointScanner {
      *  flood the graph with buttons/utilities. */
     private boolean isPageFile(String file) {
         String n = file.replace('\\', '/').toLowerCase();
-        if (n.endsWith(".html") || n.endsWith(".htm")
+        if (n.endsWith(".html") || n.endsWith(".htm") || n.endsWith(".jsp")
                 || n.endsWith(".vue") || n.endsWith(".svelte")) {
             return true;
         }
@@ -282,7 +282,7 @@ public class MobileEndpointScanner {
                 String n = file.getFileName().toString().toLowerCase();
                 if (n.endsWith(".ts") || n.endsWith(".tsx") || n.endsWith(".js")
                         || n.endsWith(".jsx") || n.endsWith(".html") || n.endsWith(".htm")
-                        || n.endsWith(".vue") || n.endsWith(".svelte")) {
+                        || n.endsWith(".vue") || n.endsWith(".svelte") || n.endsWith(".jsp")) {
                     files.add(file);
                 }
                 return FileVisitResult.CONTINUE;

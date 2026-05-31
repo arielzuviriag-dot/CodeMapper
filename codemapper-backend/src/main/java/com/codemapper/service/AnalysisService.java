@@ -296,7 +296,10 @@ public class AnalysisService {
                         // "Aplicación" cross-stack: link the front-end screens →
                         // backend controllers once the Java parse is done.
                         crossStackLinker.streamWebLinks(
-                                session.getParsedClasses(), session.getFrontendPath(),
+                                session.getParsedClasses(),
+                                session.getProjectPath() == null ? null
+                                        : session.getProjectPath().toString(),
+                                session.getFrontendPath(),
                                 session.getFrontendKind(), sink);
                         if (held[0] != null) sink.accept(held[0]);
                     }

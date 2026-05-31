@@ -20,10 +20,20 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -68,8 +78,9 @@ public class CrossStackLinker {
      * resulting WEB_SCREEN nodes + HTTP_CALL edges through {@code sink}. No-op
      * when there's no front-end path or it isn't a directory.
      */
-    public void streamWebLinks(List<ParsedClass> classes, String frontendPath,
-                               String frontendKind, Consumer<BaseEvent> sink) {
+    public void streamWebLinks(List<ParsedClass> classes, String projectRoot,
+                               String frontendPath, String frontendKind,
+                               Consumer<BaseEvent> sink) {
         if (frontendPath == null || frontendPath.isBlank()) return;
         Path root = Path.of(frontendPath);
         if (!Files.isDirectory(root)) {
@@ -94,7 +105,10 @@ public class CrossStackLinker {
             return;
         }
 
+        // Endpoint table from BOTH sources: Spring annotations (@GetMapping…)
+        // and Struts/XML config (struts.xml / struts-config.xml → Action class).
         List<ControllerEndpoint> endpoints = collectControllerEndpoints(classes);
+        endpoints.addAll(collectStrutsEndpoints(projectRoot, classes));
 
         Set<String> emittedNodes = new HashSet<>();
         Set<String> emittedEdges = new HashSet<>();
@@ -222,6 +236,115 @@ public class CrossStackLinker {
         return false;
     }
 
+    // ── Struts / XML config endpoints ───────────────────────────────────
+
+    private static final Set<String> XML_EXCLUDED =
+            Set.of("node_modules", ".git", "target", "build", "dist", ".idea");
+
+    /**
+     * Parse {@code struts.xml} / {@code struts-config.xml} under the project
+     * root and map each action's URL → its Action class node. Verb is "" —
+     * Struts doesn't gate by HTTP method — so a JSP form/link matches by path.
+     * Supports Struts 2 ({@code <action name= class=>} inside a
+     * {@code <package namespace=>}) and Struts 1 ({@code <action path= type=>}).
+     */
+    private List<ControllerEndpoint> collectStrutsEndpoints(String projectRoot,
+                                                            List<ParsedClass> classes) {
+        List<ControllerEndpoint> out = new ArrayList<>();
+        if (projectRoot == null || projectRoot.isBlank()) return out;
+        Path root = Path.of(projectRoot);
+        if (!Files.isDirectory(root)) return out;
+
+        Map<String, String> idByFqn = new HashMap<>();
+        for (ParsedClass pc : classes) {
+            if (pc.getFullyQualifiedName() != null) {
+                idByFqn.put(pc.getFullyQualifiedName(), pc.getId());
+            }
+        }
+
+        for (Path xml : findStrutsXml(root)) {
+            try {
+                Document doc = parseXmlNoDtd(xml);
+                NodeList actions = doc.getElementsByTagName("action");
+                for (int i = 0; i < actions.getLength(); i++) {
+                    if (!(actions.item(i) instanceof Element a)) continue;
+                    String cls = a.getAttribute("class");  // Struts 2
+                    String type = a.getAttribute("type");  // Struts 1
+                    String fqn = !cls.isBlank() ? cls : type;
+                    if (fqn.isBlank()) continue;
+                    String id = idByFqn.get(fqn);
+                    if (id == null) continue; // Action class not in parsed project
+                    String rawPath = !cls.isBlank()
+                            ? joinPaths(parentNamespace(a), a.getAttribute("name")) // Struts 2
+                            : a.getAttribute("path");                               // Struts 1
+                    String path = MobileEndpointScanner.normalizePath(rawPath);
+                    if (path != null) out.add(new ControllerEndpoint("", path, id));
+                }
+            } catch (Exception e) {
+                log.debug("Cross-stack: could not parse {}: {}", xml, e.getMessage());
+            }
+        }
+        if (!out.isEmpty()) {
+            log.info("Cross-stack: {} Struts action endpoint(s) from XML", out.size());
+        }
+        return out;
+    }
+
+    /** Namespace of the action's enclosing {@code <package>} (Struts 2), or "". */
+    private String parentNamespace(Element action) {
+        org.w3c.dom.Node n = action.getParentNode();
+        while (n instanceof Element e) {
+            if ("package".equals(e.getTagName())) return e.getAttribute("namespace");
+            n = e.getParentNode();
+        }
+        return "";
+    }
+
+    private List<Path> findStrutsXml(Path root) {
+        List<Path> out = new ArrayList<>();
+        try {
+            Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    Path name = dir.getFileName();
+                    if (!dir.equals(root) && name != null
+                            && XML_EXCLUDED.contains(name.toString())) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String n = file.getFileName().toString().toLowerCase();
+                    if (n.equals("struts.xml") || n.equals("struts-config.xml")) {
+                        out.add(file);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            log.debug("Cross-stack: struts xml walk failed under {}: {}", root, e.getMessage());
+        }
+        return out;
+    }
+
+    /** Parse XML without fetching the Struts DTD (offline + closes XXE). */
+    private Document parseXmlNoDtd(Path xml) throws Exception {
+        DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
+        f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        f.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        f.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        f.setValidating(false);
+        DocumentBuilder b = f.newDocumentBuilder();
+        return b.parse(xml.toFile());
+    }
+
     private Map<String, Endpoint> extractMappings(TypeDeclaration<?> type) {
         Map<String, Endpoint> out = new LinkedHashMap<>();
         String prefix = "";
@@ -328,12 +451,24 @@ public class CrossStackLinker {
 
     private boolean pathsMatch(String a, String b) {
         if (a == null || b == null) return false;
-        return stripApi(a).equals(stripApi(b));
+        return normPath(a).equals(normPath(b));
+    }
+
+    private String normPath(String p) {
+        return stripExt(stripApi(p));
     }
 
     private String stripApi(String p) {
         if (p.startsWith("/api/")) return p.substring(4);
         if (p.equals("/api")) return "/";
+        return p;
+    }
+
+    /** Drop a Struts action extension so a JSP form's {@code /x.do} matches the
+     *  {@code /x} mapping in struts.xml. */
+    private String stripExt(String p) {
+        if (p.endsWith(".do")) return p.substring(0, p.length() - 3);
+        if (p.endsWith(".action")) return p.substring(0, p.length() - 7);
         return p;
     }
 
