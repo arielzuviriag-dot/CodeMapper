@@ -61,7 +61,7 @@ public class CrossStackLinker {
     private record ControllerEndpoint(String verb, String path, String controllerId) {}
 
     /** Safety cap so a huge front-end can't flood the graph. */
-    private static final int MAX_WEB_NODES = 80;
+    private static final int MAX_WEB_NODES = 200;
 
     /**
      * Scan {@code frontendPath}, link screens → controllers, and push the
@@ -128,12 +128,27 @@ public class CrossStackLinker {
                 if (controllerId != null) {
                     String edgeKey = screenId + "->" + controllerId;
                     if (emittedEdges.add(edgeKey)) {
+                        String label = (call.verb() == null || call.verb().isBlank())
+                                ? call.path() : call.verb() + " " + call.path();
                         sink.accept(new ConnectionFoundEvent(screenId, controllerId,
-                                ConnectionType.HTTP_CALL, call.verb() + " " + call.path()));
+                                ConnectionType.HTTP_CALL, label));
                     }
                 }
             }
             if (emittedNodes.size() >= MAX_WEB_NODES) break;
+        }
+
+        // Draw EVERY page/screen the scan found — even ones with no detected
+        // backend call — so the front surface is complete (orphan nodes).
+        for (String screenFile : scan.screenFiles()) {
+            if (emittedNodes.size() >= MAX_WEB_NODES) {
+                log.info("Cross-stack: reached MAX_WEB_NODES cap ({})", MAX_WEB_NODES);
+                break;
+            }
+            String screenId = "web:" + screenFile.replace('\\', '/');
+            if (emittedNodes.add(screenId)) {
+                sink.accept(webNode(screenId, screenFile, root));
+            }
         }
 
         log.info("Cross-stack link of {}: {} web node(s), {} edge(s)",
@@ -306,6 +321,8 @@ public class CrossStackLinker {
 
     private boolean verbMatches(String endpointVerb, String callVerb) {
         if (endpointVerb == null || endpointVerb.isBlank()) return true;
+        // fetch()/<form> calls don't carry a verb — match by path alone.
+        if (callVerb == null || callVerb.isBlank()) return true;
         return endpointVerb.equalsIgnoreCase(callVerb);
     }
 

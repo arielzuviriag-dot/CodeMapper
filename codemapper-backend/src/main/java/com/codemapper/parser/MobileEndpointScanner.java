@@ -45,6 +45,18 @@ public class MobileEndpointScanner {
     /** {@code something.post<Type>('/path'} or with backtick/double quotes. */
     private static final Pattern API_CALL = Pattern.compile(
             "\\b[A-Za-z_$][\\w$]*\\.(get|post|put|patch|delete)\\s*(?:<[^>]*>)?\\s*\\(\\s*[`'\"]([^`'\"]+)[`'\"]");
+    /** {@code fetch('/x')} / {@code axios('/x')} — verb unknown (wildcard). */
+    private static final Pattern FETCH_CALL = Pattern.compile(
+            "\\b(?:fetch|axios)\\s*\\(\\s*[`'\"]([^`'\"]+)[`'\"]");
+    /** jQuery {@code $.get('/x')} / {@code $.post('/x')} (old front). */
+    private static final Pattern JQUERY_CALL = Pattern.compile(
+            "\\$\\.(get|post)\\s*\\(\\s*[`'\"]([^`'\"]+)[`'\"]");
+    /** {@code XMLHttpRequest.open('GET','/x')} (classic AJAX). */
+    private static final Pattern XHR_CALL = Pattern.compile(
+            "\\.open\\s*\\(\\s*[`'\"]([A-Za-z]+)[`'\"]\\s*,\\s*[`'\"]([^`'\"]+)[`'\"]");
+    /** Old HTML form: {@code action="/x"} — verb unknown (wildcard). */
+    private static final Pattern FORM_ACTION = Pattern.compile(
+            "action\\s*=\\s*[`'\"]([^`'\"]+)[`'\"]");
 
     // Only EXPORTED top-level declarations are candidates for "the action" — a
     // local `const res = await api.post(...)` must NOT win over the exported
@@ -56,8 +68,16 @@ public class MobileEndpointScanner {
 
     public record RnApiCall(String verb, String path, String functionName, String file) {}
 
+    /**
+     * @param apiCalls           every HTTP call found (verb+path+fn+file).
+     * @param screensByFunction  wrapper fn → screen files that reference it.
+     * @param screenFiles        ALL page/screen-like files found (web mode) —
+     *                           so the linker can show every screen, even ones
+     *                           with no detected call.
+     */
     public record ScanResult(List<RnApiCall> apiCalls,
-                             Map<String, List<String>> screensByFunction) {}
+                             Map<String, List<String>> screensByFunction,
+                             List<String> screenFiles) {}
 
     /** Narrow (React-Native) screen detection — back-compat for the exception
      *  / mobile-origins path. */
@@ -78,7 +98,7 @@ public class MobileEndpointScanner {
             files = collectSourceFiles(root);
         } catch (IOException e) {
             log.warn("Mobile scan: could not walk {}: {}", root, e.getMessage());
-            return new ScanResult(calls, Map.of());
+            return new ScanResult(calls, Map.of(), List.of());
         }
 
         Map<String, String> fileText = new LinkedHashMap<>();
@@ -98,13 +118,15 @@ public class MobileEndpointScanner {
             List<Integer> declIdx = new ArrayList<>();
             collectDecls(text, declIdx, declNames);
 
-            Matcher m = API_CALL.matcher(text);
-            while (m.find()) {
-                String verb = m.group(1).toUpperCase();
-                String path = normalizePath(m.group(2));
-                if (path == null) continue;
-                String fn = enclosingFunction(declIdx, declNames, m.start(), file);
-                calls.add(new RnApiCall(verb, path, fn, file));
+            // The modern wrapper-client pattern (api.get/post(...)).
+            collectCalls(API_CALL, 1, 2, text, file, declIdx, declNames, calls);
+            // Any-front patterns — fetch/axios/jQuery/XHR/old HTML forms — so we
+            // catch old and new front-ends, not just a centralized TS client.
+            if (webMode) {
+                collectCalls(JQUERY_CALL, 1, 2, text, file, declIdx, declNames, calls);
+                collectCalls(XHR_CALL, 1, 2, text, file, declIdx, declNames, calls);
+                collectCalls(FETCH_CALL, 0, 1, text, file, declIdx, declNames, calls);
+                collectCalls(FORM_ACTION, 0, 1, text, file, declIdx, declNames, calls);
             }
         }
 
@@ -126,9 +148,46 @@ public class MobileEndpointScanner {
             screensByFn.put(c.functionName(), screens);
         }
 
-        log.info("Mobile scan of {}: {} api calls, {} wrapper functions",
-                root, calls.size(), screensByFn.size());
-        return new ScanResult(calls, screensByFn);
+        // Every page/screen-like file — so the linker can draw the FULL front
+        // surface, not only the screens that happen to call the backend.
+        List<String> screenFiles = new ArrayList<>();
+        if (webMode) {
+            for (String file : fileText.keySet()) {
+                if (isPageFile(file)) screenFiles.add(file);
+            }
+        }
+
+        log.info("Mobile scan of {}: {} api calls, {} wrapper functions, {} screen files",
+                root, calls.size(), screensByFn.size(), screenFiles.size());
+        return new ScanResult(calls, screensByFn, screenFiles);
+    }
+
+    /** Run one call-pattern over a file, attributing each hit to its enclosing
+     *  exported function. verbGroup 0 = "no verb" (wildcard match by path). */
+    private void collectCalls(Pattern pattern, int verbGroup, int pathGroup,
+                              String text, String file, List<Integer> declIdx,
+                              List<String> declNames, List<RnApiCall> out) {
+        Matcher m = pattern.matcher(text);
+        while (m.find()) {
+            String verb = verbGroup > 0 ? m.group(verbGroup).toUpperCase() : "";
+            String path = normalizePath(m.group(pathGroup));
+            if (path == null) continue;
+            String fn = enclosingFunction(declIdx, declNames, m.start(), file);
+            out.add(new RnApiCall(verb, path, fn, file));
+        }
+    }
+
+    /** A page/screen-level file: any HTML/Vue/Svelte file, or a file under a
+     *  conventional screen dir. Deliberately NOT every component — that would
+     *  flood the graph with buttons/utilities. */
+    private boolean isPageFile(String file) {
+        String n = file.replace('\\', '/').toLowerCase();
+        if (n.endsWith(".html") || n.endsWith(".htm")
+                || n.endsWith(".vue") || n.endsWith(".svelte")) {
+            return true;
+        }
+        return n.contains("/pages/") || n.contains("/views/") || n.contains("/screens/")
+                || n.contains("/routes/") || n.contains("/app/") || n.contains("/templates/");
     }
 
     /** A "screen" lives under app/ or screens/ — the expo-router / RN UI dirs.
@@ -220,8 +279,10 @@ public class MobileEndpointScanner {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                String n = file.getFileName().toString();
-                if (n.endsWith(".ts") || n.endsWith(".tsx") || n.endsWith(".js") || n.endsWith(".jsx")) {
+                String n = file.getFileName().toString().toLowerCase();
+                if (n.endsWith(".ts") || n.endsWith(".tsx") || n.endsWith(".js")
+                        || n.endsWith(".jsx") || n.endsWith(".html") || n.endsWith(".htm")
+                        || n.endsWith(".vue") || n.endsWith(".svelte")) {
                     files.add(file);
                 }
                 return FileVisitResult.CONTINUE;
