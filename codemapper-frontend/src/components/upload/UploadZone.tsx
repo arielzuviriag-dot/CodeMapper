@@ -10,8 +10,6 @@ import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-type FrontendKind = "web" | "react-native";
-
 /**
  * "Aplicación" — analiza el proyecto completo pasando las RUTAS físicas de cada
  * parte en la PC (como el tab "Java" / la pantalla de Escuchar), en vez de
@@ -22,7 +20,6 @@ type FrontendKind = "web" | "react-native";
 export function UploadZone() {
   const router = useRouter();
   const [frontendPath, setFrontendPath] = useState("");
-  const [frontendKind, setFrontendKind] = useState<FrontendKind>("web");
   const [backendPath, setBackendPath] = useState("");
   const [dbPath, setDbPath] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -40,9 +37,10 @@ export function UploadZone() {
     // Fire-and-forget POST. El map page consume la promesa vía pendingAnalysis
     // bajo sessionId="pending" y redirige a la URL real cuando está listo. Si
     // hay ruta de front, el backend la escanea y linkea pantalla → controller.
+    // No frontendKind — the backend auto-detects web vs React Native from the
+    // front-end's package.json.
     const promise = analyzeLocalPath(backend, demoMode, {
       frontendPath: front || undefined,
-      frontendKind: front ? frontendKind : undefined,
     });
     useGraphStore.getState().setPendingAnalysis({
       promise,
@@ -66,21 +64,7 @@ export function UploadZone() {
       <PathSlot
         icon={<Layout className="h-4 w-4" />}
         label="Front end"
-        hint={
-          frontendKind === "web"
-            ? "Ruta del cliente web (HTML, CSS, JS, React, etc.)"
-            : "Ruta del proyecto React Native / Expo"
-        }
-        topRow={
-          <SegmentedRow
-            value={frontendKind}
-            onChange={setFrontendKind}
-            options={[
-              { value: "web", label: "Web" },
-              { value: "react-native", label: "React Native" },
-            ]}
-          />
-        }
+        hint="Ruta del front-end (web o React Native — se detecta solo)"
         value={frontendPath}
         onChange={setFrontendPath}
         placeholder="C:\Users\ariel\Reserva\frontend-reserva"

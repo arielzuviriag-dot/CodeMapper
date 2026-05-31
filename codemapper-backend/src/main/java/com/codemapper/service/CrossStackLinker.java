@@ -77,9 +77,17 @@ public class CrossStackLinker {
             return;
         }
 
-        // Web admins don't use the RN /app//screens/ convention — widen screen
-        // detection unless the user explicitly picked React Native.
-        boolean webMode = !"react-native".equalsIgnoreCase(frontendKind);
+        // Auto-detect web vs React Native from package.json so the user never
+        // has to pick. An explicit frontendKind (if ever passed) still wins.
+        boolean webMode;
+        if ("react-native".equalsIgnoreCase(frontendKind)) {
+            webMode = false;
+        } else if ("web".equalsIgnoreCase(frontendKind)) {
+            webMode = true;
+        } else {
+            webMode = !isReactNative(root);
+        }
+        log.info("Cross-stack: {} detected as {}", frontendPath, webMode ? "web" : "react-native");
         MobileEndpointScanner.ScanResult scan = scanner.scan(root, webMode);
         if (scan.apiCalls().isEmpty()) {
             log.info("Cross-stack: no HTTP calls found under {}", frontendPath);
@@ -169,6 +177,22 @@ public class CrossStackLinker {
             }
         }
         return out;
+    }
+
+    /** A front-end is React Native when its package.json depends on
+     *  react-native or expo. Defaults to false (web) when unsure — the web
+     *  screen heuristic is a superset, so it degrades gracefully. */
+    private boolean isReactNative(Path root) {
+        Path pkg = root.resolve("package.json");
+        try {
+            if (Files.isRegularFile(pkg)) {
+                String text = Files.readString(pkg);
+                return text.contains("\"react-native\"") || text.contains("\"expo\"");
+            }
+        } catch (Exception ignored) {
+            // unreadable package.json — fall through to web default
+        }
+        return false;
     }
 
     private boolean looksLikeController(ParsedClass pc) {
