@@ -32,7 +32,7 @@ interface ListeningEdgeData extends Record<string, unknown> {
 
 const STROKE = "#B91C42";
 const STROKE_ERROR = "#DC2626";
-const ARROW_CLEARANCE = 44;
+const ARROW_CLEARANCE = 4;
 const ANIM_DURATION_MS = 1400;
 const ANIM_DELAY_MS = 300;
 const STAGGER_MS = 280;
