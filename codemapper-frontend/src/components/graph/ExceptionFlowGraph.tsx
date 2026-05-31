@@ -3,6 +3,7 @@
 import {
   Background,
   BackgroundVariant,
+  Controls,
   type Edge,
   Handle,
   type Node,
@@ -15,6 +16,7 @@ import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo } from "react";
 import { AlertOctagon, Info, Smartphone } from "lucide-react";
 import { useGraphStore } from "@/store/graphStore";
+import { useGraphInteraction } from "@/hooks/useGraphInteraction";
 import { ErrorReportPanel } from "./ErrorReportPanel";
 import { buildClassChain } from "./exceptionChain";
 
@@ -101,7 +103,10 @@ function ExceptionFlowInner() {
   const openMobileFile = useGraphStore((s) => s.openMobileFile);
   const { fitView, getNode, setCenter } = useReactFlow();
 
-  const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
+  const { nodes: computedNodes, edges: computedEdges } = useMemo<{
+    nodes: Node[];
+    edges: Edge[];
+  }>(() => {
     if (!report) return { nodes: [], edges: [] };
     const chain = buildClassChain(report.causes);
     if (chain.length === 0) return { nodes: [], edges: [] };
@@ -200,10 +205,24 @@ function ExceptionFlowInner() {
     };
   }, [report, mobileOrigins]);
 
+  const {
+    nodes: rfNodes,
+    edges: rfEdges,
+    onNodesChange,
+    onEdgesChange,
+    onMoveStart,
+    onNodeDragStart,
+    onNodeDragStop,
+    shouldAutoFit,
+  } = useGraphInteraction(computedNodes, computedEdges);
+
   useEffect(() => {
-    const t = setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1.1 }), 200);
+    if (!shouldAutoFit()) return;
+    const t = setTimeout(() => {
+      if (shouldAutoFit()) fitView({ duration: 600, padding: 0.2, maxZoom: 1.1 });
+    }, 200);
     return () => clearTimeout(t);
-  }, [fitView, nodes.length]);
+  }, [fitView, computedNodes.length, shouldAutoFit]);
 
   return (
     <div className="flex h-full w-full bg-[var(--bg-base)]">
@@ -214,7 +233,7 @@ function ExceptionFlowInner() {
       </aside>
 
       <div className="relative flex-1">
-      {nodes.length === 0 ? (
+      {computedNodes.length === 0 ? (
         report ? (
           <NoUserCodeCard
             type={report.topExceptionType}
@@ -229,16 +248,21 @@ function ExceptionFlowInner() {
         )
       ) : (
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={rfNodes}
+          edges={rfEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           nodeTypes={NODE_TYPES}
           proOptions={{ hideAttribution: true }}
           minZoom={0.2}
           maxZoom={2}
-          nodesDraggable={false}
+          nodesDraggable
           nodesConnectable={false}
           elementsSelectable={false}
           fitView
+          onMoveStart={onMoveStart}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDragStop={onNodeDragStop}
           onNodeClick={(_, node) => {
             const data = node.data as Record<string, unknown>;
             if (data.kind === "class") {
@@ -263,6 +287,7 @@ function ExceptionFlowInner() {
             size={1}
             color="rgba(192, 192, 200, 0.08)"
           />
+          <Controls showInteractive={false} />
         </ReactFlow>
       )}
       </div>

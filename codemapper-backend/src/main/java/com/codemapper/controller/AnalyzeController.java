@@ -51,8 +51,12 @@ public class AnalyzeController {
             throws IOException {
         // ENDPOINT DE DESARROLLO LOCAL — no exponer en producción
         boolean isPro = isProMode(request.getDemoMode());
-        log.info("Analyze path request: {} [demoMode={}]", request.getAbsolutePath(), request.getDemoMode());
-        return ResponseEntity.ok(analysisService.handlePath(request.getAbsolutePath(), isPro));
+        log.info("Analyze path request: {} [front={} kind={} demoMode={}]",
+                request.getAbsolutePath(), request.getFrontendPath(),
+                request.getFrontendKind(), request.getDemoMode());
+        return ResponseEntity.ok(analysisService.handlePath(
+                request.getAbsolutePath(), request.getFrontendPath(),
+                request.getFrontendKind(), isPro));
     }
 
     @PostMapping(value = "/github", consumes = MediaType.APPLICATION_JSON_VALUE)

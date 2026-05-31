@@ -315,6 +315,7 @@ const DEFAULT_FILTERS: FilterState = {
     ENUM: true,
     RECORD: true,
     ABSTRACT_CLASS: true,
+    WEB_SCREEN: true,
   },
   connectionTypeFilters: {
     EXTENDS: true,
@@ -323,6 +324,7 @@ const DEFAULT_FILTERS: FilterState = {
     DEPENDENCY_INJECTION: true,
     METHOD_CALL: true,
     ANNOTATION_USAGE: true,
+    HTTP_CALL: true,
   },
   focusConnectionTypeFilters: {
     CALLS: true,

@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import {
   Background,
   BackgroundVariant,
+  Controls,
   type Edge,
   type Node,
   ReactFlow,
@@ -20,6 +21,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toPng } from "html-to-image";
+import { useGraphInteraction } from "@/hooks/useGraphInteraction";
 import {
   ArrowLeft,
   Clock,
@@ -251,7 +253,7 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
   // Build React Flow nodes + edges from the store. Layout: origen at
   // (0,0), visited nodes evenly spaced on a ring of RING_RADIUS. As N
   // grows the ring gets crowded — leave that for a v2 (multi-ring).
-  const { rfNodes, rfEdges } = useMemo(() => {
+  const { rfNodes: computedNodes, rfEdges: computedEdges } = useMemo(() => {
     const others = nodes.filter((n) => !n.isOrigen);
     const N = Math.max(others.length, 1);
     const rfNodes: Node[] = [];
@@ -334,16 +336,29 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
     return { rfNodes, rfEdges };
   }, [nodes, edges, activeNodeId, isHistorical]);
 
-  // Frame the tree on first render and whenever the node count changes.
+  const {
+    nodes: rfNodes,
+    edges: rfEdges,
+    onNodesChange,
+    onEdgesChange,
+    onMoveStart,
+    onNodeDragStart,
+    onNodeDragStop,
+    shouldAutoFit,
+  } = useGraphInteraction(computedNodes, computedEdges);
+
+  // Frame the tree on first render and whenever the node count changes —
+  // unless the user has taken manual control of the view.
   const flowRef = useRef<HTMLDivElement | null>(null);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    if (!shouldAutoFit()) return;
     if (fitTimer.current) clearTimeout(fitTimer.current);
     fitTimer.current = setTimeout(() => {
-      fitView({ duration: 350, padding: 0.18 });
+      if (shouldAutoFit()) fitView({ duration: 350, padding: 0.18 });
     }, 80);
-  }, [fitView, rfNodes.length]);
+  }, [fitView, computedNodes.length, shouldAutoFit]);
 
   const onExport = useCallback(async () => {
     const target = flowRef.current?.querySelector(
@@ -621,17 +636,22 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           nodeTypes={NODE_TYPES}
           edgeTypes={EDGE_TYPES}
           proOptions={{ hideAttribution: true }}
           minZoom={0.4}
           maxZoom={2}
-          nodesDraggable={false}
+          nodesDraggable
           nodesConnectable={false}
           panOnScroll
           zoomOnPinch
           fitView
           fitViewOptions={{ padding: 0.18 }}
+          onMoveStart={onMoveStart}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDragStop={onNodeDragStop}
         >
           <Background
             variant={BackgroundVariant.Dots}
@@ -639,6 +659,7 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
             size={1}
             color="rgba(192, 192, 200, 0.07)"
           />
+          <Controls showInteractive={false} />
         </ReactFlow>
       </div>
     </div>

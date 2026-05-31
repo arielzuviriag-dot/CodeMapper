@@ -59,7 +59,19 @@ public class MobileEndpointScanner {
     public record ScanResult(List<RnApiCall> apiCalls,
                              Map<String, List<String>> screensByFunction) {}
 
+    /** Narrow (React-Native) screen detection — back-compat for the exception
+     *  / mobile-origins path. */
     public ScanResult scan(Path root) {
+        return scan(root, false);
+    }
+
+    /**
+     * @param webMode when true, also treat web screen dirs ({@code /pages/},
+     *                {@code /views/}, {@code /routes/}) and UI {@code .tsx/.jsx}
+     *                files as "screens" — a web admin doesn't use the RN
+     *                {@code /app/}|{@code /screens/} convention.
+     */
+    public ScanResult scan(Path root, boolean webMode) {
         List<RnApiCall> calls = new ArrayList<>();
         List<Path> files = new ArrayList<>();
         try {
@@ -106,7 +118,7 @@ public class MobileEndpointScanner {
             for (var entry : fileText.entrySet()) {
                 String file = entry.getKey();
                 if (file.equals(c.file())) continue; // skip the defining module
-                if (!isScreenFile(file)) continue;
+                if (!isScreenFile(file, webMode)) continue;
                 if (use.matcher(entry.getValue()).find()) {
                     screens.add(file);
                 }
@@ -119,10 +131,22 @@ public class MobileEndpointScanner {
         return new ScanResult(calls, screensByFn);
     }
 
-    /** A "screen" lives under app/ or screens/ — the expo-router / RN UI dirs. */
-    private boolean isScreenFile(String file) {
+    /** A "screen" lives under app/ or screens/ — the expo-router / RN UI dirs.
+     *  In web mode, also count pages/views/routes dirs and UI .tsx/.jsx files
+     *  (excluding api/client/lib/hooks/utils/services modules). */
+    private boolean isScreenFile(String file, boolean webMode) {
         String n = file.replace('\\', '/').toLowerCase();
-        return n.contains("/app/") || n.contains("/screens/");
+        if (n.contains("/app/") || n.contains("/screens/")) return true;
+        if (!webMode) return false;
+        if (n.contains("/pages/") || n.contains("/views/") || n.contains("/routes/")) {
+            return true;
+        }
+        if (n.endsWith(".tsx") || n.endsWith(".jsx")) {
+            return !(n.contains("/api/") || n.contains("/client") || n.contains("/lib/")
+                    || n.contains("/hooks/") || n.contains("/utils/")
+                    || n.contains("/services/"));
+        }
+        return false;
     }
 
     /** Normalize a raw path so it can match a Spring mapping. Strips the query

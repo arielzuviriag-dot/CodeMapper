@@ -10,6 +10,8 @@ import {
   Circle,
   CircleDashed,
   CircleDot,
+  Coffee,
+  Globe,
   Lock,
   Shapes,
 } from "lucide-react";
@@ -51,8 +53,12 @@ const INTERFACE_THEME: HeaderTheme = {
   fg: "#C0C0C8",
   border: "1px dashed #C0C0C8",
 };
+/** Front-end screen — classic "internet blue" so the web layer reads apart
+ *  from every Java (bordó/silver) card at a glance. */
+const WEB_THEME: HeaderTheme = { bg: "#2F81F7", fg: "#F5F5F5" };
 
 function pickHeaderTheme(data: ClassNodeData): HeaderTheme {
+  if (data.type === "WEB_SCREEN") return WEB_THEME;
   if (data.type === "INTERFACE") return INTERFACE_THEME;
   if (data.type === "ENUM") return ENUM_THEME;
   for (const ann of data.annotations ?? []) {
@@ -60,6 +66,16 @@ function pickHeaderTheme(data: ClassNodeData): HeaderTheme {
     if (ANNOTATION_THEMES[stripped]) return ANNOTATION_THEMES[stripped];
   }
   return DEFAULT_THEME;
+}
+
+/** The stack marker the user asked for: 🌐 globe = web (front-end), ☕ coffee =
+ *  Java (backend). Shown on every card so you can tell the layer at a glance. */
+function StackBadge({ kind }: { kind: ClassKind }) {
+  return kind === "WEB_SCREEN" ? (
+    <Globe className="h-4 w-4" />
+  ) : (
+    <Coffee className="h-4 w-4" />
+  );
 }
 
 function KindIcon({ kind }: { kind: ClassKind }) {
@@ -118,6 +134,42 @@ function ClassNodeComponent({ data, id }: NodeProps) {
     ? "border-[var(--bordo)] ring-2 ring-[var(--bordo)]/40"
     : "border-[var(--border-silver)]";
 
+  // Front-end screen — a dedicated compact card (no Java fields/methods),
+  // globe-marked and internet-blue so it never reads as a Java class.
+  if (classData.type === "WEB_SCREEN") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.6 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.25 }}
+        whileHover={{ scale: 1.02 }}
+        className={`${baseClass} ${selectedClass} w-[240px]`}
+        onClick={() => selectNode(id)}
+      >
+        <Handle type="target" position={Position.Top} className="!opacity-0" />
+        <Handle type="source" position={Position.Bottom} className="!opacity-0" />
+        <div
+          className="flex items-center gap-2 rounded-t-md px-3 py-2 text-sm font-semibold"
+          style={{ backgroundColor: theme.bg, color: theme.fg }}
+        >
+          <Globe className="h-4 w-4" />
+          <span className="truncate">{classData.name}</span>
+          <span className="ml-auto text-[10px] uppercase tracking-[0.16em] opacity-80">
+            web
+          </span>
+        </div>
+        <div className="flex flex-col gap-1 px-3 py-2.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#2F81F7]">
+            Front-end
+          </span>
+          <span className="break-all font-mono text-[11px] leading-snug text-[var(--fg-secondary)]">
+            {classData.fullyQualifiedName || classData.filePath}
+          </span>
+        </div>
+      </motion.div>
+    );
+  }
+
   if (isCompact) {
     const primaryAnn = (classData.annotations ?? [])
       .map((a) => a.replace(/^@/, "").split("(")[0])[0];
@@ -136,6 +188,7 @@ function ClassNodeComponent({ data, id }: NodeProps) {
             border: theme.border,
           }}
         >
+          <StackBadge kind={classData.type} />
           <KindIcon kind={classData.type} />
           <span className="truncate">{classData.name}</span>
         </div>
@@ -173,6 +226,7 @@ function ClassNodeComponent({ data, id }: NodeProps) {
           border: theme.border,
         }}
       >
+        <StackBadge kind={classData.type} />
         <KindIcon kind={classData.type} />
         <span className="truncate">{classData.name}</span>
         {classData.type === "ABSTRACT_CLASS" && (

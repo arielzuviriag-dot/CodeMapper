@@ -29,7 +29,7 @@ export default function HomePage() {
       {/* CRT scan line — silver dashed, drifts top→bottom in loop */}
       {!prefersReducedMotion && <ScanLine />}
 
-      <div className="relative mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-start gap-6 px-6 pb-16 pt-6">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-start gap-6 px-6 pb-16 pt-6">
         <header className="flex items-center justify-center gap-5">
           <div className="flex flex-col items-center gap-1 text-center">
             <motion.h1
@@ -88,7 +88,7 @@ export default function HomePage() {
 function ScanLine() {
   return (
     <motion.div
-      className="pointer-events-none fixed left-0 right-0 z-40 h-px"
+      className="pointer-events-none fixed left-0 right-0 z-0 h-px"
       style={{
         backgroundImage:
           "repeating-linear-gradient(to right, rgba(192,192,200,0.4) 0 6px, transparent 6px 12px)",

@@ -12,6 +12,7 @@ import {
   Crosshair,
   FileCode,
   GitBranch,
+  Globe,
   Hash,
   Loader2,
   Shapes,
@@ -514,6 +515,7 @@ const KIND_META: Record<
   ENUM: { label: "Enum", Icon: Shapes },
   RECORD: { label: "Record", Icon: CircleDot },
   ABSTRACT_CLASS: { label: "Abstract", Icon: Square },
+  WEB_SCREEN: { label: "Web", Icon: Globe },
 };
 
 /** Compact metadata chip — class kind + line count. Sits next to the FOCO

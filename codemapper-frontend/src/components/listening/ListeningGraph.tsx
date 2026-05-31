@@ -3,15 +3,18 @@
 import {
   Background,
   BackgroundVariant,
+  Controls,
   type Edge,
   MiniMap,
   type Node,
   ReactFlow,
   ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useListeningStore } from "@/store/listeningStore";
 import { ListeningNode, type ListeningNodeData } from "./ListeningNode";
 import { ListeningEdge } from "./ListeningEdge";
@@ -34,6 +37,11 @@ function ringRadius(depth: number): number {
  * the origin (where the "Iniciar" button was); each successive ring is one
  * call deeper. Reuses the Foco visual language via {@link ListeningNode} /
  * {@link ListeningEdge} but is driven entirely by the live trace store.
+ *
+ * Interaction: the canvas pans (drag background) and zooms (wheel / Controls),
+ * and each class node can be dragged. The auto-fit that keeps new rings in view
+ * backs off the moment the user pans/zooms/drags, so manual positioning is
+ * never yanked back by an incoming span.
  */
 function ListeningGraphInner() {
   const nodesData = useListeningStore((s) => s.nodes);
@@ -42,8 +50,21 @@ function ListeningGraphInner() {
   const selectError = useListeningStore((s) => s.selectError);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Once the user pans/zooms/drags, stop auto-fitting so the view stays put
+  // (otherwise every incoming span re-centers and the graph feels frozen).
+  const userMovedRef = useRef(false);
+  // Positions of nodes the user dragged — preserved across live rebuilds so a
+  // moved class doesn't snap back when the next span arrives.
+  const draggedPosRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-  const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
+  const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
+  const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  // Target layout computed from the store (radial rings by call depth).
+  const { nodes: computedNodes, edges: computedEdges } = useMemo<{
+    nodes: Node[];
+    edges: Edge[];
+  }>(() => {
     if (nodesData.length === 0) return { nodes: [], edges: [] };
 
     // Group classes by depth ring, ordered by firstSeen so the angular slot a
@@ -57,21 +78,21 @@ function ListeningGraphInner() {
     byDepth.forEach((arr) => arr.sort((a, b) => a.firstSeen - b.firstSeen));
 
     const pos = new Map<string, { x: number; y: number }>();
-    const rfNodes: Node[] = [];
+    const outNodes: Node[] = [];
 
     byDepth.forEach((ring, depth) => {
       if (depth === 0) {
         // The (single) root sits at the origin.
         ring.forEach((n) => {
           pos.set(n.className, { x: 0, y: 0 });
-          rfNodes.push({
+          outNodes.push({
             id: n.className,
             type: "listening",
             position: { x: -CENTER_W / 2, y: -CENTER_H / 2 },
             width: CENTER_W,
             height: CENTER_H,
             data: { node: n, isCenter: true },
-            draggable: false,
+            draggable: true,
             selectable: false,
           });
         });
@@ -89,19 +110,19 @@ function ListeningGraphInner() {
         const cx = radius * Math.cos(angle);
         const cy = radius * Math.sin(angle);
         pos.set(n.className, { x: cx, y: cy });
-        rfNodes.push({
+        outNodes.push({
           id: n.className,
           type: "listening",
           position: { x: cx - PERIPHERAL_W / 2, y: cy - PERIPHERAL_H / 2 },
           width: PERIPHERAL_W,
           height: PERIPHERAL_H,
           data: { node: n, isCenter: false },
-          draggable: false,
+          draggable: true,
         });
       });
     });
 
-    const rfEdges: Edge[] = edgesData.map((e, i) => {
+    const outEdges: Edge[] = edgesData.map((e, i) => {
       const targetNode = nodesData.find((n) => n.className === e.target);
       return {
         id: e.id,
@@ -116,35 +137,69 @@ function ListeningGraphInner() {
       };
     });
 
-    return { nodes: rfNodes, edges: rfEdges };
+    return { nodes: outNodes, edges: outEdges };
   }, [nodesData, edgesData]);
 
-  // Re-fit as the graph grows so new outer rings stay in view.
+  // Sync the computed layout into React Flow's own node state, but keep any
+  // position the user has dragged a node to (drag survives live rebuilds).
   useEffect(() => {
+    setRfNodes(
+      computedNodes.map((n) => {
+        const dragged = draggedPosRef.current.get(n.id);
+        return dragged ? { ...n, position: dragged } : n;
+      }),
+    );
+  }, [computedNodes, setRfNodes]);
+
+  useEffect(() => {
+    setRfEdges(computedEdges);
+  }, [computedEdges, setRfEdges]);
+
+  // Re-fit as the graph grows so new outer rings stay in view — UNLESS the user
+  // has taken manual control (panned/zoomed/dragged), in which case we never
+  // move their view.
+  useEffect(() => {
+    if (userMovedRef.current) return;
     if (fitTimer.current) clearTimeout(fitTimer.current);
     fitTimer.current = setTimeout(() => {
+      if (userMovedRef.current) return;
       fitView({ duration: 600, padding: 0.2, maxZoom: 1 });
     }, 200);
   }, [fitView, nodesData.length, edgesData.length, rootClassName]);
 
+  // Any user-initiated pan/zoom (event is non-null) hands control to the user.
+  const onMoveStart = useCallback((event: unknown) => {
+    if (event) userMovedRef.current = true;
+  }, []);
+
+  const onNodeDragStart = useCallback(() => {
+    userMovedRef.current = true;
+  }, []);
+
+  const onNodeDragStop = useCallback((_: unknown, node: Node) => {
+    draggedPosRef.current.set(node.id, node.position);
+  }, []);
+
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
+      nodes={rfNodes}
+      edges={rfEdges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
       nodeTypes={NODE_TYPES}
       edgeTypes={EDGE_TYPES}
       proOptions={{ hideAttribution: true }}
       minZoom={0.1}
       maxZoom={2}
-      nodesDraggable={false}
+      nodesDraggable
       nodesConnectable={false}
       elementsSelectable={false}
       defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
-      // Without an onNodeClick handler React Flow sets pointer-events:none on
-      // non-selectable, non-draggable nodes — which would make the in-node
-      // "ver detalle" button (and any future affordance) unclickable. Wiring
-      // this keeps nodes interactive AND makes the whole errored card open the
-      // stacktrace panel.
+      onMoveStart={onMoveStart}
+      onNodeDragStart={onNodeDragStart}
+      onNodeDragStop={onNodeDragStop}
+      // Clicking an errored node opens its stacktrace panel. A plain click
+      // (no drag) still fires this even with dragging enabled.
       onNodeClick={(_, node) => {
         const d = node.data as ListeningNodeData;
         if (d?.node?.status === "ERROR") selectError(d.node.className);
@@ -156,6 +211,7 @@ function ListeningGraphInner() {
         size={1}
         color="rgba(192, 192, 200, 0.08)"
       />
+      <Controls showInteractive={false} />
       <MiniMap
         nodeColor={(n) =>
           (n.data as { node?: { status?: string } })?.node?.status === "ERROR"

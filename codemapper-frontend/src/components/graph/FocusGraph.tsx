@@ -3,6 +3,7 @@
 import {
   Background,
   BackgroundVariant,
+  Controls,
   type Edge,
   MiniMap,
   type Node,
@@ -12,6 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useRef } from "react";
+import { useGraphInteraction } from "@/hooks/useGraphInteraction";
 import { FocusCenterNode } from "./FocusCenterNode";
 import { FocusPeripheralNode } from "./FocusPeripheralNode";
 import { FocusEdge } from "./FocusEdge";
@@ -83,7 +85,10 @@ function FocusGraphInner() {
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
+  const { nodes: computedNodes, edges: computedEdges } = useMemo<{
+    nodes: Node[];
+    edges: Edge[];
+  }>(() => {
     if (!focusClass) {
       return { nodes: [], edges: [] };
     }
@@ -282,12 +287,25 @@ function FocusGraphInner() {
     };
   }, [focusClass, focusConnections, classTypeFilters, focusConnectionTypeFilters, showTests, impactReport, edgeGrouping, focusDirectionFilter]);
 
+  const {
+    nodes: rfNodes,
+    edges: rfEdges,
+    onNodesChange,
+    onEdgesChange,
+    onMoveStart,
+    onNodeDragStart,
+    onNodeDragStop,
+    shouldAutoFit,
+  } = useGraphInteraction(computedNodes, computedEdges);
+
   useEffect(() => {
+    if (!shouldAutoFit()) return;
     if (fitTimer.current) clearTimeout(fitTimer.current);
     fitTimer.current = setTimeout(() => {
+      if (!shouldAutoFit()) return;
       fitView({ duration: 600, padding: 0.18, maxZoom: 1 });
     }, 200);
-  }, [fitView, focusConnections.length, focusClass?.id]);
+  }, [fitView, focusConnections.length, focusClass?.id, shouldAutoFit]);
 
   if (!focusClass) {
     return (
@@ -331,17 +349,22 @@ function FocusGraphInner() {
           resto se ve borroso con CSS class .cm-impact-active. */}
       <ReactFlow
         className={impactReport ? "cm-impact-active" : ""}
-        nodes={nodes}
-        edges={edges}
+        nodes={rfNodes}
+        edges={rfEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={FOCUS_NODE_TYPES}
         edgeTypes={FOCUS_EDGE_TYPES}
         proOptions={{ hideAttribution: true }}
         minZoom={0.2}
         maxZoom={2}
-        nodesDraggable={false}
+        nodesDraggable
         nodesConnectable={false}
         elementsSelectable={false}
         defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+        onMoveStart={onMoveStart}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
         onNodeClick={(_, node) => {
           selectNode(node.id);
         }}
@@ -352,6 +375,7 @@ function FocusGraphInner() {
           size={1}
           color="rgba(192, 192, 200, 0.08)"
         />
+        <Controls showInteractive={false} />
         {/* MiniMap — paleta consistente con CodeGraph: bordó para el centro
             y para llamadas, silver para herencia. Para FOCO la coloración
             la determina el connectionType del peripheral, no la annotation. */}

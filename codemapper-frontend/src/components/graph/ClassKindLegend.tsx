@@ -4,6 +4,7 @@ import {
   Box,
   CircleDashed,
   CircleDot,
+  Globe,
   HelpCircle,
   Shapes,
   Square,
@@ -58,6 +59,13 @@ const ITEMS: KindItem[] = [
     Icon: CircleDot,
     description:
       "Clase inmutable de datos (Java 14+). record Point(int x, int y) {} — genera constructor, getters, equals, hashCode y toString automáticamente. Ideal para DTOs.",
+  },
+  {
+    id: "WEB_SCREEN",
+    label: "Web",
+    Icon: Globe,
+    description:
+      "Pantalla del front-end (no es Java). Aparece cuando pasás la ruta del front en 'Aplicación': se la linkea al controller que atiende su llamada HTTP. Las cards web salen con el globo 🌐 y en azul.",
   },
 ];
 

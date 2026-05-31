@@ -21,6 +21,8 @@ const LAYER_BY_ANNOTATION: Record<string, number> = {
   Configuration: 4,
 };
 const FALLBACK_LAYER = 4;
+/** Front-end screens get their own row, below every Java layer. */
+const WEB_LAYER = 5;
 
 function classDataOf(node: Node): ClassNodeData | undefined {
   return (node.data as { classData?: ClassNodeData } | undefined)?.classData;
@@ -28,6 +30,9 @@ function classDataOf(node: Node): ClassNodeData | undefined {
 
 function getLayer(node: Node): number {
   const data = classDataOf(node);
+  // Web screens are not Java — pin them to their own bottom row so they never
+  // share a layer with Java classes.
+  if (data?.type === "WEB_SCREEN") return WEB_LAYER;
   for (const ann of data?.annotations ?? []) {
     const stripped = ann.replace(/^@/, "").split("(")[0];
     const idx = LAYER_BY_ANNOTATION[stripped];

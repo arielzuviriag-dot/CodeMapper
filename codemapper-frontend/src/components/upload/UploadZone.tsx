@@ -1,66 +1,55 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { useDropzone } from "react-dropzone";
-import JSZip from "jszip";
-import {
-  Database,
-  FileArchive,
-  FolderOpen,
-  Layout,
-  Loader2,
-  Server,
-  X,
-} from "lucide-react";
+import { useState } from "react";
+import { Database, HardDrive, Layout, Loader2, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { resolveDemoMode, uploadProject } from "@/lib/api";
+import { analyzeLocalPath, resolveDemoMode } from "@/lib/api";
 import { useGraphStore } from "@/store/graphStore";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-interface PreparedUpload {
-  file: File;
-  description: string;
-  fileCount: number;
-}
-
-async function zipFiles(files: File[], zipName = "project.zip"): Promise<File> {
-  const zip = new JSZip();
-  for (const f of files) {
-    const relPath =
-      (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
-    const buf = await f.arrayBuffer();
-    zip.file(relPath, buf);
-  }
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  return new File([blob], zipName, { type: "application/zip" });
-}
-
 type FrontendKind = "web" | "react-native";
 
+/**
+ * "Aplicación" — analiza el proyecto completo pasando las RUTAS físicas de cada
+ * parte en la PC (como el tab "Java" / la pantalla de Escuchar), en vez de
+ * subir carpetas. El backend Java es el que dispara el análisis (vía
+ * {@link analyzeLocalPath} → POST /api/analyze/path, que lee la ruta directo).
+ * Front-end y base de datos se ingresan como contexto del proyecto.
+ */
 export function UploadZone() {
   const router = useRouter();
-  const [frontend, setFrontend] = useState<PreparedUpload | null>(null);
+  const [frontendPath, setFrontendPath] = useState("");
   const [frontendKind, setFrontendKind] = useState<FrontendKind>("web");
-  const [backend, setBackend] = useState<PreparedUpload | null>(null);
-  const [dbDocs, setDbDocs] = useState<PreparedUpload | null>(null);
+  const [backendPath, setBackendPath] = useState("");
+  const [dbPath, setDbPath] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const onAnalyze = () => {
-    if (!backend || isAnalyzing) return;
+    const backend = backendPath.trim();
+    if (!backend) {
+      toast.error("Ingresá la ruta del backend Java");
+      return;
+    }
+    if (isAnalyzing) return;
     setIsAnalyzing(true);
     const demoMode = resolveDemoMode();
-    // Fire-and-forget POST (with the multipart upload still pending). The
-    // map page consumes the promise via pendingAnalysis under
-    // sessionId="pending" and redirects to the real session URL when the
-    // upload finishes and the backend returns the sessionId.
-    const promise = uploadProject(backend.file, demoMode);
+    const front = frontendPath.trim();
+    // Fire-and-forget POST. El map page consume la promesa vía pendingAnalysis
+    // bajo sessionId="pending" y redirige a la URL real cuando está listo. Si
+    // hay ruta de front, el backend la escanea y linkea pantalla → controller.
+    const promise = analyzeLocalPath(backend, demoMode, {
+      frontendPath: front || undefined,
+      frontendKind: front ? frontendKind : undefined,
+    });
     useGraphStore.getState().setPendingAnalysis({
       promise,
-      description: `Subiendo ${backend.description}...`,
+      description: `Analizando ${backend.split(/[\\/]/).pop() ?? backend}...`,
       mode: "project",
       demo: demoMode === "pro" ? "pro" : undefined,
+      projectPath: backend,
     });
     const suffix = demoMode === "pro" ? "?demo=pro" : "";
     router.push(`/map/pending${suffix}`);
@@ -69,18 +58,18 @@ export function UploadZone() {
   return (
     <div className="flex flex-col gap-4">
       <p className="rounded-md border border-[var(--border-silver)] bg-[var(--bg-panel)]/40 px-3 py-2.5 text-xs leading-relaxed text-[var(--fg-secondary)]">
-        Analizá el proyecto completo de una aplicación. Subí la carpeta donde
-        viven el front-end y el backend, más la documentación de la organización
-        de la base de datos con todas sus tablas.
+        Analizá el proyecto completo de una aplicación. Pegá las rutas locales
+        donde viven el front-end y el backend en tu PC, más la documentación de
+        la base de datos. El análisis arranca desde el backend Java.
       </p>
 
-      <FileSlot
+      <PathSlot
         icon={<Layout className="h-4 w-4" />}
         label="Front end"
         hint={
           frontendKind === "web"
-            ? "Carpeta o .zip del cliente (HTML, CSS, JS, React, etc.)"
-            : "Carpeta o .zip del proyecto React Native / Expo"
+            ? "Ruta del cliente web (HTML, CSS, JS, React, etc.)"
+            : "Ruta del proyecto React Native / Expo"
         }
         topRow={
           <SegmentedRow
@@ -92,16 +81,16 @@ export function UploadZone() {
             ]}
           />
         }
-        prepared={frontend}
-        onPrepare={setFrontend}
-        zipName="frontend.zip"
-        accept={{ "application/zip": [".zip"] }}
+        value={frontendPath}
+        onChange={setFrontendPath}
+        placeholder="C:\Users\ariel\Reserva\frontend-reserva"
+        disabled={isAnalyzing}
       />
 
-      <FileSlot
+      <PathSlot
         icon={<Server className="h-4 w-4" />}
         label="Backend"
-        hint="Archivos .java o un .zip con el código del servidor"
+        hint="Ruta del proyecto backend Java (obligatorio — es lo que se analiza)"
         topRow={
           <SegmentedRow
             value="java"
@@ -109,33 +98,30 @@ export function UploadZone() {
             options={[{ value: "java", label: "Java" }]}
           />
         }
-        prepared={backend}
-        onPrepare={setBackend}
-        zipName="backend.zip"
-        accept={{
-          "application/zip": [".zip"],
-          "text/x-java-source": [".java"],
-        }}
-        javaOnly
+        value={backendPath}
+        onChange={setBackendPath}
+        placeholder="C:\Users\ariel\Reserva\backend-reserva"
+        disabled={isAnalyzing}
+        onEnter={onAnalyze}
       />
 
-      <FileSlot
+      <PathSlot
         icon={<Database className="h-4 w-4" />}
         label="Base de datos"
-        hint="Documentación de tablas (.md, .sql, .pdf, .txt)"
-        prepared={dbDocs}
-        onPrepare={setDbDocs}
-        zipName="db-docs.zip"
-        accept={{
-          "text/markdown": [".md"],
-          "text/plain": [".txt", ".sql"],
-          "application/pdf": [".pdf"],
-        }}
+        hint="Ruta de la documentación de tablas (.md, .sql, .pdf, .txt)"
+        value={dbPath}
+        onChange={setDbPath}
+        placeholder="C:\Users\ariel\Reserva\db-docs"
+        disabled={isAnalyzing}
       />
+
+      <p className="text-xs text-[var(--fg-muted)]">
+        Solo desarrollo local. Las rutas se leen directamente desde el backend.
+      </p>
 
       <Button
         onClick={onAnalyze}
-        disabled={!backend || isAnalyzing}
+        disabled={!backendPath.trim() || isAnalyzing}
         size="lg"
         className={cn(
           "uppercase tracking-[0.16em] text-white",
@@ -157,90 +143,29 @@ export function UploadZone() {
   );
 }
 
-interface FileSlotProps {
+interface PathSlotProps {
   icon: React.ReactNode;
   label: string;
   hint: string;
   topRow?: React.ReactNode;
-  prepared: PreparedUpload | null;
-  onPrepare: (p: PreparedUpload | null) => void;
-  zipName: string;
-  accept?: Record<string, string[]>;
-  javaOnly?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+  onEnter?: () => void;
 }
 
-function FileSlot({
+function PathSlot({
   icon,
   label,
   hint,
   topRow,
-  prepared,
-  onPrepare,
-  zipName,
-  accept,
-  javaOnly,
-}: FileSlotProps) {
-  const folderInputRef = useRef<HTMLInputElement>(null);
-
-  const onDrop = useCallback(
-    async (accepted: File[]) => {
-      if (accepted.length === 0) return;
-      if (accepted.length === 1) {
-        const f = accepted[0];
-        if (f.name.endsWith(".zip")) {
-          onPrepare({ file: f, description: f.name, fileCount: 1 });
-          return;
-        }
-        if (!javaOnly) {
-          onPrepare({ file: f, description: f.name, fileCount: 1 });
-          return;
-        }
-      }
-      const filtered = javaOnly
-        ? accepted.filter((f) => f.name.endsWith(".java"))
-        : accepted;
-      if (filtered.length === 0) {
-        toast.error("Archivos no válidos para esta entrada");
-        return;
-      }
-      const zipped = await zipFiles(filtered, zipName);
-      onPrepare({
-        file: zipped,
-        description: `${filtered.length} archivos (zipeados)`,
-        fileCount: filtered.length,
-      });
-    },
-    [javaOnly, onPrepare, zipName],
-  );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: true,
-    accept,
-  });
-
-  const onFolderPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length === 0) return;
-    const filtered = javaOnly
-      ? files.filter((f) => f.name.endsWith(".java"))
-      : files;
-    if (filtered.length === 0) {
-      toast.error("La carpeta no contiene archivos válidos");
-      return;
-    }
-    const folderName =
-      (filtered[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split(
-        "/",
-      )[0] ?? "carpeta";
-    const zipped = await zipFiles(filtered, zipName);
-    onPrepare({
-      file: zipped,
-      description: `${folderName} (${filtered.length} archivos)`,
-      fileCount: filtered.length,
-    });
-  };
-
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  onEnter,
+}: PathSlotProps) {
   return (
     <div className="rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-3">
       <div className="mb-1.5 flex items-center justify-between gap-2 text-[var(--fg-primary)]">
@@ -254,59 +179,20 @@ function FileSlot({
       </div>
       <p className="mb-2.5 text-[11px] text-[var(--fg-muted)]">{hint}</p>
 
-      {prepared ? (
-        <div className="cm-accent-bar-left flex items-center justify-between rounded-md border border-[var(--border-silver)] bg-[var(--bg-panel)] p-2 pl-3">
-          <div className="flex items-center gap-2">
-            <FileArchive className="h-4 w-4 text-[var(--bordo)]" />
-            <span className="truncate text-xs text-[var(--fg-primary)]">
-              {prepared.description}
-            </span>
-          </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0"
-            onClick={() => onPrepare(null)}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <div
-            {...getRootProps()}
-            className={cn(
-              "flex flex-1 cursor-pointer items-center justify-center rounded-md border border-dashed px-3 py-2 text-[11px] transition-all",
-              isDragActive
-                ? "border-[var(--bordo)] bg-[var(--bordo)]/5 text-[var(--bordo)]"
-                : "border-[var(--border-default)] text-[var(--fg-muted)] hover:border-[var(--silver-dark)] hover:text-[var(--fg-primary)]",
-            )}
-          >
-            <input {...getInputProps()} />
-            {isDragActive ? "Soltá acá" : "Arrastrá o click"}
-          </div>
-          <input
-            ref={folderInputRef}
-            type="file"
-            className="hidden"
-            // @ts-expect-error - non-standard but supported in Chromium
-            webkitdirectory=""
-            directory=""
-            multiple
-            onChange={onFolderPicked}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-[var(--border-silver)] bg-transparent uppercase tracking-[0.14em]"
-            onClick={() => folderInputRef.current?.click()}
-          >
-            <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-            Carpeta
-          </Button>
-        </div>
-      )}
+      <div className="flex items-center gap-3 rounded-md border border-[var(--border-default)] bg-[var(--bg-panel)] px-3 py-2 transition-colors focus-within:border-[var(--bordo)] focus-within:shadow-[0_0_16px_rgba(185,28,66,0.25)]">
+        <HardDrive className="h-4 w-4 shrink-0 text-[var(--silver-dark)]" />
+        <Input
+          type="text"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && onEnter) onEnter();
+          }}
+          className="border-0 bg-transparent px-0 font-mono text-sm shadow-none focus-visible:ring-0"
+        />
+      </div>
     </div>
   );
 }

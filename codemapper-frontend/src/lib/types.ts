@@ -3,7 +3,9 @@ export type ClassKind =
   | "INTERFACE"
   | "ENUM"
   | "RECORD"
-  | "ABSTRACT_CLASS";
+  | "ABSTRACT_CLASS"
+  // Front-end screen (not a Java class) emitted by the cross-stack linker.
+  | "WEB_SCREEN";
 
 export type ConnectionType =
   | "EXTENDS"
@@ -11,7 +13,9 @@ export type ConnectionType =
   | "COMPOSITION"
   | "DEPENDENCY_INJECTION"
   | "METHOD_CALL"
-  | "ANNOTATION_USAGE";
+  | "ANNOTATION_USAGE"
+  // Front-end screen → backend controller (an HTTP call).
+  | "HTTP_CALL";
 
 export interface ParsedField {
   name: string;

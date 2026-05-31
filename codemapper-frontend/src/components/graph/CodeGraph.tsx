@@ -80,6 +80,14 @@ const EDGE_STYLES: Record<ConnectionType, EdgeStyle> = {
     strokeWidth: 1.25,
     strokeDasharray: "2,3",
   },
+  // Front-end screen → controller. Internet blue, dashed, animated — reads as
+  // a cross-stack "web call" distinct from the silver/bordó Java edges.
+  HTTP_CALL: {
+    stroke: "#2F81F7",
+    strokeWidth: 2,
+    strokeDasharray: "6,3",
+    marker: { type: MarkerType.ArrowClosed, color: "#2F81F7", width: 18, height: 18 },
+  },
 };
 
 function CodeGraphInner() {
@@ -186,7 +194,7 @@ function CodeGraphInner() {
           target: c.to,
           label: c.label,
           type: "stackedLabel",
-          animated: c.type === "DEPENDENCY_INJECTION",
+          animated: c.type === "DEPENDENCY_INJECTION" || c.type === "HTTP_CALL",
           markerEnd: style.marker,
           style: {
             stroke: style.stroke,
@@ -285,6 +293,7 @@ function CodeGraphInner() {
         <MiniMap
           nodeColor={(n) => {
             const data = (n.data as { classData?: ClassNodeData })?.classData;
+            if (data?.type === "WEB_SCREEN") return "#2F81F7"; // web = internet blue
             const ann = data?.annotations?.[0]?.replace(/^@/, "").split("(")[0];
             switch (ann) {
               case "Service":

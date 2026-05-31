@@ -1,6 +1,6 @@
 "use client";
 
-import { Bug, Crosshair, Folder, Radio, Sparkles, Upload } from "lucide-react";
+import { Radio } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UploadZone } from "./UploadZone";
@@ -26,25 +26,25 @@ export function UploadTabs() {
     <Tabs defaultValue="upload" className="w-full">
       <TabsList className="grid w-full grid-cols-6 rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] p-1">
         <TabsTrigger value="upload" className={TRIGGER_CLASS}>
-          <Upload className="h-3.5 w-3.5" /> Aplicación
+          Aplicación
         </TabsTrigger>
         <TabsTrigger value="local" className={TRIGGER_CLASS}>
-          <Folder className="h-3.5 w-3.5" /> Proyecto Java
+          Java
         </TabsTrigger>
         <TabsTrigger value="focus" className={`${TRIGGER_CLASS} normal-case`}>
-          <Crosshair className="h-3.5 w-3.5" /> Marco Polo
+          Marco Polo
         </TabsTrigger>
         <TabsTrigger value="exception" className={`${TRIGGER_CLASS} normal-case`}>
-          <Bug className="h-3.5 w-3.5" /> Bug
+          Bug
         </TabsTrigger>
         <TabsTrigger value="listening" className={`${TRIGGER_CLASS} normal-case`}>
-          <Radio className="h-3.5 w-3.5" /> Escuchando
+          Escuchando
         </TabsTrigger>
         {/* TEMPORAL — tab para testear modo PRO sin tocar la URL.
             Borrar este TabsTrigger + el TabsContent="focus-pro" cuando
             exista billing real. Acción equivalente a `?demo=pro`. */}
         <TabsTrigger value="focus-pro" className={`${TRIGGER_CLASS} normal-case`}>
-          <Sparkles className="h-3.5 w-3.5" /> Marco Polo PRO
+          Marco Polo PRO
         </TabsTrigger>
       </TabsList>
 

@@ -5,5 +5,8 @@ public enum ClassType {
     INTERFACE,
     ENUM,
     RECORD,
-    ABSTRACT_CLASS
+    ABSTRACT_CLASS,
+    /** Not a Java class — a front-end screen/module that calls the backend.
+     *  Emitted by the cross-stack linker so the web layer shows in the graph. */
+    WEB_SCREEN
 }

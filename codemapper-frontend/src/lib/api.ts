@@ -84,13 +84,23 @@ export async function uploadProject(
   return data;
 }
 
+export interface LocalPathOptions {
+  /** Optional front-end project path — links its screens → controllers. */
+  frontendPath?: string;
+  /** "web" | "react-native". */
+  frontendKind?: string;
+}
+
 export async function analyzeLocalPath(
   absolutePath: string,
   demoMode?: DemoMode,
+  options?: LocalPathOptions,
 ): Promise<AnalyzeResponse> {
   const { data } = await api.post<AnalyzeResponse>("/api/analyze/path", {
     absolutePath,
     demoMode,
+    frontendPath: options?.frontendPath,
+    frontendKind: options?.frontendKind,
   });
   return data;
 }

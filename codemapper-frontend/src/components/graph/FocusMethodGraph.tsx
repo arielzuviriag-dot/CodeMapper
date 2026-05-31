@@ -3,6 +3,7 @@
 import {
   Background,
   BackgroundVariant,
+  Controls,
   type Edge,
   MiniMap,
   type Node,
@@ -19,6 +20,7 @@ import { ClassKindLegend } from "./ClassKindLegend";
 import { FocusConnectionLegend } from "./FocusConnectionLegend";
 import { GraphSearchInput } from "./GraphSearchInput";
 import { useGraphStore } from "@/store/graphStore";
+import { useGraphInteraction } from "@/hooks/useGraphInteraction";
 
 const NODE_TYPES = {
   focusMethodCenter: FocusMethodCenterNode,
@@ -59,7 +61,10 @@ function FocusMethodGraphInner() {
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { nodes, edges } = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
+  const { nodes: computedNodes, edges: computedEdges } = useMemo<{
+    nodes: Node[];
+    edges: Edge[];
+  }>(() => {
     if (!focusMethod) return { nodes: [], edges: [] };
 
     const centerNode: Node = {
@@ -125,12 +130,25 @@ function FocusMethodGraphInner() {
     };
   }, [focusMethod, focusConnections, classTypeFilters, focusConnectionTypeFilters]);
 
+  const {
+    nodes: rfNodes,
+    edges: rfEdges,
+    onNodesChange,
+    onEdgesChange,
+    onMoveStart,
+    onNodeDragStart,
+    onNodeDragStop,
+    shouldAutoFit,
+  } = useGraphInteraction(computedNodes, computedEdges);
+
   useEffect(() => {
+    if (!shouldAutoFit()) return;
     if (fitTimer.current) clearTimeout(fitTimer.current);
     fitTimer.current = setTimeout(() => {
+      if (!shouldAutoFit()) return;
       fitView({ duration: 600, padding: 0.18, maxZoom: 1 });
     }, 200);
-  }, [fitView, focusConnections.length, focusMethod?.id]);
+  }, [fitView, focusConnections.length, focusMethod?.id, shouldAutoFit]);
 
   if (!focusMethod) {
     return (
@@ -152,17 +170,22 @@ function FocusMethodGraphInner() {
         <ClassKindLegend />
       </aside>
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={rfNodes}
+        edges={rfEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         proOptions={{ hideAttribution: true }}
         minZoom={0.2}
         maxZoom={2}
-        nodesDraggable={false}
+        nodesDraggable
         nodesConnectable={false}
         elementsSelectable={false}
         defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+        onMoveStart={onMoveStart}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
         onNodeClick={(_, node) => {
           // Center node → open method sheet from the focusMethod payload
           // (selectNode would land on class mode — wrong, this is a method).
@@ -191,6 +214,7 @@ function FocusMethodGraphInner() {
           size={1}
           color="rgba(192, 192, 200, 0.08)"
         />
+        <Controls showInteractive={false} />
         {/* MiniMap — misma paleta que FocusGraph. El centro acá es el método
             focus (focusMethodCenter), peripherals son las clases que lo
             invocan o que él invoca. */}

@@ -7,6 +7,7 @@ import com.codemapper.model.dto.AnalyzeResponse;
 import com.codemapper.model.dto.ClassSourceResponse;
 import com.codemapper.model.event.BaseEvent;
 import com.codemapper.model.event.ErrorEvent;
+import com.codemapper.model.event.SessionCompleteEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ public class AnalysisService {
     private final FocusMethodTracerService focusMethodTracerService;
     private final ExceptionTracerService exceptionTracerService;
     private final ImpactAnalysisService impactAnalysisService;
+    private final CrossStackLinker crossStackLinker;
     private final ExecutorService analysisExecutor;
 
     @Value("${codemapper.upload-dir:./tmp-uploads}")
@@ -97,6 +99,11 @@ public class AnalysisService {
     }
 
     public AnalyzeResponse handlePath(String absolutePath, boolean isPro) throws IOException {
+        return handlePath(absolutePath, null, null, isPro);
+    }
+
+    public AnalyzeResponse handlePath(String absolutePath, String frontendPath,
+                                      String frontendKind, boolean isPro) throws IOException {
         // ENDPOINT DE DESARROLLO LOCAL — no exponer en producción
         if (absolutePath == null || absolutePath.isBlank()) {
             throw new IllegalArgumentException("absolutePath is required");
@@ -118,6 +125,12 @@ public class AnalysisService {
 
         SessionData session = sessionService.createSession(root.toAbsolutePath().normalize(),
                 projectName, totalFiles, false, isPro);
+        // Optional front-end project — the cross-stack linker scans it once the
+        // Java parse finishes and links screens → controllers.
+        if (frontendPath != null && !frontendPath.isBlank()) {
+            session.setFrontendPath(frontendPath.trim());
+            session.setFrontendKind(frontendKind);
+        }
         return new AnalyzeResponse(session.getSessionId(), projectName, totalFiles);
     }
 
@@ -266,8 +279,27 @@ public class AnalysisService {
                             focusTracerService.traceFocus(session, sink);
                     case EXCEPTION ->
                             exceptionTracerService.trace(session, sink);
-                    case FULL ->
-                            javaParserService.parseProject(session, sink);
+                    case FULL -> {
+                        // The browser closes the SSE on session_complete, so the
+                        // cross-stack web nodes (emitted after the Java parse)
+                        // would never reach it. Hold the complete event back,
+                        // run the linker, THEN forward complete last.
+                        SessionCompleteEvent[] held = new SessionCompleteEvent[1];
+                        Consumer<BaseEvent> fullSink = ev -> {
+                            if (ev instanceof SessionCompleteEvent sce) {
+                                held[0] = sce;
+                                return;
+                            }
+                            sink.accept(ev);
+                        };
+                        javaParserService.parseProject(session, fullSink);
+                        // "Aplicación" cross-stack: link the front-end screens →
+                        // backend controllers once the Java parse is done.
+                        crossStackLinker.streamWebLinks(
+                                session.getParsedClasses(), session.getFrontendPath(),
+                                session.getFrontendKind(), sink);
+                        if (held[0] != null) sink.accept(held[0]);
+                    }
                 }
                 emitter.complete();
             } catch (Exception ex) {
