@@ -72,6 +72,15 @@ export interface ClassEdge {
   source: string;
   target: string;
   firstSeen: number;
+  /** Distinct methods invoked on the target class via this call, first-seen
+   *  order — shown on the edge label ("a qué método se llama"). */
+  methods: string[];
+  /** How many times this exact call (source → target) happened — the call
+   *  count between the two classes ("el número de llamada"). */
+  count: number;
+  /** True when the reverse call (target → source) also exists — i.e. the two
+   *  classes call each other ("va y vuelve"). */
+  bidirectional: boolean;
 }
 
 export interface TraceGraph {
@@ -153,6 +162,8 @@ export function buildTraceGraph(
   const nodes = new Map<string, ClassNode>();
   const childToParent = new Map<string, string>(); // class → its class-parent
   const edgeKeys = new Set<string>();
+  const edgeCount = new Map<string, number>(); // key → # of calls
+  const edgeMethods = new Map<string, string[]>(); // key → methods on target
   const rootCandidates: string[] = [];
 
   // URL filter — the user can scope the live graph to traces of a chosen URL
@@ -237,6 +248,16 @@ export function buildTraceGraph(
         edgeKeys.add(key);
         if (edgeFirstSeen[key] === undefined) edgeFirstSeen[key] = now;
       }
+      // Count every call and record the method invoked on the target (this
+      // span's code.function), so the edge label can show method + call count.
+      edgeCount.set(key, (edgeCount.get(key) ?? 0) + 1);
+      if (span.method) {
+        const ms = edgeMethods.get(key) ?? [];
+        if (!ms.includes(span.method)) {
+          ms.push(span.method);
+          edgeMethods.set(key, ms);
+        }
+      }
       // First parent wins as the tree parent for depth purposes.
       if (!childToParent.has(cn)) childToParent.set(cn, parent);
     } else if (!childToParent.has(cn)) {
@@ -313,7 +334,15 @@ export function buildTraceGraph(
 
   const edges: ClassEdge[] = [...edgeKeys].map((key) => {
     const [source, target] = key.split("__");
-    return { id: `trace-edge-${key}`, source, target, firstSeen: edgeFirstSeen[key] };
+    return {
+      id: `trace-edge-${key}`,
+      source,
+      target,
+      firstSeen: edgeFirstSeen[key],
+      methods: edgeMethods.get(key) ?? [],
+      count: edgeCount.get(key) ?? 1,
+      bidirectional: edgeKeys.has(`${target}__${source}`),
+    };
   });
 
   return {

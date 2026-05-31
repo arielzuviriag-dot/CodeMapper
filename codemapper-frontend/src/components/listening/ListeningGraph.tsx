@@ -123,6 +123,9 @@ function ListeningGraphInner() {
           firstSeen: e.firstSeen,
           index: i,
           isError: targetNode?.status === "ERROR",
+          methods: e.methods,
+          count: e.count,
+          bidirectional: e.bidirectional,
         },
       };
     });

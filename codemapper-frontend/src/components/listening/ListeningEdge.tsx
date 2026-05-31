@@ -22,6 +22,12 @@ interface ListeningEdgeData extends Record<string, unknown> {
   /** Arrival index → small stagger so edges draw one-by-one. */
   index: number;
   isError: boolean;
+  /** Methods invoked on the target via this call. */
+  methods?: string[];
+  /** How many times this call happened (source → target). */
+  count?: number;
+  /** True when target also calls source back ("va y vuelve"). */
+  bidirectional?: boolean;
 }
 
 const STROKE = "#B91C42";
@@ -56,9 +62,20 @@ function rectIntersection(
   return { x: cx + dx * scale, y: cy + dy * scale };
 }
 
-function ListeningEdgeComponent({ id, source, target, data }: EdgeProps) {
+function ListeningEdgeComponent({ id, source, target, data, style }: EdgeProps) {
   const edgeData = (data ?? {}) as ListeningEdgeData;
-  const stroke = edgeData.isError ? STROKE_ERROR : STROKE;
+  // Highlight (from useGraphInteraction on double-click) arrives via `style`.
+  const hl = (style ?? {}) as React.CSSProperties;
+  const highlighted = hl.stroke != null;
+  const dimmed = !highlighted && hl.opacity != null && Number(hl.opacity) < 1;
+  const stroke =
+    (hl.stroke as string) ?? (edgeData.isError ? STROKE_ERROR : STROKE);
+  const strokeWidth = hl.strokeWidth != null
+    ? Number(hl.strokeWidth)
+    : edgeData.isError
+      ? 2.5
+      : 2;
+  const styleOpacity = hl.opacity != null ? Number(hl.opacity) : 1;
 
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
@@ -116,6 +133,14 @@ function ListeningEdgeComponent({ id, source, target, data }: EdgeProps) {
   const opacity = Math.min(1, progress * 5);
   const markerId = `trace-arrow-${id}`;
 
+  // Label = the method(s) invoked on the target (up to 2), or "llama" when the
+  // agent didn't report a code.function for the call.
+  const methods = edgeData.methods ?? [];
+  const labelText =
+    methods.length === 0
+      ? "llama"
+      : methods.slice(0, 2).join(", ") + (methods.length > 2 ? "…" : "");
+
   return (
     <>
       <g className="cm-focus-edge-group" style={{ color: stroke }}>
@@ -140,28 +165,38 @@ function ListeningEdgeComponent({ id, source, target, data }: EdgeProps) {
           markerEnd={`url(#${markerId})`}
           style={{
             stroke,
-            strokeWidth: edgeData.isError ? 2.5 : 2,
+            strokeWidth,
             strokeDasharray: "1500",
             strokeDashoffset: dashOffset,
-            opacity,
+            opacity: opacity * styleOpacity,
+            filter: highlighted ? (hl.filter as string) : undefined,
           }}
         />
       </g>
-      {progress > 0.4 && (
+      {progress > 0.4 && !dimmed && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "none",
-              opacity,
+              opacity: opacity * styleOpacity,
             }}
           >
             <span
-              className="rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase leading-none tracking-[0.16em] text-white shadow-sm"
+              className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-semibold leading-none text-white shadow-sm"
               style={{ backgroundColor: stroke }}
             >
-              llama
+              {edgeData.bidirectional && <span title="se llaman mutuamente">⇄</span>}
+              <span>{labelText}</span>
+              {(edgeData.count ?? 0) > 1 && (
+                <span
+                  className="rounded-[3px] bg-white/25 px-1"
+                  title="número de llamadas entre estas clases"
+                >
+                  ×{edgeData.count}
+                </span>
+              )}
             </span>
           </div>
         </EdgeLabelRenderer>
