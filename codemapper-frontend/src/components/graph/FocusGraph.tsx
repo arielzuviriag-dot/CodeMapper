@@ -295,8 +295,13 @@ function FocusGraphInner() {
     onMoveStart,
     onNodeDragStart,
     onNodeDragStop,
+    onNodeClick,
+    onNodeDoubleClick,
+    onPaneClick,
     shouldAutoFit,
-  } = useGraphInteraction(computedNodes, computedEdges);
+  } = useGraphInteraction(computedNodes, computedEdges, (node) =>
+    selectNode(node.id),
+  );
 
   useEffect(() => {
     if (!shouldAutoFit()) return;
@@ -365,9 +370,9 @@ function FocusGraphInner() {
         onMoveStart={onMoveStart}
         onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_, node) => {
-          selectNode(node.id);
-        }}
+        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onPaneClick={onPaneClick}
       >
         <Background
           variant={BackgroundVariant.Dots}

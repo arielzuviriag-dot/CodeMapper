@@ -97,6 +97,13 @@ function CodeGraphInner() {
   const markUserInteracted = useGraphStore((s) => s.markUserInteracted);
   const sessionStatus = useGraphStore((s) => s.sessionStatus);
   const layoutResetTick = useGraphStore((s) => s.layoutResetTick);
+  const selectNode = useGraphStore((s) => s.selectNode);
+  const openScreen = useGraphStore((s) => s.openMobileFile);
+
+  // Double-click highlights a node's connections (thicker + glowing); a single
+  // click opens its code after a short delay so the two don't fight.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -136,6 +143,87 @@ function CodeGraphInner() {
       fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
     }, 300);
   }, [fitView]);
+
+  // Single click → open code (Java sheet, or the web/mobile screen viewer).
+  const openNodeCode = useCallback(
+    (node: Node) => {
+      const cd = (node.data as { classData?: ClassNodeData })?.classData;
+      if (!cd) return;
+      if (cd.type === "WEB_SCREEN" || cd.type === "MOBILE_SCREEN") {
+        openScreen(cd.filePath, cd.name, cd.type === "MOBILE_SCREEN" ? "mobile" : "web");
+      } else {
+        selectNode(node.id);
+      }
+    },
+    [openScreen, selectNode],
+  );
+
+  // Delay the single-click action so a double-click can cancel it.
+  const onNodeClick = useCallback(
+    (_: unknown, node: Node) => {
+      if (clickTimer.current) clearTimeout(clickTimer.current);
+      const n = node;
+      clickTimer.current = setTimeout(() => openNodeCode(n), 220);
+    },
+    [openNodeCode],
+  );
+
+  // Double click → toggle the connection highlight for this node.
+  const onNodeDoubleClick = useCallback((_: unknown, node: Node) => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    setHighlightId((prev) => (prev === node.id ? null : node.id));
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    setHighlightId(null);
+  }, []);
+
+  // Derived view: when a node is highlighted, fatten + glow its edges and dim
+  // everything else so the connections of that object pop out.
+  const displayEdges = useMemo(() => {
+    if (!highlightId) return edges;
+    return edges.map((e) => {
+      const lit = e.source === highlightId || e.target === highlightId;
+      const base = (e.style ?? {}) as React.CSSProperties;
+      if (lit) {
+        const w = Number(base.strokeWidth ?? 1.5);
+        return {
+          ...e,
+          animated: true,
+          zIndex: 1000,
+          style: {
+            ...base,
+            stroke: "#FFD166",
+            strokeWidth: Math.max(w * 2.5, 4),
+            opacity: 1,
+            filter: "drop-shadow(0 0 6px rgba(255,209,102,0.85))",
+          },
+        };
+      }
+      return { ...e, style: { ...base, opacity: 0.1 } };
+    });
+  }, [edges, highlightId]);
+
+  const displayNodes = useMemo(() => {
+    if (!highlightId) return nodes;
+    const connected = new Set<string>([highlightId]);
+    for (const e of edges) {
+      if (e.source === highlightId) connected.add(e.target);
+      if (e.target === highlightId) connected.add(e.source);
+    }
+    return nodes.map((n) =>
+      connected.has(n.id)
+        ? n
+        : { ...n, style: { ...(n.style ?? {}), opacity: 0.25 } },
+    );
+  }, [nodes, edges, highlightId]);
 
   useEffect(() => {
     const state = useGraphStore.getState();
@@ -267,8 +355,8 @@ function CodeGraphInner() {
       </aside>
 
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={(changes) => {
@@ -278,6 +366,9 @@ function CodeGraphInner() {
           onNodesChange(changes);
         }}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onPaneClick={onPaneClick}
         connectionLineType={ConnectionLineType.SmoothStep}
         defaultViewport={{ x: 0, y: 0, zoom: 0.4 }}
         proOptions={{ hideAttribution: true }}

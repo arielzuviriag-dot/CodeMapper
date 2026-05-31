@@ -113,8 +113,6 @@ interface CustomData extends Record<string, unknown> {
 
 function ClassNodeComponent({ data, id }: NodeProps) {
   const classData = (data as CustomData).classData;
-  const selectNode = useGraphStore((s) => s.selectNode);
-  const openScreen = useGraphStore((s) => s.openMobileFile);
   const isSelected = useGraphStore((s) => s.selectedNodeId === id);
   const hideGettersSetters = useGraphStore((s) => s.filters.hideGettersSetters);
   const isCompact = useStore((s) => s.transform[2] < COMPACT_ZOOM_THRESHOLD);
@@ -149,13 +147,6 @@ function ClassNodeComponent({ data, id }: NodeProps) {
         transition={{ duration: 0.25 }}
         whileHover={{ scale: 1.02 }}
         className={`${baseClass} ${selectedClass} w-[240px]`}
-        onClick={() =>
-          openScreen(
-            classData.filePath,
-            classData.name,
-            isMobile ? "mobile" : "web",
-          )
-        }
       >
         <Handle type="target" position={Position.Top} className="!opacity-0" />
         <Handle type="source" position={Position.Bottom} className="!opacity-0" />
@@ -192,10 +183,7 @@ function ClassNodeComponent({ data, id }: NodeProps) {
     const primaryAnn = (classData.annotations ?? [])
       .map((a) => a.replace(/^@/, "").split("(")[0])[0];
     return (
-      <div
-        className={`${baseClass} ${selectedClass} w-[180px] overflow-hidden`}
-        onClick={() => selectNode(id)}
-      >
+      <div className={`${baseClass} ${selectedClass} w-[180px] overflow-hidden`}>
         <Handle type="target" position={Position.Top} className="!opacity-0" />
         <Handle type="source" position={Position.Bottom} className="!opacity-0" />
         <div
@@ -231,7 +219,6 @@ function ClassNodeComponent({ data, id }: NodeProps) {
       transition={{ duration: 0.25 }}
       whileHover={{ scale: 1.02 }}
       className={`${baseClass} ${selectedClass} w-[280px]`}
-      onClick={() => selectNode(id)}
     >
       <Handle type="target" position={Position.Top} className="!opacity-0" />
       <Handle type="source" position={Position.Bottom} className="!opacity-0" />

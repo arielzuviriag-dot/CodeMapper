@@ -9,13 +9,12 @@ import {
   type Node,
   ReactFlow,
   ReactFlowProvider,
-  useEdgesState,
-  useNodesState,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useListeningStore } from "@/store/listeningStore";
+import { useGraphInteraction } from "@/hooks/useGraphInteraction";
 import { ListeningNode, type ListeningNodeData } from "./ListeningNode";
 import { ListeningEdge } from "./ListeningEdge";
 
@@ -50,15 +49,6 @@ function ListeningGraphInner() {
   const selectError = useListeningStore((s) => s.selectError);
   const { fitView } = useReactFlow();
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Once the user pans/zooms/drags, stop auto-fitting so the view stays put
-  // (otherwise every incoming span re-centers and the graph feels frozen).
-  const userMovedRef = useRef(false);
-  // Positions of nodes the user dragged — preserved across live rebuilds so a
-  // moved class doesn't snap back when the next span arrives.
-  const draggedPosRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-
-  const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
-  const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Target layout computed from the store (radial rings by call depth).
   const { nodes: computedNodes, edges: computedEdges } = useMemo<{
@@ -140,45 +130,34 @@ function ListeningGraphInner() {
     return { nodes: outNodes, edges: outEdges };
   }, [nodesData, edgesData]);
 
-  // Sync the computed layout into React Flow's own node state, but keep any
-  // position the user has dragged a node to (drag survives live rebuilds).
-  useEffect(() => {
-    setRfNodes(
-      computedNodes.map((n) => {
-        const dragged = draggedPosRef.current.get(n.id);
-        return dragged ? { ...n, position: dragged } : n;
-      }),
-    );
-  }, [computedNodes, setRfNodes]);
+  // Shared interaction: drag + pan/zoom (auto-fit backs off), single click →
+  // open the errored node's stacktrace, double click → highlight connections.
+  const {
+    nodes: rfNodes,
+    edges: rfEdges,
+    onNodesChange,
+    onEdgesChange,
+    onMoveStart,
+    onNodeDragStart,
+    onNodeDragStop,
+    onNodeClick,
+    onNodeDoubleClick,
+    onPaneClick,
+    shouldAutoFit,
+  } = useGraphInteraction(computedNodes, computedEdges, (node) => {
+    const d = node.data as ListeningNodeData;
+    if (d?.node?.status === "ERROR") selectError(d.node.className);
+  });
 
+  // Re-fit as the graph grows so new outer rings stay in view — unless the user
+  // has taken manual control of the view.
   useEffect(() => {
-    setRfEdges(computedEdges);
-  }, [computedEdges, setRfEdges]);
-
-  // Re-fit as the graph grows so new outer rings stay in view — UNLESS the user
-  // has taken manual control (panned/zoomed/dragged), in which case we never
-  // move their view.
-  useEffect(() => {
-    if (userMovedRef.current) return;
+    if (!shouldAutoFit()) return;
     if (fitTimer.current) clearTimeout(fitTimer.current);
     fitTimer.current = setTimeout(() => {
-      if (userMovedRef.current) return;
-      fitView({ duration: 600, padding: 0.2, maxZoom: 1 });
+      if (shouldAutoFit()) fitView({ duration: 600, padding: 0.2, maxZoom: 1 });
     }, 200);
-  }, [fitView, nodesData.length, edgesData.length, rootClassName]);
-
-  // Any user-initiated pan/zoom (event is non-null) hands control to the user.
-  const onMoveStart = useCallback((event: unknown) => {
-    if (event) userMovedRef.current = true;
-  }, []);
-
-  const onNodeDragStart = useCallback(() => {
-    userMovedRef.current = true;
-  }, []);
-
-  const onNodeDragStop = useCallback((_: unknown, node: Node) => {
-    draggedPosRef.current.set(node.id, node.position);
-  }, []);
+  }, [fitView, nodesData.length, edgesData.length, rootClassName, shouldAutoFit]);
 
   return (
     <ReactFlow
@@ -198,12 +177,9 @@ function ListeningGraphInner() {
       onMoveStart={onMoveStart}
       onNodeDragStart={onNodeDragStart}
       onNodeDragStop={onNodeDragStop}
-      // Clicking an errored node opens its stacktrace panel. A plain click
-      // (no drag) still fires this even with dragging enabled.
-      onNodeClick={(_, node) => {
-        const d = node.data as ListeningNodeData;
-        if (d?.node?.status === "ERROR") selectError(d.node.className);
-      }}
+      onNodeClick={onNodeClick}
+      onNodeDoubleClick={onNodeDoubleClick}
+      onPaneClick={onPaneClick}
     >
       <Background
         variant={BackgroundVariant.Dots}

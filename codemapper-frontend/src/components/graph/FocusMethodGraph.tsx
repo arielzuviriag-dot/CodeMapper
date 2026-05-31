@@ -138,8 +138,30 @@ function FocusMethodGraphInner() {
     onMoveStart,
     onNodeDragStart,
     onNodeDragStop,
+    onNodeClick,
+    onNodeDoubleClick,
+    onPaneClick,
     shouldAutoFit,
-  } = useGraphInteraction(computedNodes, computedEdges);
+  } = useGraphInteraction(computedNodes, computedEdges, (node) => {
+    // Center node → open the method sheet (selectNode would land on class
+    // mode — wrong, this is a method). Peripheral → existing class flow.
+    if (focusMethod && node.id === focusMethod.id) {
+      openMethodSheet(focusMethod.id, {
+        name: focusMethod.methodName,
+        returnType: focusMethod.returnType,
+        parameters: focusMethod.parameters,
+        modifiers: [],
+        annotations: [],
+        isStatic: false,
+        isAbstract: false,
+        lineCount: focusMethod.lineCount,
+        startLine: focusMethod.startLine,
+        endLine: focusMethod.endLine,
+      });
+      return;
+    }
+    selectNode(node.id);
+  });
 
   useEffect(() => {
     if (!shouldAutoFit()) return;
@@ -186,27 +208,9 @@ function FocusMethodGraphInner() {
         onMoveStart={onMoveStart}
         onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_, node) => {
-          // Center node → open method sheet from the focusMethod payload
-          // (selectNode would land on class mode — wrong, this is a method).
-          if (node.id === focusMethod.id) {
-            openMethodSheet(focusMethod.id, {
-              name: focusMethod.methodName,
-              returnType: focusMethod.returnType,
-              parameters: focusMethod.parameters,
-              modifiers: [],
-              annotations: [],
-              isStatic: false,
-              isAbstract: false,
-              lineCount: focusMethod.lineCount,
-              startLine: focusMethod.startLine,
-              endLine: focusMethod.endLine,
-            });
-            return;
-          }
-          // Peripheral → existing class flow (we added them to parsedClasses)
-          selectNode(node.id);
-        }}
+        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onPaneClick={onPaneClick}
       >
         <Background
           variant={BackgroundVariant.Dots}

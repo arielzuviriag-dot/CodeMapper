@@ -344,6 +344,8 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
     onMoveStart,
     onNodeDragStart,
     onNodeDragStop,
+    onNodeDoubleClick,
+    onPaneClick,
     shouldAutoFit,
   } = useGraphInteraction(computedNodes, computedEdges);
 
@@ -652,6 +654,8 @@ function BitacoraInner({ onClose }: { onClose: () => void }) {
           onMoveStart={onMoveStart}
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onPaneClick={onPaneClick}
         >
           <Background
             variant={BackgroundVariant.Dots}

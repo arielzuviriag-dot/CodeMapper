@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Edge,
   type Node,
@@ -9,45 +9,42 @@ import {
 } from "@xyflow/react";
 
 /**
- * Shared live-graph interaction: makes any React-Flow graph freely
- * pannable / zoomable with draggable nodes, WITHOUT the auto-fit yanking the
- * view back every time the data changes.
+ * Shared live-graph interaction for every React-Flow graph in the app:
+ *   • drag nodes + free pan/zoom WITHOUT the auto-fit fighting (it backs off
+ *     once the user takes control); dragged positions persist across rebuilds.
+ *   • single click → opens that node (via the `onActivate` callback) after a
+ *     short delay, so a double-click can cancel it.
+ *   • double click → highlights that node's connections (fattened + glowing)
+ *     and dims the rest, so you can read what it's wired to. Click the
+ *     background to clear.
  *
- * Usage: compute your layout as before (a useMemo that returns nodes/edges),
- * pass it in, and spread the returned handlers + state onto <ReactFlow>:
- *
+ * Usage:
  *   const layout = useMemo(() => ({ nodes, edges }), [deps]);
- *   const g = useGraphInteraction(layout.nodes, layout.edges);
+ *   const g = useGraphInteraction(layout.nodes, layout.edges, (node) => openIt(node));
  *   <ReactFlow nodes={g.nodes} edges={g.edges}
  *     onNodesChange={g.onNodesChange} onEdgesChange={g.onEdgesChange}
  *     nodesDraggable onMoveStart={g.onMoveStart}
- *     onNodeDragStart={g.onNodeDragStart} onNodeDragStop={g.onNodeDragStop} />
+ *     onNodeDragStart={g.onNodeDragStart} onNodeDragStop={g.onNodeDragStop}
+ *     onNodeClick={g.onNodeClick} onNodeDoubleClick={g.onNodeDoubleClick}
+ *     onPaneClick={g.onPaneClick} />
  *
- * Then guard your fitView effect with {@link shouldAutoFit}() so it only
- * auto-fits until the user takes manual control:
- *
- *   useEffect(() => {
- *     if (!g.shouldAutoFit()) return;
- *     setTimeout(() => { if (g.shouldAutoFit()) fitView({...}); }, 200);
- *   }, [deps]);
- *
- * Positions of nodes the user dragged are preserved across rebuilds, so a
- * moved node never snaps back when new data arrives.
+ * Guard your fitView effect with g.shouldAutoFit().
  */
 export function useGraphInteraction(
   computedNodes: Node[],
   computedEdges: Edge[],
+  onActivate?: (node: Node) => void,
 ) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Flips true the moment the user pans/zooms/drags — auto-fit then backs off.
   const userMovedRef = useRef(false);
-  // className/id → position the user dragged it to; survives rebuilds.
   const draggedPosRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-  // Sync the computed layout into RF's own state, keeping every node draggable
-  // and preserving any user-dragged position.
+  // Node whose connections are highlighted (set by double-click).
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     setNodes(
       computedNodes.map((n) => {
@@ -63,30 +60,95 @@ export function useGraphInteraction(
     setEdges(computedEdges);
   }, [computedEdges, setEdges]);
 
-  // event is non-null only for user-initiated pan/zoom (null = programmatic).
   const onMoveStart = useCallback((event: unknown) => {
     if (event) userMovedRef.current = true;
   }, []);
-
   const onNodeDragStart = useCallback(() => {
     userMovedRef.current = true;
   }, []);
-
   const onNodeDragStop = useCallback((_: unknown, node: Node) => {
     draggedPosRef.current.set(node.id, node.position);
   }, []);
-
   const shouldAutoFit = useCallback(() => !userMovedRef.current, []);
 
+  // Single click → activate after a short delay (double-click cancels it).
+  const onNodeClick = useCallback(
+    (_: unknown, node: Node) => {
+      if (!onActivate) return;
+      if (clickTimer.current) clearTimeout(clickTimer.current);
+      const n = node;
+      clickTimer.current = setTimeout(() => onActivate(n), 220);
+    },
+    [onActivate],
+  );
+
+  const onNodeDoubleClick = useCallback((_: unknown, node: Node) => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    setHighlightId((prev) => (prev === node.id ? null : node.id));
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    setHighlightId(null);
+  }, []);
+
+  // Fatten + glow the highlighted node's edges; dim the rest.
+  const styledEdges = useMemo(() => {
+    if (!highlightId) return edges;
+    return edges.map((e) => {
+      const lit = e.source === highlightId || e.target === highlightId;
+      const base = (e.style ?? {}) as React.CSSProperties;
+      if (lit) {
+        const w = Number(base.strokeWidth ?? 1.5);
+        return {
+          ...e,
+          animated: true,
+          zIndex: 1000,
+          style: {
+            ...base,
+            stroke: "#FFD166",
+            strokeWidth: Math.max(w * 2.5, 4),
+            opacity: 1,
+            filter: "drop-shadow(0 0 6px rgba(255,209,102,0.85))",
+          },
+        };
+      }
+      return { ...e, style: { ...base, opacity: 0.1 } };
+    });
+  }, [edges, highlightId]);
+
+  const styledNodes = useMemo(() => {
+    if (!highlightId) return nodes;
+    const connected = new Set<string>([highlightId]);
+    for (const e of edges) {
+      if (e.source === highlightId) connected.add(e.target);
+      if (e.target === highlightId) connected.add(e.source);
+    }
+    return nodes.map((n) =>
+      connected.has(n.id)
+        ? n
+        : { ...n, style: { ...(n.style ?? {}), opacity: 0.25 } },
+    );
+  }, [nodes, edges, highlightId]);
+
   return {
-    nodes,
-    edges,
+    nodes: styledNodes,
+    edges: styledEdges,
     setNodes,
     onNodesChange,
     onEdgesChange,
     onMoveStart,
     onNodeDragStart,
     onNodeDragStop,
+    onNodeClick,
+    onNodeDoubleClick,
+    onPaneClick,
     shouldAutoFit,
   };
 }

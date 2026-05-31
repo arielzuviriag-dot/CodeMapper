@@ -213,8 +213,27 @@ function ExceptionFlowInner() {
     onMoveStart,
     onNodeDragStart,
     onNodeDragStop,
+    onNodeClick,
+    onNodeDoubleClick,
+    onPaneClick,
     shouldAutoFit,
-  } = useGraphInteraction(computedNodes, computedEdges);
+  } = useGraphInteraction(computedNodes, computedEdges, (node) => {
+    const data = node.data as Record<string, unknown>;
+    if (data.kind === "class") {
+      const cid = String(data.classId ?? "");
+      const m = (data.methodName as string) ?? null;
+      const n = getNode(node.id);
+      if (n) {
+        setCenter(n.position.x + NODE_W / 2, n.position.y + NODE_H / 2, {
+          zoom: 1.15,
+          duration: 500,
+        });
+      }
+      if (cid) openClassSheetAtMethod(cid, m);
+    } else if (data.kind === "screen") {
+      openMobileFile(String(data.screenFile), String(data.screenName));
+    }
+  });
 
   useEffect(() => {
     if (!shouldAutoFit()) return;
@@ -263,23 +282,9 @@ function ExceptionFlowInner() {
           onMoveStart={onMoveStart}
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
-          onNodeClick={(_, node) => {
-            const data = node.data as Record<string, unknown>;
-            if (data.kind === "class") {
-              const cid = String(data.classId ?? "");
-              const m = (data.methodName as string) ?? null;
-              const n = getNode(node.id);
-              if (n) {
-                setCenter(n.position.x + NODE_W / 2, n.position.y + NODE_H / 2, {
-                  zoom: 1.15,
-                  duration: 500,
-                });
-              }
-              if (cid) openClassSheetAtMethod(cid, m);
-            } else if (data.kind === "screen") {
-              openMobileFile(String(data.screenFile), String(data.screenName));
-            }
-          }}
+          onNodeClick={onNodeClick}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onPaneClick={onPaneClick}
         >
           <Background
             variant={BackgroundVariant.Dots}
