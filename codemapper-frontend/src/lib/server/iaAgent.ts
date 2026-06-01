@@ -15,6 +15,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { promises as fs } from "fs";
 import path from "path";
 import type { ChangePlan, ProposedDiff } from "@/lib/iaGrafo";
+import { buildProjectContext } from "./iaManual";
 
 const MODEL = process.env.IA_GRAFO_MODEL ?? "claude-opus-4-8";
 const MAX_TURNS = 28;
@@ -132,7 +133,7 @@ async function grepTool(
 const SYSTEM_PROMPT = `Sos el motor de análisis de "IA.Grafo", una herramienta que visualiza el impacto de un cambio de código sobre un proyecto (mayormente Java/Spring, pero puede haber front).
 
 El usuario te pide un cambio en lenguaje natural ("quiero modificar X"). Tu trabajo:
-1. EXPLORAR el proyecto real con las herramientas (read_file, list_dir, grep) para encontrar TODOS los lugares que ese cambio tocaría. No inventes: cada lugar que reportes tiene que salir de algo que leíste.
+1. ABAJO, en el system, tenés YA el CONTEXTO del proyecto pre-investigado por la herramienta: el árbol (acotado al módulo del cambio) y los archivos relevantes (los del cambio completos; los de apoyo resumidos). Basate en ESO. Usá las herramientas (read_file/grep/list_dir) SOLO si te falta un archivo puntual o necesitás el texto exacto de uno que vino resumido — NO re-explores lo que ya tenés (ahorra tokens). No inventes: cada lugar que reportes tiene que salir del contexto o de algo que leíste.
 2. Llamar UNA vez a "report_plan" con el grafo del impacto:
    - nodos: cada archivo/clase afectada, con su rol (objetivo / caller / dependencia / test / config), su file (ruta relativa), fqcn si es Java, y anchorLine (la línea exacta del cambio) + anchorSymbol (método).
    - aristas: una por relación entre nodos, con "reason" = explicación CORTA y concreta de por qué se toca ahí (ej: "Llama a getTotal() en la línea 88, hay que actualizar el nombre"). El reason es la leyenda que el usuario va a leer sobre la flecha.
@@ -255,10 +256,30 @@ export async function runAgent(
 
     const client = new Anthropic({ apiKey });
 
+    // La HERRAMIENTA hace la investigación (scoping + selección de archivos) y
+    // la pre-carga como contexto cacheado. Así la IA gasta tokens solo en lo
+    // esencial (razonar + diff) y NO re-explora. El cache_control hace que las
+    // vueltas del loop no re-paguen ese contexto.
+    emit({ type: "step", label: "Investigando el proyecto (sin gastar IA)…" });
+    const projectContext = await buildProjectContext(root, prompt);
+    const systemBlocks: Anthropic.TextBlockParam[] = [
+      { type: "text", text: SYSTEM_PROMPT },
+      {
+        type: "text",
+        text: `CONTEXTO DEL PROYECTO (ya investigado por la herramienta):\n\n${projectContext}`,
+        cache_control: { type: "ephemeral" },
+      },
+    ];
+
     const messages: Anthropic.MessageParam[] = [
       ...history.map((h) => ({ role: h.role, content: h.text }) as Anthropic.MessageParam),
       { role: "user", content: prompt },
     ];
+
+    let inTot = 0;
+    let outTot = 0;
+    let cacheRead = 0;
+    let cacheCreate = 0;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       if (abort?.aborted) {
@@ -270,12 +291,18 @@ export async function runAgent(
         {
           model: MODEL,
           max_tokens: 8000,
-          system: SYSTEM_PROMPT,
+          system: systemBlocks,
           tools: TOOLS,
           messages,
         },
         { signal: abort },
       );
+
+      const u = resp.usage;
+      inTot += u.input_tokens ?? 0;
+      outTot += u.output_tokens ?? 0;
+      cacheRead += u.cache_read_input_tokens ?? 0;
+      cacheCreate += u.cache_creation_input_tokens ?? 0;
 
       messages.push({ role: "assistant", content: resp.content });
 
@@ -353,6 +380,12 @@ export async function runAgent(
       break;
     }
 
+    // Uso REAL de tokens de la API (no estimado). cacheRead = lo que NO se
+    // re-pagó gracias al caching del contexto.
+    emit({
+      type: "step",
+      label: `Tokens reales — entrada ${inTot} (cache leído ${cacheRead}, creado ${cacheCreate}) · salida ${outTot} · total ${inTot + outTot}`,
+    });
     emit({ type: "done" });
   } catch (e) {
     const err = e as { status?: number; message?: string };

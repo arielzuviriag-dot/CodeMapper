@@ -223,7 +223,12 @@ Tokens aprox. de esta respuesta: <número>
 con tu mejor estimación de cuántos tokens ocupó tu respuesta. Esa línea NO va dentro del JSON.`;
 
 /** Arma el prompt completo de modo manual. */
-export async function buildManualPrompt(
+/**
+ * Construye SOLO el contexto del proyecto (árbol scoped + archivos relevantes,
+ * con los de apoyo resumidos). Es la "investigación" determinística que hace la
+ * herramienta — la comparte el modo manual y el modo API (donde va cacheado).
+ */
+export async function buildProjectContext(
   projectRoot: string,
   userPrompt: string,
 ): Promise<string> {
@@ -340,10 +345,21 @@ export async function buildManualPrompt(
       : "(no encontré archivos que matcheen el pedido — guiate por el árbol y pedí en el summary los que falten)";
 
   return [
+    `# ÁRBOL DEL PROYECTO (${treeNote})\n${tree}`,
+    `# ARCHIVOS RELEVANTES (heurística: ${relevantNote})\n${bundles.join("\n\n")}`,
+  ].join("\n\n");
+}
+
+/** Prompt completo de modo manual = instrucciones + pedido + contexto. */
+export async function buildManualPrompt(
+  projectRoot: string,
+  userPrompt: string,
+): Promise<string> {
+  const context = await buildProjectContext(projectRoot, userPrompt);
+  return [
     OUTPUT_INSTRUCTIONS,
     `\n# PEDIDO DEL USUARIO\n${userPrompt}`,
-    `\n# ÁRBOL DEL PROYECTO (${treeNote})\n${tree}`,
-    `\n# ARCHIVOS RELEVANTES (heurística: ${relevantNote})\n${bundles.join("\n\n")}`,
+    `\n${context}`,
     `\n# RECORDATORIO\nRespondé SOLO con el bloque \`\`\`json descripto arriba.`,
   ].join("\n");
 }
