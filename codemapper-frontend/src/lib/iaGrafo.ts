@@ -184,6 +184,56 @@ export async function buildManualPrompt(
 }
 
 /**
+ * Escapa saltos de línea / retornos / tabs que aparezcan DENTRO de un string
+ * JSON (JSON inválido: deben ir como \n, \r, \t). Recorre el texto llevando si
+ * estamos dentro de comillas; afuera no toca nada (preserva el formato).
+ */
+function repairJsonControlChars(raw: string): string {
+  let out = "";
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inStr) {
+      if (escaped) {
+        out += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        out += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        out += ch;
+        inStr = false;
+        continue;
+      }
+      if (ch === "\n") {
+        out += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        continue;
+      }
+      out += ch;
+    } else {
+      if (ch === '"') {
+        inStr = true;
+      }
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/**
  * Parsea la respuesta que el usuario pegó desde claude.ai. Espera un bloque
  * ```json con { summary, nodes, edges, diffs }. Devuelve el plan y los diffs.
  */
@@ -211,9 +261,18 @@ export function parseManualResponse(text: string): {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error(
-      "No pude leer el JSON de la respuesta. Pegá el bloque ```json que devolvió Claude, completo.",
-    );
+    // Reintento tolerante: el caso más común es que Claude haya dejado saltos
+    // de línea/tabs REALES dentro de un string (ej. el summary largo), lo cual
+    // es JSON inválido. Los escapamos y reintentamos.
+    try {
+      parsed = JSON.parse(repairJsonControlChars(raw));
+    } catch (e) {
+      throw new Error(
+        "No pude leer el JSON de la respuesta. Pegá SOLO el bloque ```json que devolvió Claude, completo (" +
+          (e as Error).message +
+          ").",
+      );
+    }
   }
   if (!Array.isArray(parsed.nodes)) {
     throw new Error("La respuesta no tiene 'nodes'. ¿Pegaste el JSON completo?");
