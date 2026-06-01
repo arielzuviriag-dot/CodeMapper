@@ -22,6 +22,8 @@ import { EdgeLegend } from "./EdgeLegend";
 import { ClassKindLegend } from "./ClassKindLegend";
 import { GraphControls } from "./GraphControls";
 import { GraphSearchInput } from "./GraphSearchInput";
+import { LensPanel } from "./LensPanel";
+import { computeLens, type LensClass, type LensId } from "./lenses";
 import { StackedLabelEdge } from "./StackedLabelEdge";
 import { useGraphStore } from "@/store/graphStore";
 import { applyDagreLayout } from "@/lib/layout";
@@ -105,6 +107,9 @@ function CodeGraphInner() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Lente activa (overlay analítico sobre el grafo). "none" = sin lente.
+  const [activeLens, setActiveLens] = useState<LensId>("none");
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView } = useReactFlow();
@@ -185,57 +190,127 @@ function CodeGraphInner() {
     setHighlightId(null);
   }, []);
 
-  // Derived view: when a node is highlighted, fatten + glow its edges and dim
-  // everything else so the connections of that object pop out.
-  const displayEdges = useMemo(() => {
-    if (!highlightId) return edges;
-    return edges.map((e) => {
-      const lit = e.source === highlightId || e.target === highlightId;
-      const base = (e.style ?? {}) as React.CSSProperties;
-      if (lit) {
-        const w = Number(base.strokeWidth ?? 1.5);
-        return {
-          ...e,
-          animated: true,
-          zIndex: 1000,
-          style: {
-            ...base,
-            stroke: "#FFD166",
-            strokeWidth: Math.max(w * 2.5, 4),
-            opacity: 1,
-            filter: "drop-shadow(0 0 6px rgba(255,209,102,0.85))",
-          },
-        };
-      }
-      return { ...e, style: { ...base, opacity: 0.1 } };
+  // Resultado de la lente activa, calculado del grafo visible (nodos+aristas).
+  const lensResult = useMemo(() => {
+    if (activeLens === "none") return null;
+    const lensClasses: LensClass[] = nodes.map((n) => {
+      const cd = (n.data as { classData?: ClassNodeData })?.classData;
+      return {
+        id: n.id,
+        name: cd?.name ?? n.id,
+        annotations: cd?.annotations ?? [],
+        type: cd?.type ?? "CLASS",
+        lineCount: cd?.lineCount ?? 0,
+        methodCount: cd?.methods?.length ?? 0,
+      };
     });
-  }, [edges, highlightId]);
+    const lensEdges = edges.map((e) => ({ source: e.source, target: e.target }));
+    return computeLens(activeLens, lensClasses, lensEdges);
+  }, [activeLens, nodes, edges]);
+
+  // Derived view: when a node is highlighted, fatten + glow its edges and dim
+  // everything else so the connections of that object pop out. Si hay una lente
+  // con aristas marcadas (ciclos / violación de capa), las resalta en rojo.
+  const displayEdges = useMemo(() => {
+    if (highlightId) {
+      return edges.map((e) => {
+        const lit = e.source === highlightId || e.target === highlightId;
+        const base = (e.style ?? {}) as React.CSSProperties;
+        if (lit) {
+          const w = Number(base.strokeWidth ?? 1.5);
+          return {
+            ...e,
+            animated: true,
+            zIndex: 1000,
+            style: {
+              ...base,
+              stroke: "#FFD166",
+              strokeWidth: Math.max(w * 2.5, 4),
+              opacity: 1,
+              filter: "drop-shadow(0 0 6px rgba(255,209,102,0.85))",
+            },
+          };
+        }
+        return { ...e, style: { ...base, opacity: 0.1 } };
+      });
+    }
+    if (lensResult && lensResult.edgeFlags.size > 0) {
+      return edges.map((e) => {
+        const base = (e.style ?? {}) as React.CSSProperties;
+        if (lensResult.edgeFlags.has(`${e.source}|${e.target}`)) {
+          return {
+            ...e,
+            animated: true,
+            zIndex: 1000,
+            style: {
+              ...base,
+              stroke: "#DC2626",
+              strokeWidth: Math.max(Number(base.strokeWidth ?? 1.5) * 2, 3),
+              opacity: 1,
+              filter: "drop-shadow(0 0 6px rgba(220,38,38,0.7))",
+            },
+          };
+        }
+        return { ...e, style: { ...base, opacity: 0.12 } };
+      });
+    }
+    return edges;
+  }, [edges, highlightId, lensResult]);
 
   const displayNodes = useMemo(() => {
-    if (!highlightId) return nodes;
-    const connected = new Set<string>([highlightId]);
-    for (const e of edges) {
-      if (e.source === highlightId) connected.add(e.target);
-      if (e.target === highlightId) connected.add(e.source);
+    // El highlight por doble-clic tiene prioridad sobre la lente.
+    if (highlightId) {
+      const connected = new Set<string>([highlightId]);
+      for (const e of edges) {
+        if (e.source === highlightId) connected.add(e.target);
+        if (e.target === highlightId) connected.add(e.source);
+      }
+      return nodes.map((n) =>
+        connected.has(n.id)
+          ? {
+              ...n,
+              // CSS `scale` composes with React Flow's translate, so the
+              // connected cards grow without breaking layout and stay bigger
+              // relative to the rest as you zoom in.
+              zIndex: 10,
+              style: {
+                ...(n.style ?? {}),
+                scale: "1.35",
+                opacity: 1,
+                transition: "scale 0.15s ease-out",
+              },
+            }
+          : { ...n, style: { ...(n.style ?? {}), opacity: 0.25 } },
+      );
     }
-    return nodes.map((n) =>
-      connected.has(n.id)
-        ? {
+    if (lensResult) {
+      // Acento = anillo de color (no tapa el contenido); atenúa los no relevantes.
+      return nodes.map((n) => {
+        const accent = lensResult.nodeAccent[n.id];
+        if (accent) {
+          return {
             ...n,
-            // CSS `scale` composes with React Flow's translate, so the
-            // connected cards grow without breaking layout and stay bigger
-            // relative to the rest as you zoom in.
-            zIndex: 10,
+            zIndex: 5,
             style: {
               ...(n.style ?? {}),
-              scale: "1.35",
               opacity: 1,
-              transition: "scale 0.15s ease-out",
+              boxShadow: `0 0 0 2px ${accent}, 0 0 16px ${accent}80`,
+              borderRadius: 12,
             },
-          }
-        : { ...n, style: { ...(n.style ?? {}), opacity: 0.25 } },
-    );
-  }, [nodes, edges, highlightId]);
+          };
+        }
+        return {
+          ...n,
+          style: {
+            ...(n.style ?? {}),
+            opacity: lensResult.dimmed.has(n.id) ? 0.28 : 1,
+            boxShadow: undefined,
+          },
+        };
+      });
+    }
+    return nodes;
+  }, [nodes, edges, highlightId, lensResult]);
 
   useEffect(() => {
     const state = useGraphStore.getState();
@@ -375,6 +450,10 @@ function CodeGraphInner() {
 
   return (
     <div className="relative h-full w-full bg-[var(--bg-base)]">
+      {/* Lentes — arriba a la izquierda (libre: zoom/leyendas van a la derecha,
+          buscador arriba-centro, minimapa abajo-derecha). */}
+      <LensPanel active={activeLens} onChange={setActiveLens} result={lensResult} />
+
       {/* Floating search input — centered at the top of the graph area.
           Lives outside FilterPanel so it doesn't compete with the
           ANOTACIONES block in the left sidebar. */}
