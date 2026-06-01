@@ -165,15 +165,20 @@ export async function streamChat(
  * Modo manual (copiar/pegar) — sin API.
  * ============================================================ */
 
-/** Pide al server el prompt autocontenido para pegar en claude.ai. */
+/**
+ * Pide al server el prompt para pegar en claude.ai.
+ * @param followUp true = seguimiento en el mismo chat (claude.ai ya tiene el
+ *   proyecto) → prompt liviano, sin re-pegar el contexto (mucho menos tokens).
+ */
 export async function buildManualPrompt(
   projectPath: string,
   prompt: string,
+  followUp = false,
 ): Promise<string> {
   const res = await fetch("/api/ia/manual/prompt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectPath, prompt }),
+    body: JSON.stringify({ projectPath, prompt, followUp }),
   });
   if (!res.ok) {
     const msg = await res.text().catch(() => "");

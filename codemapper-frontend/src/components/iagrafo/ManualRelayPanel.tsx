@@ -24,17 +24,20 @@ export function ManualRelayPanel() {
   const [generated, setGenerated] = useState<string | null>(null);
   const [response, setResponse] = useState("");
   const [generating, setGenerating] = useState(false);
+  // "Seguir en el mismo chat de claude.ai": no re-pega el contexto (lo tiene de
+  // antes) → prompt mucho más liviano en tokens.
+  const [followUp, setFollowUp] = useState(false);
 
   const onGenerate = async () => {
     const req = request.trim();
     if (!req) return;
-    if (!projectPath.trim()) {
+    if (!followUp && !projectPath.trim()) {
       toast.error("Primero indicá la ruta del proyecto");
       return;
     }
     setGenerating(true);
     try {
-      const prompt = await buildManualPrompt(projectPath.trim(), req);
+      const prompt = await buildManualPrompt(projectPath.trim(), req, followUp);
       setGenerated(prompt);
     } catch (err) {
       toast.error((err as Error).message ?? "No se pudo armar el prompt");
@@ -81,13 +84,28 @@ export function ManualRelayPanel() {
         placeholder="ej: renombrar el campo total de Pedido a montoTotal"
         className="resize-none rounded-md border border-[var(--border-silver)] bg-[var(--bg-input)] px-2.5 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--silver-dark)] focus:border-[var(--bordo)] focus:outline-none"
       />
+      <label
+        className="flex cursor-pointer items-start gap-2 text-[10px] leading-snug text-[var(--silver-dark)]"
+        title="Si ya pegaste el contexto del proyecto antes en ESTE chat de claude.ai, activá esto: el prompt sale solo con el pedido (muchos menos tokens)."
+      >
+        <input
+          type="checkbox"
+          checked={followUp}
+          onChange={(e) => setFollowUp(e.target.checked)}
+          className="mt-0.5 accent-[var(--bordo)]"
+        />
+        <span>
+          Seguir en el mismo chat de claude.ai (ya tiene el contexto) — no re-pega
+          el proyecto, gasta muchos menos tokens
+        </span>
+      </label>
       <Button
         onClick={onGenerate}
         disabled={generating}
         className="gap-1.5 bg-[var(--bordo)] text-xs uppercase tracking-[0.12em] text-white hover:bg-[var(--bordo-mid)]"
       >
         {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-        Generar prompt
+        {followUp ? "Generar pedido (liviano)" : "Generar prompt"}
       </Button>
 
       {/* Paso 2: copiar el prompt */}

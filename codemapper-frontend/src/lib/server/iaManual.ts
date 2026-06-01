@@ -363,3 +363,17 @@ export async function buildManualPrompt(
     `\n# RECORDATORIO\nRespondé SOLO con el bloque \`\`\`json descripto arriba.`,
   ].join("\n");
 }
+
+/**
+ * Prompt de SEGUIMIENTO: para cuando seguís en el MISMO chat de claude.ai, que
+ * ya tiene el proyecto del primer mensaje. No re-pega el contexto (árbol +
+ * archivos) → cuesta una fracción de tokens. Solo el pedido nuevo + un
+ * recordatorio compacto del formato.
+ */
+export function buildFollowUpPrompt(userPrompt: string): string {
+  return [
+    "Seguimos con el MISMO proyecto que ya te pasé antes en este chat (no lo vuelvo a pegar, para ahorrar tokens). Si te falta el contenido exacto de algún archivo para un diff, pedímelo en el summary.",
+    'Respondé EN EL MISMO FORMATO: UN bloque ```json con { "summary", "nodes":[{id,label,role,file,fqcn,anchorLine,anchorSymbol,summary}], "edges":[{from,to,reason,changeKind}], "diffs":[{file,reason,oldString,newString}] } (ids únicos; oldString EXACTO). Después del bloque, una línea: "Tokens aprox. de esta respuesta: <número>".',
+    `\n# NUEVO PEDIDO\n${userPrompt}`,
+  ].join("\n\n");
+}

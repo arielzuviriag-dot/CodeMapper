@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildManualPrompt } from "@/lib/server/iaManual";
+import { buildManualPrompt, buildFollowUpPrompt } from "@/lib/server/iaManual";
 import { assertProjectAllowed, ForbiddenRootError } from "@/lib/server/iaSandbox";
 
 export const runtime = "nodejs";
@@ -10,16 +10,23 @@ export const runtime = "nodejs";
  * solo lee archivos locales dentro de projectPath.
  */
 export async function POST(req: Request) {
-  let body: { projectPath?: string; prompt?: string };
+  let body: { projectPath?: string; prompt?: string; followUp?: boolean };
   try {
     body = await req.json();
   } catch {
     return new NextResponse("JSON inválido", { status: 400 });
   }
-  const projectPath = (body.projectPath ?? "").trim();
   const prompt = (body.prompt ?? "").trim();
-  if (!projectPath) return new NextResponse("Falta la ruta del proyecto", { status: 400 });
   if (!prompt) return new NextResponse("Falta el pedido", { status: 400 });
+
+  // Seguimiento en el mismo chat de claude.ai: no re-pegamos el contexto (lo
+  // tiene de antes) → prompt liviano, sin leer disco ni validar ruta.
+  if (body.followUp) {
+    return NextResponse.json({ prompt: buildFollowUpPrompt(prompt) });
+  }
+
+  const projectPath = (body.projectPath ?? "").trim();
+  if (!projectPath) return new NextResponse("Falta la ruta del proyecto", { status: 400 });
 
   try {
     await assertProjectAllowed(projectPath);
